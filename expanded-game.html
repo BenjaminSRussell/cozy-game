@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cozy Farm - Expanded Version</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #87CEEB, #98FB98); 
+            font-family: Arial;
+        }
+        #game { 
+            border: 3px solid #333; 
+            background: #90EE90; 
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #controls { 
+            margin-top: 20px; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .btn { 
+            background: #4CAF50; 
+            color: white; 
+            border: none; 
+            padding: 12px 18px; 
+            margin: 5px; 
+            border-radius: 6px; 
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .btn:hover { 
+            background: #45a049; 
+            transform: translateY(-2px);
+        }
+        .btn:active {
+            transform: translateY(0);
+        }
+        .btn.selected {
+            background: #2196F3;
+        }
+        #info { 
+            margin-top: 15px; 
+            font-size: 14px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .info-item {
+            background: #f5f5f5;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #333;
+        }
+        .info-value {
+            color: #4CAF50;
+            font-size: 16px;
+        }
+        #message {
+            margin-top: 10px;
+            padding: 10px;
+            background: #E3F2FD;
+            border-radius: 4px;
+            text-align: center;
+            min-height: 20px;
+        }
+        .season-indicator {
+            background: #FFD700;
+            color: #333;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game" width="800" height="500"></canvas>
+    
+    <div id="controls">
+        <div>
+            <button class="btn" onclick="selectTool('wheat')" id="wheat-btn">Wheat</button>
+            <button class="btn" onclick="selectTool('carrot')" id="carrot-btn">Carrot</button>
+            <button class="btn" onclick="selectTool('corn')" id="corn-btn">Corn</button>
+            <button class="btn" onclick="selectTool('water')" id="water-btn">Water</button>
+            <button class="btn" onclick="selectTool('harvest')" id="harvest-btn">Harvest</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <button class="btn" onclick="selectTool('house')" id="house-btn">House</button>
+            <button class="btn" onclick="selectTool('barn')" id="barn-btn">Barn</button>
+            <button class="btn" onclick="selectTool('fence')" id="fence-btn">Fence</button>
+            <button class="btn" onclick="selectTool('tree')" id="tree-btn">Tree</button>
+            <button class="btn" onclick="selectTool('mine')" id="mine-btn">Mine</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <button class="btn" onclick="nextSeason()">Next Season</button>
+            <button class="btn" onclick="buySeeds()">Buy Seeds (5 coins)</button>
+            <button class="btn" onclick="saveGame()">Save</button>
+            <button class="btn" onclick="loadGame()">Load</button>
+            <button class="btn" onclick="resetGame()">Reset</button>
+        </div>
+        
+        <div id="info">
+            <div class="info-item">
+                <div class="info-label">Season</div>
+                <div class="info-value season-indicator" id="season">Spring</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Tool</div>
+                <div class="info-value" id="currentTool">wheat</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Seeds</div>
+                <div class="info-value" id="seeds">20</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Crops</div>
+                <div class="info-value" id="crops">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Buildings</div>
+                <div class="info-value" id="buildings">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Trees</div>
+                <div class="info-value" id="trees">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Ore</div>
+                <div class="info-value" id="ore">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Coins</div>
+                <div class="info-value" id="coins">50</div>
+            </div>
+        </div>
+        
+        <div id="message">Welcome to Cozy Farm! Click to plant crops and build your farm.</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const CELL_SIZE = 40;
+        const ROWS = 12;
+        const COLS = 20;
+        
+        let currentTool = 'wheat';
+        let seeds = 20;
+        let coins = 50;
+        let season = 0; // 0=Spring, 1=Summer, 2=Fall, 3=Winter
+        let grid = [];
+        
+        const seasons = ['Spring', 'Summer', 'Fall', 'Winter'];
+        const seasonColors = {
+            'Spring': '#90EE90',
+            'Summer': '#7CFC00',
+            'Fall': '#DAA520',
+            'Winter': '#F0F8FF'
+        };
+        
+        const cropPrices = {
+            'wheat': 10,
+            'carrot': 15,
+            'corn': 20
+        };
+        
+        const buildingCosts = {
+            'house': { wood: 10, coins: 30 },
+            'barn': { wood: 15, coins: 50 },
+            'fence': { wood: 2, coins: 5 }
+        };
+        
+        // Initialize grid
+        function initGrid() {
+            grid = [];
+            for (let r = 0; r < ROWS; r++) {
+                grid[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    grid[r][c] = {
+                        type: 'empty',
+                        cropType: null,
+                        growth: 0,
+                        watered: false,
+                        building: null,
+                        tree: null,
+                        ore: null
+                    };
+                }
+            }
+        }
+        
+        // Draw game
+        function draw() {
+            // Clear canvas with season color
+            ctx.fillStyle = seasonColors[seasons[season]];
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            let stats = { crops: 0, buildings: 0, trees: 0, ore: 0 };
+            
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const x = c * CELL_SIZE;
+                    const y = r * CELL_SIZE;
+                    const cell = grid[r][c];
+                    
+                    // Draw soil
+                    if (cell.type === 'empty') {
+                        ctx.fillStyle = cell.watered ? '#8B4513' : '#654321';
+                        ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                    }
+                    
+                    // Draw crops
+                    if (cell.type === 'crop') {
+                        drawCrop(x, y, cell.cropType, cell.growth);
+                        if (cell.growth >= 10) stats.crops++;
+                    }
+                    
+                    // Draw buildings
+                    if (cell.building) {
+                        drawBuilding(x, y, cell.building);
+                        stats.buildings++;
+                    }
+                    
+                    // Draw trees
+                    if (cell.tree) {
+                        drawTree(x, y, cell.tree);
+                        stats.trees++;
+                    }
+                    
+                    // Draw ore
+                    if (cell.ore) {
+                        drawOre(x, y, cell.ore);
+                        stats.ore++;
+                    }
+                    
+                    // Draw grid lines
+                    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                    ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
+                }
+            }
+            
+            // Update stats
+            document.getElementById('crops').textContent = stats.crops;
+            document.getElementById('buildings').textContent = stats.buildings;
+            document.getElementById('trees').textContent = stats.trees;
+            document.getElementById('ore').textContent = stats.ore;
+        }
+        
+        function drawCrop(x, y, type, growth) {
+            const colors = {
+                'wheat': '#DAA520',
+                'carrot': '#FF8C00',
+                'corn': '#FFD700'
+            };
+            
+            ctx.fillStyle = colors[type] || '#90EE90';
+            
+            if (growth < 3) {
+                // Seed stage
+                ctx.fillRect(x + 15, y + 25, 10, 10);
+            } else if (growth < 6) {
+                // Sprout stage
+                ctx.fillRect(x + 10, y + 20, 20, 15);
+            } else if (growth < 10) {
+                // Growing stage
+                ctx.fillRect(x + 5, y + 15, 30, 20);
+            } else {
+                // Mature stage
+                ctx.beginPath();
+                ctx.arc(x + 20, y + 20, 12, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Add glow effect for mature crops
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+        
+        function drawBuilding(x, y, type) {
+            const colors = {
+                'house': '#8B4513',
+                'barn': '#DC143C',
+                'fence': '#654321'
+            };
+            
+            ctx.fillStyle = colors[type] || '#8B4513';
+            
+            if (type === 'house') {
+                // House body
+                ctx.fillRect(x + 5, y + 15, 30, 20);
+                // Roof
+                ctx.fillStyle = '#A52A2A';
+                ctx.beginPath();
+                ctx.moveTo(x, y + 15);
+                ctx.lineTo(x + 20, y);
+                ctx.lineTo(x + 40, y + 15);
+                ctx.closePath();
+                ctx.fill();
+                // Door
+                ctx.fillStyle = '#654321';
+                ctx.fillRect(x + 15, y + 25, 10, 10);
+            } else if (type === 'barn') {
+                // Barn body
+                ctx.fillRect(x + 5, y + 10, 30, 25);
+                // Roof
+                ctx.fillStyle = '#8B0000';
+                ctx.beginPath();
+                ctx.moveTo(x, y + 10);
+                ctx.lineTo(x + 20, y);
+                ctx.lineTo(x + 40, y + 10);
+                ctx.closePath();
+                ctx.fill();
+                // Doors
+                ctx.fillStyle = '#654321';
+                ctx.fillRect(x + 10, y + 20, 8, 15);
+                ctx.fillRect(x + 22, y + 20, 8, 15);
+            } else if (type === 'fence') {
+                ctx.fillRect(x + 15, y + 10, 10, 25);
+                ctx.fillRect(x + 5, y + 15, 30, 3);
+            }
+        }
+        
+        function drawTree(x, y, type) {
+            // Trunk
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x + 15, y + 20, 10, 15);
+            
+            // Leaves
+            ctx.fillStyle = '#228B22';
+            ctx.beginPath();
+            ctx.arc(x + 20, y + 15, 12, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add some detail
+            ctx.fillStyle = '#32CD32';
+            ctx.beginPath();
+            ctx.arc(x + 15, y + 12, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + 25, y + 18, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawOre(x, y, type) {
+            const colors = {
+                'copper': '#B87333',
+                'iron': '#434343',
+                'gold': '#FFD700'
+            };
+            
+            ctx.fillStyle = colors[type] || '#696969';
+            ctx.fillRect(x + 10, y + 10, 20, 20);
+            
+            // Add sparkle effect
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(x + 15, y + 15, 3, 3);
+            ctx.fillRect(x + 22, y + 12, 2, 2);
+        }
+        
+        // Handle click
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const col = Math.floor(x / CELL_SIZE);
+            const row = Math.floor(y / CELL_SIZE);
+            
+            if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+                const cell = grid[row][col];
+                let message = '';
+                
+                if (currentTool === 'wheat' && cell.type === 'empty' && seeds > 0) {
+                    cell.type = 'crop';
+                    cell.cropType = 'wheat';
+                    cell.growth = 0;
+                    seeds--;
+                    message = 'Planted wheat seed!';
+                } else if (currentTool === 'carrot' && cell.type === 'empty' && seeds > 0) {
+                    cell.type = 'crop';
+                    cell.cropType = 'carrot';
+                    cell.growth = 0;
+                    seeds--;
+                    message = 'Planted carrot seed!';
+                } else if (currentTool === 'corn' && cell.type === 'empty' && seeds > 0) {
+                    cell.type = 'crop';
+                    cell.cropType = 'corn';
+                    cell.growth = 0;
+                    seeds--;
+                    message = 'Planted corn seed!';
+                } else if (currentTool === 'water') {
+                    cell.watered = true;
+                    message = 'Watered the crops!';
+                } else if (currentTool === 'harvest' && cell.type === 'crop' && cell.growth >= 10) {
+                    const price = cropPrices[cell.cropType] || 10;
+                    coins += price;
+                    cell.type = 'empty';
+                    cell.cropType = null;
+                    cell.growth = 0;
+                    message = `Harvested ${cell.cropType} for ${price} coins!`;
+                } else if (currentTool === 'house' && cell.type === 'empty' && coins >= buildingCosts.house.coins) {
+                    cell.type = 'building';
+                    cell.building = 'house';
+                    coins -= buildingCosts.house.coins;
+                    message = 'Built a house!';
+                } else if (currentTool === 'barn' && cell.type === 'empty' && coins >= buildingCosts.barn.coins) {
+                    cell.type = 'building';
+                    cell.building = 'barn';
+                    coins -= buildingCosts.barn.coins;
+                    message = 'Built a barn!';
+                } else if (currentTool === 'fence' && cell.type === 'empty' && coins >= buildingCosts.fence.coins) {
+                    cell.type = 'building';
+                    cell.building = 'fence';
+                    coins -= buildingCosts.fence.coins;
+                    message = 'Built a fence!';
+                } else if (currentTool === 'tree' && cell.type === 'empty' && seeds > 0) {
+                    cell.tree = 'oak';
+                    seeds--;
+                    message = 'Planted a tree!';
+                } else if (currentTool === 'mine' && cell.type === 'empty' && coins >= 10) {
+                    cell.ore = ['copper', 'iron', 'gold'][Math.floor(Math.random() * 3)];
+                    coins -= 10;
+                    message = `Found ${cell.ore} ore!`;
+                } else if (seeds <= 0 && ['wheat', 'carrot', 'corn'].includes(currentTool)) {
+                    message = 'No seeds left! Buy more seeds.';
+                } else if (coins < 10 && currentTool === 'mine') {
+                    message = 'Not enough coins to mine!';
+                }
+                
+                updateUI();
+                draw();
+                showMessage(message);
+            }
+        });
+        
+        // Update game
+        function update() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = grid[r][c];
+                    if (cell.type === 'crop' && cell.watered && cell.growth < 10) {
+                        cell.growth += 0.2;
+                        if (cell.growth > 10) cell.growth = 10;
+                    }
+                    cell.watered = false;
+                }
+            }
+            draw();
+        }
+        
+        // Select tool
+        function selectTool(tool) {
+            currentTool = tool;
+            document.getElementById('currentTool').textContent = tool;
+            
+            // Update button states
+            document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('selected'));
+            document.getElementById(tool + '-btn').classList.add('selected');
+        }
+        
+        // Next season
+        function nextSeason() {
+            season = (season + 1) % 4;
+            document.getElementById('season').textContent = seasons[season];
+            showMessage(`Season changed to ${seasons[season]}!`);
+            draw();
+        }
+        
+        // Buy seeds
+        function buySeeds() {
+            if (coins >= 5) {
+                coins -= 5;
+                seeds += 10;
+                showMessage('Bought 10 seeds for 5 coins!');
+                updateUI();
+            } else {
+                showMessage('Not enough coins to buy seeds!');
+            }
+        }
+        
+        // Save game
+        function saveGame() {
+            const gameData = {
+                grid: grid,
+                seeds: seeds,
+                coins: coins,
+                season: season
+            };
+            localStorage.setItem('cozyFarmSave', JSON.stringify(gameData));
+            showMessage('Game saved!');
+        }
+        
+        // Load game
+        function loadGame() {
+            const savedData = localStorage.getItem('cozyFarmSave');
+            if (savedData) {
+                const gameData = JSON.parse(savedData);
+                grid = gameData.grid;
+                seeds = gameData.seeds;
+                coins = gameData.coins;
+                season = gameData.season;
+                document.getElementById('season').textContent = seasons[season];
+                updateUI();
+                draw();
+                showMessage('Game loaded!');
+            } else {
+                showMessage('No saved game found!');
+            }
+        }
+        
+        // Update UI
+        function updateUI() {
+            document.getElementById('seeds').textContent = seeds;
+            document.getElementById('coins').textContent = coins;
+        }
+        
+        // Show message
+        function showMessage(msg) {
+            document.getElementById('message').textContent = msg;
+            setTimeout(() => {
+                document.getElementById('message').textContent = '';
+            }, 3000);
+        }
+        
+        // Reset game
+        function resetGame() {
+            if (confirm('Are you sure you want to reset the game?')) {
+                seeds = 20;
+                coins = 50;
+                season = 0;
+                initGrid();
+                document.getElementById('season').textContent = seasons[season];
+                updateUI();
+                draw();
+                showMessage('Game reset!');
+            }
+        }
+        
+        // Start game
+        initGrid();
+        updateUI();
+        draw();
+        selectTool('wheat');
+        
+        // Game loop
+        setInterval(update, 1000);
+        
+        // Initial message
+        showMessage('Welcome to Cozy Farm! Click to plant crops and build your farm.');
+    </script>
+</body>
+</html>

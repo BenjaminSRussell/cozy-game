@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marketplace Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .marketplace-info {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🏪 Marketplace System Test</h1>
+    
+    <div class="test-container">
+        <h2>Marketplace Integration Test</h2>
+        <div id="test-results"></div>
+        <button onclick="testMarketplaceIntegration()">Run Marketplace Test</button>
+        <button onclick="testGameStore()">Test Game Store</button>
+        <button onclick="testMarketplaceUI()">Test Marketplace UI</button>
+    </div>
+
+    <div class="marketplace-info">
+        <h3>📋 Marketplace Features Implemented:</h3>
+        <ul>
+            <li>✅ <strong>MarketplaceScreen Component</strong> - Full modal interface with tabs</li>
+            <li>✅ <strong>Dynamic Pricing</strong> - Market prices fluctuate based on supply/demand</li>
+            <li>✅ <strong>Item Categories</strong> - Crops, Ore, Wood, and All items tabs</li>
+            <li>✅ <strong>Quality Bonuses</strong> - High-quality items get price premiums</li>
+            <li>✅ <strong>Real-time Updates</strong> - Prices refresh every 30 seconds</li>
+            <li>✅ <strong>Bulk Selling</strong> - "Sell All" functionality</li>
+            <li>✅ <strong>Visual Indicators</strong> - Price trends and percentage changes</li>
+            <li>✅ <strong>Game Store Integration</strong> - Complete backend functions</li>
+            <li>✅ <strong>GameScreen Integration</strong> - Market button and modal</li>
+        </ul>
+        
+        <h3>🎮 How to Access Marketplace:</h3>
+        <ol>
+            <li>Open the main game at <a href="http://localhost:3001" target="_blank">http://localhost:3001</a></li>
+            <li>Look for the <strong>"🏪 Market"</strong> button in the action buttons section</li>
+            <li>Click the button to open the marketplace modal</li>
+            <li>Sell your harvestable crops, ore, and wood items!</li>
+        </ol>
+        
+        <h3>💰 Selling Items:</h3>
+        <ul>
+            <li><strong>Crops:</strong> Harvestable crops from your farm plots</li>
+            <li><strong>Ore:</strong> Mined copper, silver, gold, and diamonds</li>
+            <li><strong>Wood:</strong> Harvested oak and pine wood</li>
+            <li><strong>Quality Bonus:</strong> Items with 80%+ quality get 20% price bonus</li>
+        </ul>
+    </div>
+
+    <script>
+        function addTestResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('test-results');
+            const testDiv = document.createElement('div');
+            testDiv.className = `test-result ${type}`;
+            testDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            resultsDiv.appendChild(testDiv);
+        }
+
+        function testMarketplaceIntegration() {
+            addTestResult('🔍 Testing Marketplace Integration...', 'info');
+            
+            // Test 1: Check if MarketplaceScreen component exists
+            fetch('./src/components/MarketplaceScreen.tsx')
+                .then(response => {
+                    if (response.ok) {
+                        addTestResult('✅ MarketplaceScreen component file exists', 'success');
+                    } else {
+                        addTestResult('❌ MarketplaceScreen component file not found', 'error');
+                    }
+                })
+                .catch(error => {
+                    addTestResult('❌ Error checking MarketplaceScreen: ' + error.message, 'error');
+                });
+            
+            // Test 2: Check if marketplace functions are in game store
+            fetch('./src/store/gameStore.ts')
+                .then(response => response.text())
+                .then(content => {
+                    if (content.includes('sellHarvestableCrops')) {
+                        addTestResult('✅ sellHarvestableCrops function found in game store', 'success');
+                    } else {
+                        addTestResult('❌ sellHarvestableCrops function not found in game store', 'error');
+                    }
+                    
+                    if (content.includes('getMarketPrices')) {
+                        addTestResult('✅ getMarketPrices function found in game store', 'success');
+                    } else {
+                        addTestResult('❌ getMarketPrices function not found in game store', 'error');
+                    }
+                    
+                    if (content.includes('getSellableItems')) {
+                        addTestResult('✅ getSellableItems function found in game store', 'success');
+                    } else {
+                        addTestResult('❌ getSellableItems function not found in game store', 'error');
+                    }
+                })
+                .catch(error => {
+                    addTestResult('❌ Error checking game store: ' + error.message, 'error');
+                });
+            
+            // Test 3: Check if GameScreen imports MarketplaceScreen
+            fetch('./src/components/GameScreen.tsx')
+                .then(response => response.text())
+                .then(content => {
+                    if (content.includes('import { MarketplaceScreen }')) {
+                        addTestResult('✅ MarketplaceScreen imported in GameScreen', 'success');
+                    } else {
+                        addTestResult('❌ MarketplaceScreen not imported in GameScreen', 'error');
+                    }
+                    
+                    if (content.includes('showMarketplace')) {
+                        addTestResult('✅ Marketplace state found in GameScreen', 'success');
+                    } else {
+                        addTestResult('❌ Marketplace state not found in GameScreen', 'error');
+                    }
+                    
+                    if (content.includes('🏪 Market')) {
+                        addTestResult('✅ Marketplace button found in GameScreen', 'success');
+                    } else {
+                        addTestResult('❌ Marketplace button not found in GameScreen', 'error');
+                    }
+                })
+                .catch(error => {
+                    addTestResult('❌ Error checking GameScreen: ' + error.message, 'error');
+                });
+        }
+
+        function testGameStore() {
+            addTestResult('🔍 Testing Game Store Marketplace Functions...', 'info');
+            
+            fetch('./src/store/gameStore.ts')
+                .then(response => response.text())
+                .then(content => {
+                    const marketplaceFunctions = [
+                        'sellHarvestableCrops',
+                        'sellInventoryItem', 
+                        'getMarketPrices',
+                        'updateMarketPrices',
+                        'getSellableItems'
+                    ];
+                    
+                    let foundCount = 0;
+                    marketplaceFunctions.forEach(func => {
+                        if (content.includes(func)) {
+                            foundCount++;
+                            addTestResult(`✅ ${func} function implemented`, 'success');
+                        } else {
+                            addTestResult(`❌ ${func} function missing`, 'error');
+                        }
+                    });
+                    
+                    addTestResult(`📊 Marketplace Functions: ${foundCount}/${marketplaceFunctions.length} found`, 
+                                foundCount === marketplaceFunctions.length ? 'success' : 'error');
+                })
+                .catch(error => {
+                    addTestResult('❌ Error testing game store: ' + error.message, 'error');
+                });
+        }
+
+        function testMarketplaceUI() {
+            addTestResult('🔍 Testing Marketplace UI Components...', 'info');
+            
+            fetch('./src/components/MarketplaceScreen.tsx')
+                .then(response => response.text())
+                .then(content => {
+                    const uiComponents = [
+                        'MarketplaceScreen',
+                        'selectedTab',
+                        'marketPrices',
+                        'sellItem',
+                        'sellAll',
+                        'getSellableItems'
+                    ];
+                    
+                    let foundCount = 0;
+                    uiComponents.forEach(comp => {
+                        if (content.includes(comp)) {
+                            foundCount++;
+                            addTestResult(`✅ ${comp} UI component found`, 'success');
+                        } else {
+                            addTestResult(`❌ ${comp} UI component missing`, 'error');
+                        }
+                    });
+                    
+                    addTestResult(`📊 UI Components: ${foundCount}/${uiComponents.length} found`, 
+                                foundCount === uiComponents.length ? 'success' : 'error');
+                })
+                .catch(error => {
+                    addTestResult('❌ Error testing Marketplace UI: ' + error.message, 'error');
+                });
+        }
+
+        // Auto-run test on page load
+        window.onload = function() {
+            addTestResult('🚀 Marketplace Test Page Loaded Successfully!', 'success');
+            addTestResult('📱 Game running at: <a href="http://localhost:3001" target="_blank">http://localhost:3001</a>', 'info');
+            addTestResult('🔧 Click the test buttons above to verify marketplace functionality', 'info');
+        };
+    </script>
+</body>
+</html>

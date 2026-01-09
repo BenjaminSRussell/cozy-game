@@ -1,0 +1,128 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Stone foundation -->
+  <rect x="28" y="115" width="72" height="8" fill="#808080" stroke="#696969" stroke-width="2"/>
+  <rect x="28" y="118" width="72" height="2" fill="#696969"/>
+  
+  <!-- Greenhouse base -->
+  <rect x="30" y="65" width="68" height="50" fill="#90EE90" fill-opacity="0.2" stroke="#228B22" stroke-width="2"/>
+  
+  <!-- Glass panels -->
+  <rect x="30" y="65" width="68" height="50" fill="#87CEEB" fill-opacity="0.15" stroke="#4682B4" stroke-width="1"/>
+  
+  <!-- Wood frame structure -->
+  <rect x="30" y="65" width="4" height="50" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  <rect x="94" y="65" width="4" height="50" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  <rect x="30" y="85" width="68" height="4" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  <rect x="30" y="105" width="68" height="4" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  
+  <!-- Vertical frame supports -->
+  <rect x="45" y="65" width="3" height="50" fill="#8B4513"/>
+  <rect x="60" y="65" width="3" height="50" fill="#8B4513"/>
+  <rect x="75" y="65" width="3" height="50" fill="#8B4513"/>
+  
+  <!-- Glass roof panels -->
+  <polygon points="20,65 64,25 108,65" fill="#87CEEB" fill-opacity="0.2" stroke="#4682B4" stroke-width="2"/>
+  
+  <!-- Roof frame -->
+  <line x1="64" y1="25" x2="64" y2="65" stroke="#8B4513" stroke-width="3"/>
+  <line x1="40" y1="45" x2="88" y2="45" stroke="#8B4513" stroke-width="2"/>
+  <line x1="48" y1="35" x2="80" y2="35" stroke="#8B4513" stroke-width="1"/>
+  
+  <!-- Ventilation windows on roof -->
+  <rect x="35" y="40" width="8" height="6" fill="#87CEEB" fill-opacity="0.3" stroke="#4682B4" stroke-width="1"/>
+  <rect x="85" y="40" width="8" height="6" fill="#87CEEB" fill-opacity="0.3" stroke="#4682B4" stroke-width="1"/>
+  
+  <!-- Large door -->
+  <rect x="50" y="85" width="28" height="30" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  <rect x="52" y="87" width="24" height="3" fill="#A0522D"/>
+  <rect x="52" y="93" width="24" height="3" fill="#A0522D"/>
+  <rect x="52" y="99" width="24" height="3" fill="#A0522D"/>
+  <circle cx="68" cy="100" r="2" fill="#FFD700" stroke="#FFA500" stroke-width="1"/>
+  
+  <!-- Door handle -->
+  <rect x="66" y="98" width="2" height="4" fill="#8B4513"/>
+  
+  <!-- Large windows -->
+  <rect x="35" y="70" width="15" height="12" fill="#87CEEB" fill-opacity="0.4" stroke="#4682B4" stroke-width="2"/>
+  <line x1="42.5" y1="70" x2="42.5" y2="82" stroke="#8B4513" stroke-width="2"/>
+  <line x1="35" y1="76" x2="50" y2="76" stroke="#8B4513" stroke-width="2"/>
+  
+  <rect x="78" y="70" width="15" height="12" fill="#87CEEB" fill-opacity="0.4" stroke="#4682B4" stroke-width="2"/>
+  <line x1="85.5" y1="70" x2="85.5" y2="82" stroke="#8B4513" stroke-width="2"/>
+  <line x1="78" y1="76" x2="93" y2="76" stroke="#8B4513" stroke-width="2"/>
+  
+  <!-- Interior growing beds -->
+  <rect x="35" y="95" width="15" height="15" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="37" y="97" width="11" height="2" fill="#654321"/>
+  <rect x="37" y="102" width="11" height="2" fill="#654321"/>
+  <rect x="37" y="107" width="11" height="2" fill="#654321"/>
+  
+  <rect x="78" y="95" width="15" height="15" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="80" y="97" width="11" height="2" fill="#654321"/>
+  <rect x="80" y="102" width="11" height="2" fill="#654321"/>
+  <rect x="80" y="107" width="11" height="2" fill="#654321"/>
+  
+  <!-- Center growing bed -->
+  <rect x="55" y="100" width="18" height="10" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="57" y="102" width="14" height="2" fill="#654321"/>
+  <rect x="57" y="106" width="14" height="2" fill="#654321"/>
+  
+  <!-- Tomato plants -->
+  <circle cx="40" cy="98" r="4" fill="#FF6347"/>
+  <circle cx="38" cy="96" r="2" fill="#FFA500" opacity="0.8"/>
+  <circle cx="42" cy="99" r="1.5" fill="#FFA500" opacity="0.7"/>
+  <rect x="39" y="102" width="2" height="8" fill="#228B22"/>
+  <circle cx="40" cy="94" r="1" fill="#32CD32" opacity="0.6"/>
+  
+  <circle cx="83" cy="98" r="4" fill="#FF6347"/>
+  <circle cx="81" cy="96" r="2" fill="#FFA500" opacity="0.8"/>
+  <circle cx="85" cy="99" r="1.5" fill="#FFA500" opacity="0.7"/>
+  <rect x="82" y="102" width="2" height="8" fill="#228B22"/>
+  <circle cx="83" cy="94" r="1" fill="#32CD32" opacity="0.6"/>
+  
+  <!-- Lettuce plants -->
+  <ellipse cx="64" cy="103" rx="3" ry="5" fill="#90EE90"/>
+  <ellipse cx="64" cy="101" rx="2" ry="3" fill="#98FB98" opacity="0.8"/>
+  <ellipse cx="64" cy="99" rx="1" ry="2" fill="#ADFF2F" opacity="0.7"/>
+  
+  <!-- Carrot plants -->
+  <ellipse cx="45" cy="105" rx="1.5" ry="3" fill="#FF8C00"/>
+  <ellipse cx="45" cy="103" rx="1" ry="2" fill="#FFA500" opacity="0.8"/>
+  <rect x="44.5" y="105" width="1" height="5" fill="#228B22"/>
+  
+  <ellipse cx="82" cy="105" rx="1.5" ry="3" fill="#FF8C00"/>
+  <ellipse cx="82" cy="103" rx="1" ry="2" fill="#FFA500" opacity="0.8"/>
+  <rect x="81.5" y="105" width="1" height="5" fill="#228B22"/>
+  
+  <!-- Flowers -->
+  <circle cx="55" cy="98" r="2.5" fill="#FF69B4"/>
+  <circle cx="55" cy="96" r="1" fill="#FFC0CB" opacity="0.8"/>
+  <circle cx="73" cy="99" r="2" fill="#FFD700"/>
+  <circle cx="73" cy="97" r="1" fill="#FFA500" opacity="0.8"/>
+  
+  <!-- Water drops on glass -->
+  <circle cx="45" cy="60" r="1.5" fill="#87CEEB" opacity="0.6"/>
+  <circle cx="75" cy="55" r="1" fill="#87CEEB" opacity="0.5"/>
+  <circle cx="60" cy="70" r="0.8" fill="#87CEEB" opacity="0.4"/>
+  <circle cx="50" cy="45" r="1" fill="#87CEEB" opacity="0.5"/>
+  <circle cx="78" cy="48" r="0.8" fill="#87CEEB" opacity="0.4"/>
+  
+  <!-- Temperature gauge -->
+  <rect x="85" y="75" width="3" height="10" fill="#FF6347" opacity="0.8"/>
+  <circle cx="86.5" cy="85" r="2" fill="#FF6347" opacity="0.8"/>
+  <rect x="85.5" y="77" width="1" height="6" fill="#FFF" opacity="0.6"/>
+  <rect x="85.5" y="79" width="1" height="2" fill="#FF0000" opacity="0.8"/>
+  
+  <!-- Watering can -->
+  <rect x="38" y="75" width="4" height="6" fill="#4682B4" stroke="#5F9EA0" stroke-width="1"/>
+  <ellipse cx="40" cy="75" rx="2" ry="1" fill="#87CEEB" opacity="0.5"/>
+  <rect x="42" y="74" width="2" height="1" fill="#4682B4"/>
+  <line x1="44" y1="74.5" x2="46" y2="73" stroke="#4682B4" stroke-width="1"/>
+  
+  <!-- Tools rack -->
+  <rect x="90" y="75" width="8" height="8" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="91" y="77" width="6" height="1" fill="#A0522D"/>
+  <rect x="91" y="80" width="6" height="1" fill="#A0522D"/>
+  <circle cx="93" cy="76" r="0.8" fill="#654321"/>
+  <circle cx="95" cy="82" r="0.8" fill="#654321"/>
+</svg>

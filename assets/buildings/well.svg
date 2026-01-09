@@ -1,0 +1,121 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Stone base platform -->
+  <rect x="25" y="110" width="78" height="10" fill="#808080" stroke="#696969" stroke-width="2"/>
+  <rect x="25" y="115" width="78" height="3" fill="#696969"/>
+  
+  <!-- Well outer stone ring -->
+  <circle cx="64" cy="80" r="32" fill="#8B4513" stroke="#654321" stroke-width="3"/>
+  
+  <!-- Stone brick pattern -->
+  <rect x="32" y="55" width="64" height="5" fill="#A0522D" opacity="0.8"/>
+  <rect x="32" y="65" width="64" height="5" fill="#A0522D" opacity="0.8"/>
+  <rect x="32" y="75" width="64" height="5" fill="#A052D2D" opacity="0.8"/>
+  <rect x="32" y="85" width="64" height="5" fill="#A0522D" opacity="0.8"/>
+  <rect x="32" y="95" width="64" height="5" fill="#A052D2D" opacity="0.8"/>
+  <rect x="32" y="105" width="64" height="5" fill="#A0522D2D" opacity="0.8"/>
+  
+  <!-- Mortar lines -->
+  <line x1="40" y1="48" x2="40" y2="112" stroke="#654321" stroke-width="2" opacity="0.6"/>
+  <line x1="50" y1="48" x2="50" y2="112" stroke="#654321" stroke-width="2" opacity="0.6"/>
+  <line x1="60" y1="48" x2="60" y2="112" stroke="#654321" stroke-width="2" opacity="0.6"/>
+  <line x1="70" y1="48" x2="70" y2="112" stroke="#654321" stroke-width="2" opacity="0.6"/>
+  <line x1="80" y1="48" x2="80" y2="112" stroke="#654321" stroke-width="2" opacity="0.6"/>
+  <line x1="88" y1="48" x2="88" y2="112" stroke="#654321" stroke-width="2" opacity="0.6"/>
+  
+  <!-- Deep water -->
+  <circle cx="64" cy="80" r="26" fill="#1E90FF" stroke="#4682B4" stroke-width="2"/>
+  
+  <!-- Water layers -->
+  <circle cx="64" cy="80" r="20" fill="#4682B4" stroke="#5F9EA0" stroke-width="1"/>
+  <circle cx="64" cy="80" r="15" fill="#87CEEB" stroke="#B0E0E6" stroke-width="1"/>
+  
+  <!-- Water reflections -->
+  <ellipse cx="56" cy="73" rx="10" ry="4" fill="#B0E0E6" opacity="0.5"/>
+  <ellipse cx="72" cy="87" rx="8" ry="3" fill="#B0E0E6" opacity="0.4"/>
+  <circle cx="64" cy="80" r="3" fill="#FFFFFF" opacity="0.3"/>
+  <ellipse cx="60" cy="76" rx="4" ry="2" fill="#FFFFFF" opacity="0.2"/>
+  
+  <!-- Well house structure -->
+  <rect x="52" y="40" width="24" height="25" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  
+  <!-- House details -->
+  <rect x="54" y="42" width="20" height="3" fill="#A0522D"/>
+  <rect x="54" y="48" width="20" height="3" fill="#A0522D"/>
+  <rect x="54" y="54" width="20" height="3" fill="#A0522D"/>
+  <rect x="54" y="60" width="20" height="3" fill="#A0522D"/>
+  
+  <!-- Window in well house -->
+  <rect x="58" y="45" width="12" height="8" fill="#87CEEB" stroke="#4682B4" stroke-width="1"/>
+  <line x1="64" y1="45" x2="64" y2="53" stroke="#8B4513" stroke-width="1"/>
+  <line x1="58" y1="49" x2="70" y2="49" stroke="#8B4513" stroke-width="1"/>
+  
+  <!-- Roof -->
+  <rect x="57" y="35" width="14" height="10" fill="#A0522D" stroke="#8B4513" stroke-width="1"/>
+  <polygon points="55,35 64,25 73,35" fill="#654321" stroke="#4A4A4A" stroke-width="1"/>
+  
+  <!-- Crane arm -->
+  <rect x="62" y="25" width="4" height="35" fill="#654321" stroke="#4A4A4A" stroke-width="2"/>
+  <circle cx="64" cy="25" r="4" fill="#2F4F4F" stroke="#000" stroke-width="1"/>
+  <circle cx="64" cy="25" r="2" fill="#8B4513"/>
+  
+  <!-- Pulley wheel -->
+  <circle cx="64" cy="25" r="6" fill="#696969" stroke="#2F4F4F" stroke-width="1"/>
+  <circle cx="64" cy="25" r="4" fill="#A9A9A9" stroke="#696969" stroke-width="1"/>
+  <circle cx="64" cy="25" r="2" fill="#D3D3D3" stroke="#A9A9A9" stroke-width="1"/>
+  
+  <!-- Spokes -->
+  <line x1="64" y1="19" x2="64" y2="31" stroke="#2F4F4F" stroke-width="2"/>
+  <line x1="58" y1="19" x2="70" y2="31" stroke="#2F4F4F" stroke-width="1"/>
+  <line x1="58" y1="31" x2="70" y2="19" stroke="#2F4F4F" stroke-width="1"/>
+  <line x1="60" y1="19" x2="68" y2="31" stroke="#2F4F4F" stroke-width="1"/>
+  <line x1="60" y1="31" x2="68" y2="19" stroke="#2F4F4F" stroke-width="1"/>
+  
+  <!-- Rope -->
+  <line x1="64" y1="31" x2="64" y2="75" stroke="#8B4513" stroke-width="3"/>
+  <line x1="61" y1="40" x2="61" y2="70" stroke="#A0522D" stroke-width="1"/>
+  <line x1="67" y1="40" x2="67" y2="70" stroke="#A0522D" stroke-width="1"/>
+  
+  <!-- Wooden bucket -->
+  <rect x="56" y="72" width="16" height="10" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  <rect x="58" y="74" width="12" height="2" fill="#A0522D"/>
+  <rect x="58" y="78" width="12" height="2" fill="#A0522D"/>
+  <rect x="58" y="82" width="12" height="2" fill="#A0522D"/>
+  <circle cx="64" cy="77" r="1.5" fill="#654321"/>
+  
+  <!-- Bucket handle -->
+  <path d="M 56 76 Q 52 72 56 68" stroke="#654321" stroke-width="2" fill="none"/>
+  <path d="M 72 76 Q 76 72 72 68" stroke="#654321" stroke-width="2" fill="none"/>
+  
+  <!-- Water in bucket -->
+  <rect x="58" y="77" width="12" height="3" fill="#4682B4" opacity="0.8"/>
+  
+  <!-- Water ripples -->
+  <circle cx="64" cy="80" r="12" fill="none" stroke="#87CEEB" stroke-width="2" opacity="0.4"/>
+  <circle cx="64" cy="80" r="18" fill="none" stroke="#87CEEB" stroke-width="1" opacity="0.3"/>
+  <circle cx="64" cy="80" r="24" fill="none" stroke="#87CEEB" stroke-width="0.5" opacity="0.2"/>
+  
+  <!-- Stone steps leading to well -->
+  <rect x="55" y="95" width="6" height="15" fill="#808080" stroke="#696969" stroke-width="1"/>
+  <rect x="65" y="90" width="6" height="20" fill="#808080" stroke="#696969" stroke-width="1"/>
+  <rect x="75" y="95" width="6" height="15" fill="#808080" stroke="#696969" stroke-width="1"/>
+  
+  <!-- Step edges -->
+  <polygon points="55,95 61,95 61,110 55,110" fill="#696969"/>
+  <polygon points="65,90 71,90 71,110 65,110" fill="#696969"/>
+  <polygon points="75,95 81,95 81,110 75,110" fill="#696969"/>
+  
+  <!-- Moss and vegetation -->
+  <ellipse cx="45" cy="95" rx="5" ry="3" fill="#228B22" opacity="0.6"/>
+  <ellipse cx="83" cy="90" rx="4" ry="2" fill="#32CD32" opacity="0.5"/>
+  <ellipse cx="70" cy="108" rx="3" ry="2" fill="#228B22" opacity="0.4"/>
+  <ellipse cx="58" cy="50" rx="2" ry="1" fill="#228B22" opacity="0.7"/>
+  
+  <!-- Small flowers -->
+  <circle cx="42" cy="93" r="1.5" fill="#FF69B4"/>
+  <circle cx="86" cy="88" r="1" fill="#FFD700"/>
+  <circle cx="75" cy="105" r="1" fill="#FF1493"/>
+  
+  <!-- Rope coil on ground -->
+  <ellipse cx="90" cy="118" rx="4" ry="1.5" fill="#8B4513" opacity="0.8"/>
+  <line x1="87" y1="118" x2="93" y2="118" stroke="#654321" stroke-width="1"/>
+</svg>

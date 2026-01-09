@@ -1,0 +1,460 @@
+/**
+ * Advanced Camera System with Viewport Culling
+ * 
+ * Provides smooth camera movement, zoom controls, and efficient viewport culling
+ * to optimize rendering performance by only drawing visible objects.
+ */
+
+import { Vector2D, RenderObject } from './RenderPipeline';
+
+export interface CameraBounds {
+  min: Vector2D;
+  max: Vector2D;
+  enabled: boolean;
+}
+
+export interface CameraShake {
+  intensity: number;
+  duration: number;
+  frequency: number;
+  currentTime: number;
+}
+
+export interface CameraFollowTarget {
+  position: Vector2D;
+  offset?: Vector2D;
+  smoothing?: number;
+  bounds?: CameraBounds;
+}
+
+export interface ViewportCullingResult {
+  visibleObjects: RenderObject[];
+  culledObjects: RenderObject[];
+  totalObjects: number;
+  cullingRatio: number;
+}
+
+export class CameraSystem {
+  public position: Vector2D;
+  public zoom: number;
+  public rotation: number;
+  public viewport: Vector2D;
+  public bounds: CameraBounds;
+  
+  private targetPosition: Vector2D;
+  private targetZoom: number;
+  private targetRotation: number;
+  private followTarget?: CameraFollowTarget;
+  private shake?: CameraShake;
+  private smoothing: number = 0.1;
+  private minZoom: number = 0.1;
+  private maxZoom: number = 5.0;
+
+  constructor(viewportWidth: number, viewportHeight: number) {
+    this.position = { x: 0, y: 0 };
+    this.targetPosition = { x: 0, y: 0 };
+    this.zoom = 1.0;
+    this.targetZoom = 1.0;
+    this.rotation = 0;
+    this.targetRotation = 0;
+    this.viewport = { x: viewportWidth, y: viewportHeight };
+    this.bounds = {
+      min: { x: -Infinity, y: -Infinity },
+      max: { x: Infinity, y: Infinity },
+      enabled: false
+    };
+  }
+
+  /**
+   * Update camera with smooth interpolation
+   */
+  public update(deltaTime: number): void {
+    // Smooth position interpolation
+    this.position.x += (this.targetPosition.x - this.position.x) * this.smoothing;
+    this.position.y += (this.targetPosition.y - this.position.y) * this.smoothing;
+
+    // Smooth zoom interpolation
+    this.zoom += (this.targetZoom - this.zoom) * this.smoothing;
+
+    // Smooth rotation interpolation
+    this.rotation += (this.targetRotation - this.rotation) * this.smoothing;
+
+    // Apply follow target if exists
+    if (this.followTarget) {
+      this.updateFollowTarget();
+    }
+
+    // Apply camera shake
+    if (this.shake) {
+      this.updateShake(deltaTime);
+    }
+
+    // Enforce bounds
+    this.enforceBounds();
+  }
+
+  /**
+   * Set camera position immediately
+   */
+  public setPosition(position: Vector2D): void {
+    this.position = { ...position };
+    this.targetPosition = { ...position };
+  }
+
+  /**
+   * Move camera to position with smoothing
+   */
+  public moveTo(position: Vector2D): void {
+    this.targetPosition = { ...position };
+  }
+
+  /**
+   * Move camera by offset
+   */
+  public moveBy(offset: Vector2D): void {
+    this.targetPosition.x += offset.x;
+    this.targetPosition.y += offset.y;
+  }
+
+  /**
+   * Set zoom level immediately
+   */
+  public setZoom(zoom: number): void {
+    this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+    this.targetZoom = this.zoom;
+  }
+
+  /**
+   * Zoom to level with smoothing
+   */
+  public zoomTo(zoom: number): void {
+    this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+  }
+
+  /**
+   * Zoom by factor
+   */
+  public zoomBy(factor: number): void {
+    this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.targetZoom * factor));
+  }
+
+  /**
+   * Set camera rotation immediately
+   */
+  public setRotation(rotation: number): void {
+    this.rotation = rotation;
+    this.targetRotation = rotation;
+  }
+
+  /**
+   * Rotate to angle with smoothing
+   */
+  public rotateTo(rotation: number): void {
+    this.targetRotation = rotation;
+  }
+
+  /**
+   * Rotate by angle
+   */
+  public rotateBy(angle: number): void {
+    this.targetRotation += angle;
+  }
+
+  /**
+   * Set camera to follow a target
+   */
+  public setFollowTarget(target: CameraFollowTarget): void {
+    this.followTarget = target;
+    if (target.bounds) {
+      this.bounds = target.bounds;
+    }
+  }
+
+  /**
+   * Clear follow target
+   */
+  public clearFollowTarget(): void {
+    this.followTarget = undefined;
+  }
+
+  private updateFollowTarget(): void {
+    if (!this.followTarget) return;
+
+    const target = this.followTarget;
+    const offset = target.offset || { x: 0, y: 0 };
+    const smoothing = target.smoothing || this.smoothing;
+
+    // Calculate target position with offset
+    const desiredPosition = {
+      x: target.position.x + offset.x,
+      y: target.position.y + offset.y
+    };
+
+    // Apply smoothing
+    this.targetPosition.x += (desiredPosition.x - this.targetPosition.x) * smoothing;
+    this.targetPosition.y += (desiredPosition.y - this.targetPosition.y) * smoothing;
+  }
+
+  /**
+   * Start camera shake effect
+   */
+  public startShake(intensity: number, duration: number, frequency: number = 10): void {
+    this.shake = {
+      intensity,
+      duration,
+      frequency,
+      currentTime: 0
+    };
+  }
+
+  private updateShake(deltaTime: number): void {
+    if (!this.shake) return;
+
+    this.shake.currentTime += deltaTime;
+
+    if (this.shake.currentTime >= this.shake.duration) {
+      this.shake = undefined;
+      return;
+    }
+
+    // Calculate shake offset
+    const progress = this.shake.currentTime / this.shake.duration;
+    const fadeOut = 1 - progress;
+    const shakeAmount = this.shake.intensity * fadeOut;
+    
+    const shakeOffset = {
+      x: Math.sin(this.shake.currentTime * this.shake.frequency * 0.1) * shakeAmount,
+      y: Math.cos(this.shake.currentTime * this.shake.frequency * 0.15) * shakeAmount
+    };
+
+    // Apply shake to position
+    this.position.x += shakeOffset.x;
+    this.position.y += shakeOffset.y;
+  }
+
+  /**
+   * Convert world coordinates to screen coordinates
+   */
+  public worldToScreen(worldPos: Vector2D): Vector2D {
+    // Apply rotation
+    const cos = Math.cos(-this.rotation);
+    const sin = Math.sin(-this.rotation);
+    
+    const translatedX = worldPos.x - this.position.x;
+    const translatedY = worldPos.y - this.position.y;
+    
+    const rotatedX = translatedX * cos - translatedY * sin;
+    const rotatedY = translatedX * sin + translatedY * cos;
+    
+    // Apply zoom and center
+    return {
+      x: rotatedX * this.zoom + this.viewport.x / 2,
+      y: rotatedY * this.zoom + this.viewport.y / 2
+    };
+  }
+
+  /**
+   * Convert screen coordinates to world coordinates
+   */
+  public screenToWorld(screenPos: Vector2D): Vector2D {
+    // Remove zoom and center
+    const unzoomedX = (screenPos.x - this.viewport.x / 2) / this.zoom;
+    const unzoomedY = (screenPos.y - this.viewport.y / 2) / this.zoom;
+    
+    // Apply inverse rotation
+    const cos = Math.cos(this.rotation);
+    const sin = Math.sin(this.rotation);
+    
+    const rotatedX = unzoomedX * cos - unzoomedY * sin;
+    const rotatedY = unzoomedX * sin + unzoomedY * cos;
+    
+    // Add camera position
+    return {
+      x: rotatedX + this.position.x,
+      y: rotatedY + this.position.y
+    };
+  }
+
+  /**
+   * Get visible world bounds
+   */
+  public getWorldBounds(): {
+    min: Vector2D;
+    max: Vector2D;
+  } {
+    const corners = [
+      { x: 0, y: 0 },
+      { x: this.viewport.x, y: 0 },
+      { x: this.viewport.x, y: this.viewport.y },
+      { x: 0, y: this.viewport.y }
+    ];
+
+    const worldCorners = corners.map(corner => this.screenToWorld(corner));
+
+    const minX = Math.min(...worldCorners.map(c => c.x));
+    const minY = Math.min(...worldCorners.map(c => c.y));
+    const maxX = Math.max(...worldCorners.map(c => c.x));
+    const maxY = Math.max(...worldCorners.map(c => c.y));
+
+    return {
+      min: { x: minX, y: minY },
+      max: { x: maxX, y: maxY }
+    };
+  }
+
+  /**
+   * Check if an object is visible in the viewport
+   */
+  public isVisible(object: RenderObject, padding: number = 0): boolean {
+    const objectBounds = this.getObjectBounds(object);
+    const viewportBounds = this.getWorldBounds();
+
+    // Expand viewport bounds by padding
+    viewportBounds.min.x -= padding;
+    viewportBounds.min.y -= padding;
+    viewportBounds.max.x += padding;
+    viewportBounds.max.y += padding;
+
+    return !(
+      objectBounds.max.x < viewportBounds.min.x ||
+      objectBounds.min.x > viewportBounds.max.x ||
+      objectBounds.max.y < viewportBounds.min.y ||
+      objectBounds.min.y > viewportBounds.max.y
+    );
+  }
+
+  /**
+   * Get bounds of a render object
+   */
+  private getObjectBounds(object: RenderObject): {
+    min: Vector2D;
+    max: Vector2D;
+  } {
+    const scale = object.scale || { x: 1, y: 1 };
+    const halfWidth = (object.size.x * scale.x) / 2;
+    const halfHeight = (object.size.y * scale.y) / 2;
+
+    return {
+      min: {
+        x: object.position.x - halfWidth,
+        y: object.position.y - halfHeight
+      },
+      max: {
+        x: object.position.x + halfWidth,
+        y: object.position.y + halfHeight
+      }
+    };
+  }
+
+  /**
+   * Perform viewport culling on a list of objects
+   */
+  public cullObjects(objects: RenderObject[], padding: number = 0): ViewportCullingResult {
+    const visibleObjects: RenderObject[] = [];
+    const culledObjects: RenderObject[] = [];
+
+    for (const object of objects) {
+      if (object.visible === false) {
+        culledObjects.push(object);
+      } else if (this.isVisible(object, padding)) {
+        visibleObjects.push(object);
+      } else {
+        culledObjects.push(object);
+      }
+    }
+
+    return {
+      visibleObjects,
+      culledObjects,
+      totalObjects: objects.length,
+      cullingRatio: culledObjects.length / objects.length
+    };
+  }
+
+  /**
+   * Set camera bounds
+   */
+  public setBounds(bounds: CameraBounds): void {
+    this.bounds = bounds;
+  }
+
+  /**
+   * Enable/disable bounds
+   */
+  public setBoundsEnabled(enabled: boolean): void {
+    this.bounds.enabled = enabled;
+  }
+
+  private enforceBounds(): void {
+    if (!this.bounds.enabled) return;
+
+    const worldBounds = this.getWorldBounds();
+    const currentBounds = this.bounds;
+
+    // Check if camera is outside bounds and adjust
+    if (worldBounds.min.x < currentBounds.min.x) {
+      this.targetPosition.x += currentBounds.min.x - worldBounds.min.x;
+    }
+    if (worldBounds.max.x > currentBounds.max.x) {
+      this.targetPosition.x -= worldBounds.max.x - currentBounds.max.x;
+    }
+    if (worldBounds.min.y < currentBounds.min.y) {
+      this.targetPosition.y += currentBounds.min.y - worldBounds.min.y;
+    }
+    if (worldBounds.max.y > currentBounds.max.y) {
+      this.targetPosition.y -= worldBounds.max.y - currentBounds.max.y;
+    }
+  }
+
+  /**
+   * Set smoothing factor for camera movement
+   */
+  public setSmoothing(smoothing: number): void {
+    this.smoothing = Math.max(0, Math.min(1, smoothing));
+  }
+
+  /**
+   * Set zoom limits
+   */
+  public setZoomLimits(minZoom: number, maxZoom: number): void {
+    this.minZoom = Math.max(0.1, minZoom);
+    this.maxZoom = Math.max(this.minZoom, maxZoom);
+  }
+
+  /**
+   * Resize viewport
+   */
+  public resize(width: number, height: number): void {
+    this.viewport = { x: width, y: height };
+  }
+
+  /**
+   * Get camera matrix for transformations
+   */
+  public getMatrix(): number[] {
+    const cos = Math.cos(-this.rotation);
+    const sin = Math.sin(-this.rotation);
+    
+    return [
+      cos * this.zoom, sin * this.zoom, 0,
+      -sin * this.zoom, cos * this.zoom, 0,
+      -this.position.x * this.zoom + this.viewport.x / 2,
+      -this.position.y * this.zoom + this.viewport.y / 2,
+      1
+    ];
+  }
+
+  /**
+   * Reset camera to default state
+   */
+  public reset(): void {
+    this.position = { x: 0, y: 0 };
+    this.targetPosition = { x: 0, y: 0 };
+    this.zoom = 1.0;
+    this.targetZoom = 1.0;
+    this.rotation = 0;
+    this.targetRotation = 0;
+    this.followTarget = undefined;
+    this.shake = undefined;
+  }
+}

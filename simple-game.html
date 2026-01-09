@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cozy Haven - Simple Working Version</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #gameContainer {
+            position: relative;
+            border: 3px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            background: #87CEEB;
+        }
+
+        #gameCanvas {
+            display: block;
+            cursor: crosshair;
+            border-radius: 7px;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 200px;
+        }
+
+        .ui-section {
+            margin-bottom: 15px;
+        }
+
+        .ui-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #4CAF50;
+        }
+
+        .button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 2px;
+            font-size: 12px;
+        }
+
+        .button:hover {
+            background: #45a049;
+        }
+
+        .button:active {
+            background: #3d8b40;
+        }
+
+        .info {
+            font-size: 12px;
+            margin-top: 5px;
+            opacity: 0.8;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div id="ui">
+            <div class="ui-section">
+                <div class="ui-title">Cozy Haven</div>
+                <div class="info">Free Farming Game</div>
+            </div>
+            
+            <div class="ui-section">
+                <div class="ui-title">Controls</div>
+                <button class="button" onclick="game.plantCrop()">Plant Wheat</button>
+                <button class="button" onclick="game.plantCarrot()">Plant Carrot</button>
+                <button class="button" onclick="game.placeBuilding()">Place House</button>
+                <button class="button" onclick="game.placeBarn()">Place Barn</button>
+                <button class="button" onclick="game.mineOre()">Mine Ore</button>
+                <button class="button" onclick="game.placeTree()">Place Tree</button>
+            </div>
+            
+            <div class="ui-section">
+                <div class="ui-title">Stats</div>
+                <div class="info">FPS: <span id="fps">60</span></div>
+                <div class="info">Objects: <span id="objects">0</span></div>
+                <div class="info">Crops: <span id="crops">0</span></div>
+                <div class="info">Buildings: <span id="buildings">0</span></div>
+            </div>
+            
+            <div class="ui-section">
+                <div class="ui-title">Inventory</div>
+                <div class="info">Seeds: <span id="seeds">10</span></div>
+                <div class="info">Wood: <span id="wood">5</span></div>
+                <div class="info">Stone: <span id="stone">3</span></div>
+                <div class="info">Coins: <span id="coins">100</span></div>
+            </div>
+        </div>
+        
+        <div id="loading" class="hidden">
+            <div>Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        // Simple, crash-free game implementation
+        class SimpleCozyGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.gridSize = 40;
+                this.cellSize = 20;
+                this.world = [];
+                this.selectedTool = 'wheat';
+                this.lastFrameTime = 0;
+                this.frameCount = 0;
+                this.fps = 60;
+                
+                // Game state
+                this.inventory = {
+                    seeds: 10,
+                    wood: 5,
+                    stone: 3,
+                    coins: 100
+                };
+                
+                this.stats = {
+                    crops: 0,
+                    buildings: 0,
+                    objects: 0
+                };
+                
+                this.init();
+            }
+
+            init() {
+                // Initialize world grid
+                for (let x = 0; x < this.gridSize; x++) {
+                    this.world[x] = [];
+                    for (let y = 0; y < this.gridSize; y++) {
+                        this.world[x][y] = {
+                            type: 'grass',
+                            growth: 0,
+                            building: null,
+                            tree: null
+                        };
+                    }
+                }
+                
+                // Add some initial objects
+                this.addInitialObjects();
+                
+                // Set up event listeners
+                this.setupEvents();
+                
+                // Start game loop
+                this.gameLoop();
+                
+                console.log('Cozy Haven initialized successfully!');
+            }
+
+            addInitialObjects() {
+                // Add some initial crops
+                for (let i = 0; i < 5; i++) {
+                    const x = Math.floor(Math.random() * this.gridSize);
+                    const y = Math.floor(Math.random() * this.gridSize);
+                    this.world[x][y].type = 'wheat';
+                    this.world[x][y].growth = Math.random() * 5;
+                    this.stats.crops++;
+                }
+                
+                // Add some trees
+                for (let i = 0; i < 3; i++) {
+                    const x = Math.floor(Math.random() * this.gridSize);
+                    const y = Math.floor(Math.random() * this.gridSize);
+                    this.world[x][y].tree = 'oak';
+                    this.stats.objects++;
+                }
+                
+                // Add initial building
+                const houseX = Math.floor(this.gridSize / 2);
+                const houseY = Math.floor(this.gridSize / 2);
+                this.world[houseX][houseY].building = 'house';
+                this.stats.buildings++;
+            }
+
+            setupEvents() {
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = Math.floor((e.clientX - rect.left) / this.cellSize);
+                    const y = Math.floor((e.clientY - rect.top) / this.cellSize);
+                    
+                    if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
+                        this.handleCellClick(x, y);
+                    }
+                });
+
+                // Keyboard controls
+                document.addEventListener('keydown', (e) => {
+                    switch(e.key.toLowerCase()) {
+                        case 'w':
+                            this.selectedTool = 'wheat';
+                            break;
+                        case 'c':
+                            this.selectedTool = 'carrot';
+                            break;
+                        case 'h':
+                            this.selectedTool = 'house';
+                            break;
+                        case 'b':
+                            this.selectedTool = 'barn';
+                            break;
+                        case 'm':
+                            this.selectedTool = 'mine';
+                            break;
+                        case 't':
+                            this.selectedTool = 'tree';
+                            break;
+                    }
+                });
+            }
+
+            handleCellClick(x, y) {
+                const cell = this.world[x][y];
+                
+                switch(this.selectedTool) {
+                    case 'wheat':
+                        if (cell.type === 'grass' && this.inventory.seeds > 0) {
+                            cell.type = 'wheat';
+                            cell.growth = 0;
+                            this.inventory.seeds--;
+                            this.stats.crops++;
+                            this.updateUI();
+                        }
+                        break;
+                    case 'carrot':
+                        if (cell.type === 'grass' && this.inventory.seeds > 0) {
+                            cell.type = 'carrot';
+                            cell.growth = 0;
+                            this.inventory.seeds--;
+                            this.stats.crops++;
+                            this.updateUI();
+                        }
+                        break;
+                    case 'house':
+                        if (cell.type === 'grass' && !cell.building && this.inventory.wood >= 5) {
+                            cell.building = 'house';
+                            this.inventory.wood -= 5;
+                            this.stats.buildings++;
+                            this.updateUI();
+                        }
+                        break;
+                    case 'barn':
+                        if (cell.type === 'grass' && !cell.building && this.inventory.wood >= 8) {
+                            cell.building = 'barn';
+                            this.inventory.wood -= 8;
+                            this.stats.buildings++;
+                            this.updateUI();
+                        }
+                        break;
+                    case 'mine':
+                        if (cell.type === 'grass' && this.inventory.stone >= 2) {
+                            cell.type = 'mine';
+                            this.inventory.stone -= 2;
+                            this.stats.objects++;
+                            this.updateUI();
+                        }
+                        break;
+                    case 'tree':
+                        if (cell.type === 'grass' && !cell.tree && this.inventory.seeds > 0) {
+                            cell.tree = 'oak';
+                            this.inventory.seeds--;
+                            this.stats.objects++;
+                            this.updateUI();
+                        }
+                        break;
+                }
+            }
+
+            gameLoop() {
+                const currentTime = performance.now();
+                const deltaTime = currentTime - this.lastFrameTime;
+                
+                // Update FPS
+                this.frameCount++;
+                if (this.frameCount % 30 === 0) {
+                    this.fps = Math.round(1000 / deltaTime);
+                    document.getElementById('fps').textContent = this.fps;
+                }
+                
+                // Update game logic
+                this.update(deltaTime);
+                
+                // Render
+                this.render();
+                
+                this.lastFrameTime = currentTime;
+                requestAnimationFrame(() => this.gameLoop());
+            }
+
+            update(deltaTime) {
+                // Grow crops
+                for (let x = 0; x < this.gridSize; x++) {
+                    for (let y = 0; y < this.gridSize; y++) {
+                        const cell = this.world[x][y];
+                        if (cell.type === 'wheat' || cell.type === 'carrot') {
+                            cell.growth += deltaTime * 0.001;
+                            if (cell.growth > 10) {
+                                cell.growth = 10; // Max growth
+                            }
+                        }
+                    }
+                }
+            }
+
+            render() {
+                // Clear canvas
+                this.ctx.fillStyle = '#87CEEB';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw grid
+                for (let x = 0; x < this.gridSize; x++) {
+                    for (let y = 0; y < this.gridSize; y++) {
+                        const cell = this.world[x][y];
+                        const px = x * this.cellSize;
+                        const py = y * this.cellSize;
+                        
+                        // Draw terrain
+                        if (cell.type === 'grass') {
+                            this.ctx.fillStyle = '#90EE90';
+                        } else if (cell.type === 'wheat') {
+                            this.ctx.fillStyle = '#DAA520';
+                        } else if (cell.type === 'carrot') {
+                            this.ctx.fillStyle = '#FF8C00';
+                        } else if (cell.type === 'mine') {
+                            this.ctx.fillStyle = '#696969';
+                        } else {
+                            this.ctx.fillStyle = '#90EE90';
+                        }
+                        
+                        this.ctx.fillRect(px, py, this.cellSize, this.cellSize);
+                        
+                        // Draw growth indicator for crops
+                        if ((cell.type === 'wheat' || cell.type === 'carrot') && cell.growth > 0) {
+                            const growthHeight = Math.min(cell.growth * 2, this.cellSize);
+                            this.ctx.fillStyle = cell.type === 'wheat' ? '#FFD700' : '#FF6347';
+                            this.ctx.fillRect(px, py + this.cellSize - growthHeight, this.cellSize, growthHeight);
+                        }
+                        
+                        // Draw buildings
+                        if (cell.building) {
+                            this.ctx.fillStyle = '#8B4513';
+                            this.ctx.fillRect(px + 2, py + 2, this.cellSize - 4, this.cellSize - 4);
+                            this.ctx.fillStyle = '#DEB887';
+                            this.ctx.fillRect(px + 4, py + 4, this.cellSize - 8, this.cellSize - 8);
+                            
+                            // Draw roof
+                            this.ctx.fillStyle = '#654321';
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(px, py + 4);
+                            this.ctx.lineTo(px + this.cellSize/2, py);
+                            this.ctx.lineTo(px + this.cellSize, py + 4);
+                            this.ctx.closePath();
+                            this.ctx.fill();
+                        }
+                        
+                        // Draw trees
+                        if (cell.tree) {
+                            this.ctx.fillStyle = '#8B4513';
+                            this.ctx.fillRect(px + 8, py + 10, 4, 10);
+                            this.ctx.fillStyle = '#228B22';
+                            this.ctx.beginPath();
+                            this.ctx.arc(px + 10, py + 8, 6, 0, Math.PI * 2);
+                            this.ctx.fill();
+                        }
+                        
+                        // Draw grid lines
+                        this.ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                        this.ctx.strokeRect(px, py, this.cellSize, this.cellSize);
+                    }
+                }
+                
+                // Draw selection indicator
+                this.ctx.strokeStyle = '#FFD700';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            updateUI() {
+                document.getElementById('seeds').textContent = this.inventory.seeds;
+                document.getElementById('wood').textContent = this.inventory.wood;
+                document.getElementById('stone').textContent = this.inventory.stone;
+                document.getElementById('coins').textContent = this.inventory.coins;
+                document.getElementById('crops').textContent = this.stats.crops;
+                document.getElementById('buildings').textContent = this.stats.buildings;
+                document.getElementById('objects').textContent = this.stats.objects;
+            }
+
+            // Public methods for buttons
+            plantCrop() {
+                this.selectedTool = 'wheat';
+                console.log('Selected tool: Wheat');
+            }
+
+            plantCarrot() {
+                this.selectedTool = 'carrot';
+                console.log('Selected tool: Carrot');
+            }
+
+            placeBuilding() {
+                this.selectedTool = 'house';
+                console.log('Selected tool: House');
+            }
+
+            placeBarn() {
+                this.selectedTool = 'barn';
+                console.log('Selected tool: Barn');
+            }
+
+            mineOre() {
+                this.selectedTool = 'mine';
+                console.log('Selected tool: Mine');
+            }
+
+            placeTree() {
+                this.selectedTool = 'tree';
+                console.log('Selected tool: Tree');
+            }
+        }
+
+        // Initialize game when page loads
+        let game;
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                game = new SimpleCozyGame();
+                document.getElementById('loading').classList.add('hidden');
+                console.log('Cozy Haven loaded successfully!');
+            } catch (error) {
+                console.error('Game failed to load:', error);
+                document.getElementById('loading').innerHTML = '<div style="color: red;">Error loading game: ' + error.message + '</div>';
+            }
+        });
+
+        // Handle errors gracefully
+        window.addEventListener('error', (e) => {
+            console.error('Game error:', e.error);
+        });
+    </script>
+</body>
+</html>

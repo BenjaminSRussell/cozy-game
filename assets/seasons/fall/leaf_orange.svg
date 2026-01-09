@@ -1,0 +1,18 @@
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="orangeLeafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8C00"/>
+      <stop offset="50%" stop-color="#FF6347"/>
+      <stop offset="100%" stop-color="#D2691E"/>
+    </linearGradient>
+  </defs>
+  <!-- Maple leaf shape -->
+  <path d="M 8 2 L 10 4 L 12 3 L 11 5 L 13 6 L 11 7 L 12 9 L 10 8 L 8 10 L 6 8 L 4 9 L 5 7 L 3 6 L 5 5 L 4 3 L 6 4 Z" 
+        fill="url(#orangeLeafGrad)" stroke="#8B4513" stroke-width="0.5"/>
+  <!-- Leaf vein -->
+  <line x1="8" y1="3" x2="8" y2="9" stroke="#654321" stroke-width="0.5"/>
+  <line x1="8" y1="5" x2="6" y2="4" stroke="#654321" stroke-width="0.3"/>
+  <line x1="8" y1="5" x2="10" y2="4" stroke="#654321" stroke-width="0.3"/>
+  <line x1="8" y1="7" x2="6" y2="8" stroke="#654321" stroke-width="0.3"/>
+  <line x1="8" y1="7" x2="10" y2="8" stroke="#654321" stroke-width="0.3"/>
+</svg>

@@ -1,0 +1,85 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Ground base -->
+  <rect x="0" y="115" width="128" height="8" fill="#8B4513" opacity="0.3"/>
+  
+  <!-- Fence posts with wood texture -->
+  <rect x="10" y="60" width="8" height="55" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="10" y="65" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="10" y="75" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="10" y="85" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="10" y="95" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="10" y="105" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  
+  <rect x="30" y="60" width="8" height="55" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="30" y="65" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="30" y="75" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="30" y="85" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="30" y="95" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="30" y="105" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  
+  <rect x="50" y="60" width="8" height="55" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="50" y="65" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="50" y="75" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="50" y="85" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="50" y="95" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="50" y="105" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  
+  <rect x="70" y="60" width="8" height="55" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="70" y="65" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="70" y="75" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="70" y="85" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="70" y="95" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="70" y="105" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  
+  <rect x="90" y="60" width="8" height="55" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="90" y="65" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="90" y="75" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="90" y="85" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="90" y="95" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="90" y="105" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  
+  <rect x="110" y="60" width="8" height="55" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+  <rect x="110" y="65" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="110" y="75" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="110" y="85" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="110" y="95" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  <rect x="110" y="105" width="8" height="3" fill="#A0522D" opacity="0.7"/>
+  
+  <!-- Pointed tops with better angles -->
+  <polygon points="10,60 14,52 18,60" fill="#654321"/>
+  <polygon points="30,60 34,52 38,60" fill="#654321"/>
+  <polygon points="50,60 54,52 58,60" fill="#654321"/>
+  <polygon points="70,60 74,52 78,60" fill="#654321"/>
+  <polygon points="90,60 94,52 98,60" fill="#654321"/>
+  <polygon points="110,60 114,52 118,60" fill="#654321"/>
+  
+  <!-- Horizontal rails with wood grain -->
+  <rect x="10" y="70" width="108" height="4" fill="#A0522D"/>
+  <rect x="10" y="72" width="108" height="1" fill="#8B4513" opacity="0.6"/>
+  
+  <rect x="10" y="85" width="108" height="4" fill="#A0522D"/>
+  <rect x="10" y="87" width="108" height="1" fill="#8B4513" opacity="0.6"/>
+  
+  <rect x="10" y="100" width="108" height="4" fill="#A0522D"/>
+  <rect x="10" y="102" width="108" height="1" fill="#8B4513" opacity="0.6"/>
+  
+  <!-- Wood knots -->
+  <circle cx="25" cy="80" r="1" fill="#654321" opacity="0.5"/>
+  <circle cx="65" cy="90" r="0.8" fill="#654321" opacity="0.4"/>
+  <circle cx="95" cy="75" r="1.2" fill="#654321" opacity="0.6"/>
+  <circle cx="45" cy="102" r="0.6" fill="#654321" opacity="0.4"/>
+  
+  <!-- Nail heads -->
+  <circle cx="14" cy="72" r="0.3" fill="#696969"/>
+  <circle cx="34" cy="72" r="0.3" fill="#696969"/>
+  <circle cx="54" cy="72" r="0.3" fill="#696969"/>
+  <circle cx="74" cy="72" r="0.3" fill="#696969"/>
+  <circle cx="94" cy="72" r="0.3" fill="#696969"/>
+  <circle cx="114" cy="72" r="0.3" fill="#696969"/>
+  
+  <!-- Small grass at base -->
+  <ellipse cx="20" cy="118" rx="3" ry="1" fill="#228B22" opacity="0.6"/>
+  <ellipse cx="50" cy="119" rx="2" ry="1" fill="#32CD32" opacity="0.5"/>
+  <ellipse cx="80" cy="118" rx="3" ry="1" fill="#228B22" opacity="0.6"/>
+  <ellipse cx="108" cy="119" rx="2" ry="1" fill="#32CD32" opacity="0.5"/>
+</svg>

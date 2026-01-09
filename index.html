@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cozy Haven - Free Farming Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+            position: relative;
+        }
+
+        #gameContainer {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        #gameCanvas {
+            border: 3px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            max-width: 95vw;
+            max-height: 95vh;
+            cursor: crosshair;
+        }
+
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+        }
+
+        .loading-content {
+            text-align: center;
+            max-width: 500px;
+            padding: 40px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .loading-title {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .loading-subtitle {
+            font-size: 1.2em;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            border-radius: 15px;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 20px rgba(76,175,80,0.5);
+        }
+
+        .progress-text {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .progress-details {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-bottom: 20px;
+        }
+
+        .asset-counter {
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #gameUI {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .ui-panel {
+            position: absolute;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(5px);
+            pointer-events: auto;
+        }
+
+        #statsPanel {
+            top: 20px;
+            left: 20px;
+            min-width: 200px;
+        }
+
+        #controlsPanel {
+            top: 20px;
+            right: 20px;
+            min-width: 200px;
+        }
+
+        #inventoryPanel {
+            bottom: 20px;
+            left: 20px;
+            min-width: 300px;
+        }
+
+        .panel-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+
+        .panel-content {
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            opacity: 0.8;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            color: #8BC34A;
+        }
+
+        .control-item {
+            margin-bottom: 8px;
+            padding: 5px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+        }
+
+        .control-key {
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            margin-right: 5px;
+        }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 30px);
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .inventory-slot {
+            width: 30px;
+            height: 30px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+        }
+
+        .inventory-slot.filled {
+            background: rgba(76,175,80,0.3);
+            border-color: #4CAF50;
+        }
+
+        #startButton {
+            background: linear-gradient(135deg, #4CAF50, #8BC34A);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(76,175,80,0.3);
+        }
+
+        #startButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76,175,80,0.4);
+        }
+
+        #startButton:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .error-message {
+            background: rgba(244,67,54,0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .fade-out {
+            animation: fadeOut 0.5s ease forwards;
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Loading Screen -->
+        <div id="loadingScreen">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <h1 class="loading-title">🌾 Cozy Haven</h1>
+                <p class="loading-subtitle">Free Farming Game - 1,450+ Free Assets</p>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                
+                <div class="progress-text" id="progressText">Initializing...</div>
+                <div class="progress-details" id="progressDetails">Setting up game systems...</div>
+                <div class="asset-counter" id="assetCounter">0 / 1,450 assets loaded</div>
+                
+                <button id="startButton" disabled>Launch Game</button>
+                <div class="error-message" id="errorMessage"></div>
+            </div>
+        </div>
+        
+        <!-- Game UI -->
+        <div id="gameUI" class="hidden">
+            <div class="ui-panel" id="statsPanel">
+                <div class="panel-title">📊 Game Stats</div>
+                <div class="panel-content">
+                    <div class="stat-item">
+                        <span class="stat-label">FPS:</span>
+                        <span class="stat-value" id="fpsValue">60</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Memory:</span>
+                        <span class="stat-value" id="memoryValue">0 MB</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Objects:</span>
+                        <span class="stat-value" id="objectsValue">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Launch Time:</span>
+                        <span class="stat-value" id="launchTimeValue">0s</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="ui-panel" id="controlsPanel">
+                <div class="panel-title">🎮 Controls</div>
+                <div class="panel-content">
+                    <div class="control-item">
+                        <span class="control-key">W A S D</span> Move player
+                    </div>
+                    <div class="control-item">
+                        <span class="control-key">Click</span> Interact with world
+                    </div>
+                    <div class="control-item">
+                        <span class="control-key">Space</span> Action/Use tool
+                    </div>
+                    <div class="control-item">
+                        <span class="control-key">ESC</span> Open menu
+                    </div>
+                </div>
+            </div>
+            
+            <div class="ui-panel" id="inventoryPanel">
+                <div class="panel-title">🎒 Inventory</div>
+                <div class="panel-content">
+                    <div>Seeds: <span id="seedsCount">10</span></div>
+                    <div>Tools: <span id="toolsCount">3</span></div>
+                    <div>Coins: <span id="coinsCount">100</span></div>
+                    <div class="inventory-grid" id="inventoryGrid">
+                        <!-- Inventory slots will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import game modules
+        import { GameLauncher } from './src/game/GameLauncher.js';
+        import { FreeAssetDownloader } from './src/tools/FreeAssetDownloader.js';
+
+        class CozyHavenGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.loadingScreen = document.getElementById('loadingScreen');
+                this.gameUI = document.getElementById('gameUI');
+                this.startButton = document.getElementById('startButton');
+                this.gameLauncher = null;
+                this.assetDownloader = null;
+                
+                this.setupCanvas();
+                this.setupEventListeners();
+            }
+
+            setupCanvas() {
+                // Set canvas size
+                this.canvas.width = Math.min(window.innerWidth * 0.9, 1200);
+                this.canvas.height = Math.min(window.innerHeight * 0.9, 800);
+                
+                // Handle window resize
+                window.addEventListener('resize', () => {
+                    this.canvas.width = Math.min(window.innerWidth * 0.9, 1200);
+                    this.canvas.height = Math.min(window.innerHeight * 0.9, 800);
+                });
+            }
+
+            setupEventListeners() {
+                this.startButton.addEventListener('click', () => {
+                    this.launchGame();
+                });
+
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && !this.loadingScreen.classList.contains('hidden')) {
+                        // Quick launch for development
+                        this.launchGame();
+                    }
+                });
+            }
+
+            async launchGame() {
+                this.startButton.disabled = true;
+                this.startButton.textContent = 'Launching...';
+                
+                try {
+                    // Initialize game configuration
+                    const gameConfig = {
+                        renderer: 'webgl2',
+                        quality: 'high',
+                        platform: 'web',
+                        assets: 'free',
+                        performance: {
+                            targetFPS: 60,
+                            lodDistance: 50,
+                            shadowQuality: 2,
+                            textureResolution: 1
+                        }
+                    };
+
+                    // Create game launcher
+                    this.gameLauncher = new GameLauncher(this.canvas, gameConfig);
+                    
+                    // Launch the game with progress tracking
+                    await this.gameLauncher.launchGame((progress) => {
+                        this.updateProgress(progress);
+                    });
+                    
+                    // Game launched successfully!
+                    this.onGameLaunched();
+                    
+                } catch (error) {
+                    console.error('Game launch failed:', error);
+                    this.showError(error.message);
+                    this.startButton.disabled = false;
+                    this.startButton.textContent = 'Retry Launch';
+                }
+            }
+
+            updateProgress(progress) {
+                // Update progress bar
+                const progressFill = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
+                const progressDetails = document.getElementById('progressDetails');
+                const assetCounter = document.getElementById('assetCounter');
+                
+                progressFill.style.width = `${progress.progress * 100}%`;
+                progressText.textContent = progress.stage;
+                progressDetails.textContent = progress.details;
+                assetCounter.textContent = `${progress.assetsLoaded} / ${progress.totalAssets} assets loaded`;
+                
+                // Enable start button when ready
+                if (progress.progress >= 1.0) {
+                    this.startButton.disabled = false;
+                    this.startButton.textContent = 'Game Ready!';
+                }
+            }
+
+            onGameLaunched() {
+                // Hide loading screen
+                this.loadingScreen.classList.add('fade-out');
+                
+                setTimeout(() => {
+                    this.loadingScreen.classList.add('hidden');
+                    this.gameUI.classList.remove('hidden');
+                    
+                    // Start updating game stats
+                    this.startStatsUpdate();
+                    
+                    // Setup game controls
+                    this.setupGameControls();
+                    
+                }, 500);
+            }
+
+            startStatsUpdate() {
+                setInterval(() => {
+                    if (this.gameLauncher) {
+                        const stats = this.gameLauncher.getGameStats();
+                        
+                        document.getElementById('fpsValue').textContent = Math.round(stats.fps);
+                        document.getElementById('memoryValue').textContent = `${Math.round(stats.memoryUsage / 1024 / 1024)} MB`;
+                        document.getElementById('objectsValue').textContent = stats.objectsRendered;
+                        document.getElementById('launchTimeValue').textContent = `${Math.round(stats.launchTime / 1000)}s`;
+                    }
+                }, 1000);
+            }
+
+            setupGameControls() {
+                // Additional game controls setup
+                console.log('Game controls ready!');
+                
+                // Populate inventory (example)
+                this.populateInventory();
+            }
+
+            populateInventory() {
+                const inventoryGrid = document.getElementById('inventoryGrid');
+                inventoryGrid.innerHTML = '';
+                
+                // Create inventory slots
+                for (let i = 0; i < 16; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'inventory-slot';
+                    
+                    // Add some example items
+                    if (i < 3) {
+                        slot.classList.add('filled');
+                        slot.textContent = ['🌾', '🥕', '🍅'][i];
+                    }
+                    
+                    inventoryGrid.appendChild(slot);
+                }
+            }
+
+            showError(message) {
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.textContent = `Error: ${message}`;
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        // Initialize game when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const game = new CozyHavenGame();
+            
+            // Auto-launch after 2 seconds for demo
+            setTimeout(() => {
+                if (!document.getElementById('startButton').disabled) {
+                    game.launchGame();
+                }
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Farming Game</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 20px; 
+            background: #87CEEB; 
+            font-family: Arial;
+        }
+        #game { 
+            border: 2px solid #333; 
+            background: #90EE90; 
+            cursor: pointer;
+        }
+        #controls { 
+            margin-top: 20px; 
+            background: white; 
+            padding: 15px; 
+            border-radius: 8px;
+        }
+        .btn { 
+            background: #4CAF50; 
+            color: white; 
+            border: none; 
+            padding: 10px 15px; 
+            margin: 5px; 
+            border-radius: 4px; 
+            cursor: pointer;
+        }
+        .btn:hover { background: #45a049; }
+        #info { 
+            margin-top: 10px; 
+            font-size: 14px; 
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game" width="600" height="400"></canvas>
+    
+    <div id="controls">
+        <button class="btn" onclick="selectTool('seed')">Plant Seed</button>
+        <button class="btn" onclick="selectTool('water')">Water</button>
+        <button class="btn" onclick="selectTool('harvest')">Harvest</button>
+        <button class="btn" onclick="selectTool('build')">Build</button>
+        <button class="btn" onclick="resetGame()">Reset</button>
+        
+        <div id="info">
+            <div>Tool: <span id="currentTool">seed</span></div>
+            <div>Seeds: <span id="seeds">10</span></div>
+            <div>Crops: <span id="crops">0</span></div>
+            <div>Coins: <span id="coins">0</span></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const CELL_SIZE = 40;
+        const ROWS = 10;
+        const COLS = 15;
+        
+        let currentTool = 'seed';
+        let seeds = 10;
+        let coins = 0;
+        let grid = [];
+        
+        // Initialize grid
+        function initGrid() {
+            grid = [];
+            for (let r = 0; r < ROWS; r++) {
+                grid[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    grid[r][c] = {
+                        type: 'empty',
+                        growth: 0,
+                        watered: false
+                    };
+                }
+            }
+        }
+        
+        // Draw game
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let cropCount = 0;
+            
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const x = c * CELL_SIZE;
+                    const y = r * CELL_SIZE;
+                    const cell = grid[r][c];
+                    
+                    // Draw soil
+                    ctx.fillStyle = cell.watered ? '#8B4513' : '#654321';
+                    ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                    
+                    // Draw crop
+                    if (cell.type === 'seed') {
+                        if (cell.growth < 3) {
+                            ctx.fillStyle = '#90EE90';
+                            ctx.fillRect(x + 15, y + 25, 10, 10);
+                        } else if (cell.growth < 6) {
+                            ctx.fillStyle = '#228B22';
+                            ctx.fillRect(x + 10, y + 20, 20, 15);
+                        } else {
+                            ctx.fillStyle = '#FFD700';
+                            ctx.beginPath();
+                            ctx.arc(x + 20, y + 20, 8, 0, Math.PI * 2);
+                            ctx.fill();
+                            cropCount++;
+                        }
+                    }
+                    
+                    // Draw grid lines
+                    ctx.strokeStyle = '#333';
+                    ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
+                }
+            }
+            
+            // Update info
+            document.getElementById('crops').textContent = cropCount;
+        }
+        
+        // Handle click
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const col = Math.floor(x / CELL_SIZE);
+            const row = Math.floor(y / CELL_SIZE);
+            
+            if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+                const cell = grid[row][col];
+                
+                if (currentTool === 'seed' && cell.type === 'empty' && seeds > 0) {
+                    cell.type = 'seed';
+                    cell.growth = 0;
+                    seeds--;
+                } else if (currentTool === 'water') {
+                    cell.watered = true;
+                } else if (currentTool === 'harvest' && cell.type === 'seed' && cell.growth >= 6) {
+                    cell.type = 'empty';
+                    cell.growth = 0;
+                    cell.watered = false;
+                    coins += 10;
+                } else if (currentTool === 'build' && cell.type === 'empty') {
+                    cell.type = 'house';
+                }
+                
+                updateUI();
+                draw();
+            }
+        });
+        
+        // Update game
+        function update() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = grid[r][c];
+                    if (cell.type === 'seed' && cell.watered && cell.growth < 10) {
+                        cell.growth += 0.1;
+                    }
+                    cell.watered = false;
+                }
+            }
+            draw();
+        }
+        
+        // Select tool
+        function selectTool(tool) {
+            currentTool = tool;
+            document.getElementById('currentTool').textContent = tool;
+        }
+        
+        // Update UI
+        function updateUI() {
+            document.getElementById('seeds').textContent = seeds;
+            document.getElementById('coins').textContent = coins;
+        }
+        
+        // Reset game
+        function resetGame() {
+            seeds = 10;
+            coins = 0;
+            initGrid();
+            updateUI();
+            draw();
+        }
+        
+        // Start game
+        initGrid();
+        updateUI();
+        draw();
+        setInterval(update, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SVG Farm Simulator</title>
+    <style>
+        body { margin: 0; padding: 20px; background: linear-gradient(135deg, #87CEEB, #98FB98); font-family: Arial; }
+        #game { border: 3px solid #333; background: #90EE90; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        #controls { margin-top: 20px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .btn { background: #4CAF50; color: white; border: none; padding: 12px 18px; margin: 5px; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .btn:hover { background: #45a049; transform: translateY(-2px); }
+        .btn.selected { background: #2196F3; }
+        #info { margin-top: 15px; font-size: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .info-item { background: #f5f5f5; padding: 8px; border-radius: 4px; text-align: center; }
+        .info-label { font-weight: bold; color: #333; }
+        .info-value { color: #4CAF50; font-size: 16px; }
+        #message { margin-top: 10px; padding: 10px; background: #E3F2FD; border-radius: 4px; text-align: center; min-height: 20px; }
+        .season-indicator { background: #FFD700; color: #333; padding: 5px 10px; border-radius: 15px; font-weight: bold; }
+        
+        /* Enhanced modal styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
+        .modal-content { background: white; margin: 3% auto; padding: 20px; border-radius: 15px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; }
+        .crop-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-top: 20px; }
+        .crop-item { border: 3px solid #ddd; padding: 15px; text-align: center; cursor: pointer; border-radius: 10px; transition: all 0.3s; background: #f9f9f9; }
+        .crop-item:hover { border-color: #4CAF50; background: #e8f5e8; transform: scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .crop-item.selected { border-color: #2196F3; background: #e3f2fd; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: #000; }
+        
+        /* Visual enhancements */
+        .crop-svg { width: 32px; height: 32px; margin-bottom: 8px; }
+        .crop-name { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+        .crop-time { font-size: 12px; color: #666; margin-bottom: 4px; }
+        .crop-price { color: #4CAF50; font-weight: bold; font-size: 14px; }
+        
+        /* Building modal styles */
+        .building-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 20px; }
+        .building-item { border: 3px solid #ddd; padding: 15px; text-align: center; cursor: pointer; border-radius: 10px; transition: all 0.3s; background: #f9f9f9; }
+        .building-item:hover { border-color: #FF9800; background: #fff3e0; transform: scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .building-item.selected { border-color: #2196F3; background: #e3f2fd; }
+        .building-preview { width: 40px; height: 40px; margin: 0 auto 8px; border-radius: 5px; display: flex; align-items: center; justify-content: center; }
+        .building-icon { font-size: 20px; }
+        .building-name { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+        .building-cost { color: #FF9800; font-weight: bold; font-size: 12px; margin-bottom: 4px; }
+        .building-desc { font-size: 11px; color: #666; }
+    </style>
+</head>
+<body>
+    <canvas id="game" width="800" height="500"></canvas>
+    
+    <div id="controls">
+        <div>
+            <button class="btn" onclick="openCropModal()">Crops</button>
+            <button class="btn" onclick="selectTool('water')" id="water-btn">Water</button>
+            <button class="btn" onclick="selectTool('harvest')" id="harvest-btn">Harvest</button>
+            <button class="btn" onclick="openBuildingModal()">Build</button>
+            <button class="btn" onclick="selectTool('animal')" id="animal-btn">Animals</button>
+            <button class="btn" onclick="selectTool('chop')" id="chop-btn">Chop</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <button class="btn" onclick="nextDay()">Next Day</button>
+            <button class="btn" onclick="buySeeds()">Buy Seeds</button>
+            <button class="btn" onclick="saveGame()">Save</button>
+            <button class="btn" onclick="loadGame()">Load</button>
+            <button class="btn" onclick="resetGame()">Reset</button>
+        </div>
+        
+        <div id="info">
+            <div class="info-item">
+                <div class="info-label">Day</div>
+                <div class="info-value" id="day">1</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Season</div>
+                <div class="info-value season-indicator" id="season">Spring</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Tool</div>
+                <div class="info-value" id="currentTool">Crops</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Seeds</div>
+                <div class="info-value" id="seeds">20</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Wood</div>
+                <div class="info-value" id="wood">10</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Grass</div>
+                <div class="info-value" id="grass">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Animals</div>
+                <div class="info-value" id="animals">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Crops</div>
+                <div class="info-value" id="crops">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Coins</div>
+                <div class="info-value" id="coins">50</div>
+            </div>
+        </div>
+        
+        <div id="message">Welcome to SVG Farm! Water is essential for crop growth.</div>
+    </div>
+
+    <!-- Crop Selection Modal -->
+    <div id="cropModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCropModal()">&times;</span>
+            <h2>Select Crop Type</h2>
+            <div class="crop-grid" id="cropGrid"></div>
+        </div>
+    </div>
+
+    <!-- Building Selection Modal -->
+    <div id="buildingModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeBuildingModal()">&times;</span>
+            <h2>Select Building Type</h2>
+            <div class="building-grid" id="buildingGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const CELL_SIZE = 40;
+        const ROWS = 12;
+        const COLS = 20;
+        
+        let currentTool = 'crops';
+        let selectedCrop = null;
+        let selectedBuilding = null;
+        let day = 1;
+        let season = 0;
+        let seeds = 20;
+        let wood = 10;
+        let coins = 50;
+        let grid = [];
+        let cropPrices = {};
+        let cropTimelines = {};
+        
+        const seasons = ['Spring', 'Summer', 'Fall', 'Winter'];
+        const seasonColors = {
+            'Spring': '#90EE90',
+            'Summer': '#7CFC00',
+            'Fall': '#DAA520',
+            'Winter': '#F0F8FF'
+        };
+        
+        // Crop data with 6-phase growth system (5 growth + 1 death)
+        const cropData = {
+            'wheat': { name: 'Wheat', time: 5, basePrice: 10, color: '#DAA520', shape: 'vertical', phases: 5, maxWaterDays: 2 },
+            'carrot': { name: 'Carrot', time: 5, basePrice: 15, color: '#FF8C00', shape: 'triangle', phases: 5, maxWaterDays: 2 },
+            'corn': { name: 'Corn', time: 5, basePrice: 20, color: '#FFD700', shape: 'tall', phases: 5, maxWaterDays: 3 },
+            'tomato': { name: 'Tomato', time: 5, basePrice: 18, color: '#FF6347', shape: 'round', phases: 5, maxWaterDays: 2 },
+            'potato': { name: 'Potato', time: 5, basePrice: 12, color: '#8B4513', shape: 'oval', phases: 5, maxWaterDays: 3 },
+            'lettuce': { name: 'Lettuce', time: 5, basePrice: 8, color: '#90EE90', shape: 'spread', phases: 5, maxWaterDays: 1 },
+            'pumpkin': { name: 'Pumpkin', time: 5, basePrice: 25, color: '#FF8C00', shape: 'large', phases: 5, maxWaterDays: 3 },
+            'strawberry': { name: 'Strawberry', time: 5, basePrice: 30, color: '#DC143C', shape: 'small', phases: 5, maxWaterDays: 2 },
+            'blueberry': { name: 'Blueberry', time: 5, basePrice: 22, color: '#4169E1', shape: 'cluster', phases: 5, maxWaterDays: 2 },
+            'apple': { name: 'Apple', time: 5, basePrice: 28, color: '#FF0000', shape: 'round', phases: 5, maxWaterDays: 3 },
+            'pear': { name: 'Pear', time: 5, basePrice: 24, color: '#9ACD32', shape: 'pear', phases: 5, maxWaterDays: 3 },
+            'peach': { name: 'Peach', time: 5, basePrice: 26, color: '#FFDAB9', shape: 'round', phases: 5, maxWaterDays: 2 },
+            'cherry': { name: 'Cherry', time: 5, basePrice: 35, color: '#DC143C', shape: 'small', phases: 5, maxWaterDays: 2 },
+            'grape': { name: 'Grape', time: 5, basePrice: 32, color: '#800080', shape: 'cluster', phases: 5, maxWaterDays: 2 },
+            'watermelon': { name: 'Watermelon', time: 5, basePrice: 40, color: '#00FF00', shape: 'large', phases: 5, maxWaterDays: 4 },
+            'cabbage': { name: 'Cabbage', time: 5, basePrice: 14, color: '#008000', shape: 'round', phases: 5, maxWaterDays: 2 },
+            'broccoli': { name: 'Broccoli', time: 5, basePrice: 20, color: '#006400', shape: 'tree', phases: 5, maxWaterDays: 2 },
+            'onion': { name: 'Onion', time: 5, basePrice: 16, color: '#8B4513', shape: 'oval', phases: 5, maxWaterDays: 3 },
+            'garlic': { name: 'Garlic', time: 5, basePrice: 18, color: '#F0E68C', shape: 'small', phases: 5, maxWaterDays: 2 },
+            'pepper': { name: 'Pepper', time: 5, basePrice: 22, color: '#FF0000', shape: 'triangle', phases: 5, maxWaterDays: 2 },
+            'cucumber': { name: 'Cucumber', time: 5, basePrice: 12, color: '#008000', shape: 'long', phases: 5, maxWaterDays: 2 },
+            'radish': { name: 'Radish', time: 5, basePrice: 10, color: '#8B0000', shape: 'round', phases: 5, maxWaterDays: 1 },
+            'spinach': { name: 'Spinach', time: 5, basePrice: 14, color: '#228B22', shape: 'spread', phases: 5, maxWaterDays: 1 },
+            'asparagus': { name: 'Asparagus', time: 5, basePrice: 28, color: '#32CD32', shape: 'vertical', phases: 5, maxWaterDays: 2 },
+            'mushroom': { name: 'Mushroom', time: 5, basePrice: 20, color: '#8B4513', shape: 'cap', phases: 5, maxWaterDays: 1 }
+        };
+        
+        // Building data
+        const buildingData = {
+            'house': { name: 'House', cost: 5, color: '#8B4513', description: 'Basic dwelling' },
+            'barn': { name: 'Barn', cost: 10, color: '#A0522D', description: 'Animal storage' },
+            'shed': { name: 'Shed', cost: 8, color: '#8B4513', description: 'Tool storage' },
+            'windmill': { name: 'Windmill', cost: 15, color: '#696969', description: 'Grind grains' },
+            'greenhouse': { name: 'Greenhouse', cost: 20, color: '#228B22', description: 'Extend growing season' },
+            'well': { name: 'Well', cost: 12, color: '#4682B4', description: 'Water source' },
+            'fence': { name: 'Fence', cost: 3, color: '#8B4513', description: 'Property boundary' },
+            'tower': { name: 'Tower', cost: 25, color: '#696969', description: 'Lookout point' },
+            'bridge': { name: 'Bridge', cost: 18, color: '#8B4513', description: 'Cross water' },
+            'market': { name: 'Market', cost: 30, color: '#DAA520', description: 'Sell goods' }
+        };
+        
+        // Animal data without emojis
+        const animalData = {
+            'chicken': { name: 'Chicken', cost: 20, product: 'egg', color: '#FFF8DC' },
+            'cow': { name: 'Cow', cost: 50, product: 'milk', color: '#8B4513' },
+            'pig': { name: 'Pig', cost: 35, product: 'pork', color: '#FFB6C1' },
+            'sheep': { name: 'Sheep', cost: 30, product: 'wool', color: '#F5F5DC' }
+        };
+        
+        // Initialize crop prices and timelines
+        for (let crop in cropData) {
+            cropPrices[crop] = cropData[crop].basePrice;
+            cropTimelines[crop] = cropData[crop].time;
+        }
+        
+        // Initialize grid
+        function initGrid() {
+            grid = [];
+            for (let r = 0; r < ROWS; r++) {
+                grid[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    grid[r][c] = {
+                        type: 'empty',
+                        cropType: null,
+                        growth: 0,
+                        watered: false,
+                        building: null,
+                        animal: null,
+                        tree: null,
+                        waterBlock: false,
+                        lastWatered: 0,
+                        tilled: false,
+                        hasGrass: Math.random() < 0.3, // 30% chance of initial grass
+                        daysWithoutWater: 0,
+                        isDead: false
+                    };
+                }
+            }
+            
+            // Add water blocks
+            for (let i = 0; i < 5; i++) {
+                const r = Math.floor(Math.random() * ROWS);
+                const c = Math.floor(Math.random() * COLS);
+                grid[r][c].waterBlock = true;
+                grid[r][c].hasGrass = false;
+            }
+            
+            // Add some trees
+            for (let i = 0; i < 8; i++) {
+                const r = Math.floor(Math.random() * ROWS);
+                const c = Math.floor(Math.random() * COLS);
+                if (!grid[r][c].waterBlock) {
+                    grid[r][c].tree = 'oak';
+                    grid[r][c].hasGrass = false;
+                }
+            }
+        }
+        
+        // Initialize crop modal with actual SVG files
+        function initCropModal() {
+            const cropGrid = document.getElementById('cropGrid');
+            cropGrid.innerHTML = '';
+            
+            for (let cropType in cropData) {
+                const crop = cropData[cropType];
+                const div = document.createElement('div');
+                div.className = 'crop-item';
+                div.innerHTML = `
+                    <img class="crop-svg" src="assets/crops/${cropType}.svg" alt="${crop.name}">
+                    <div class="crop-name">${crop.name}</div>
+                    <div class="crop-time">${crop.time} days</div>
+                    <div class="crop-price">${crop.basePrice} coins</div>
+                `;
+                div.onclick = () => selectCrop(cropType);
+                cropGrid.appendChild(div);
+            }
+        }
+        
+        // Initialize building modal
+        function initBuildingModal() {
+            const buildingGrid = document.getElementById('buildingGrid');
+            buildingGrid.innerHTML = '';
+            
+            for (let buildingType in buildingData) {
+                const building = buildingData[buildingType];
+                const div = document.createElement('div');
+                div.className = 'building-item';
+                div.innerHTML = `
+                    <div class="building-preview" style="background-color: ${building.color};">
+                        <div class="building-icon">🏠</div>
+                    </div>
+                    <div class="building-name">${building.name}</div>
+                    <div class="building-cost">${building.cost} wood</div>
+                    <div class="building-desc">${building.description}</div>
+                `;
+                div.onclick = () => selectBuilding(buildingType);
+                buildingGrid.appendChild(div);
+            }
+        }
+        
+        // Generate SVG for crops
+        function generateCropSVG(crop) {
+            const { color, shape } = crop;
+            
+            switch(shape) {
+                case 'vertical':
+                    return `<rect x="14" y="8" width="4" height="16" fill="${color}"/>`;
+                case 'triangle':
+                    return `<polygon points="16,8 8,24 24,24" fill="${color}"/>`;
+                case 'round':
+                    return `<circle cx="16" cy="16" r="8" fill="${color}"/>`;
+                case 'oval':
+                    return `<ellipse cx="16" cy="16" rx="10" ry="6" fill="${color}"/>`;
+                case 'tall':
+                    return `<rect x="12" y="4" width="8" height="20" fill="${color}"/>`;
+                case 'spread':
+                    return `<ellipse cx="16" cy="16" rx="12" ry="8" fill="${color}"/>`;
+                case 'large':
+                    return `<circle cx="16" cy="16" r="10" fill="${color}"/>`;
+                case 'small':
+                    return `<circle cx="16" cy="16" r="5" fill="${color}"/>`;
+                case 'cluster':
+                    return `<circle cx="12" cy="12" r="3" fill="${color}"/><circle cx="20" cy="12" r="3" fill="${color}"/><circle cx="16" cy="20" r="3" fill="${color}"/>`;
+                case 'pear':
+                    return `<ellipse cx="16" cy="14" rx="6" ry="8" fill="${color}"/>`;
+                case 'tree':
+                    return `<rect x="14" y="16" width="4" height="8" fill="#8B4513"/><circle cx="16" cy="12" r="8" fill="${color}"/>`;
+                case 'long':
+                    return `<ellipse cx="16" cy="16" rx="3" ry="12" fill="${color}"/>`;
+                case 'cap':
+                    return `<ellipse cx="16" cy="18" rx="8" ry="4" fill="${color}"/><rect x="14" y="18" width="4" height="6" fill="#F5DEB3"/>`;
+                default:
+                    return `<rect x="12" y="12" width="8" height="8" fill="${color}"/>`;
+            }
+        }
+        
+        // Draw game with SVG-style graphics
+        function draw() {
+            // Seasonal background
+            ctx.fillStyle = seasonColors[seasons[season]];
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            let stats = { crops: 0, animals: 0, grass: 0 };
+            
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const x = c * CELL_SIZE;
+                    const y = r * CELL_SIZE;
+                    const cell = grid[r][c];
+                    
+                    // Draw water blocks with realistic SVG
+                    if (cell.waterBlock) {
+                        // Draw realistic water based on depth variation
+                        const waterType = Math.random() < 0.3 ? 'deep' : (Math.random() < 0.6 ? 'flowing' : 'realistic');
+                        drawWater(x, y, waterType);
+                    } else if (cell.type === 'empty') {
+                        // Draw base soil
+                        if (cell.tilled) {
+                            // Tilled soil (darker, cultivated look)
+                            ctx.fillStyle = cell.watered ? '#8B4513' : '#654321';
+                            ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                            // Add tilled lines
+                            ctx.strokeStyle = '#4A4A4A';
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(x + 5, y + 10);
+                            ctx.lineTo(x + 35, y + 10);
+                            ctx.moveTo(x + 5, y + 20);
+                            ctx.lineTo(x + 35, y + 20);
+                            ctx.moveTo(x + 5, y + 30);
+                            ctx.lineTo(x + 35, y + 30);
+                            ctx.stroke();
+                        } else if (cell.hasGrass) {
+                            // Grass patches
+                            ctx.fillStyle = '#654321';
+                            ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                            // Draw grass
+                            ctx.fillStyle = '#228B22';
+                            for (let i = 0; i < 8; i++) {
+                                const grassX = x + 5 + (i % 4) * 8;
+                                const grassY = y + 5 + Math.floor(i / 4) * 15;
+                                ctx.fillRect(grassX, grassY, 2, 4);
+                                ctx.fillRect(grassX + 1, grassY - 1, 2, 4);
+                            }
+                        } else {
+                            // Regular soil
+                            ctx.fillStyle = cell.watered ? '#8B4513' : '#654321';
+                            ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                        }
+                    }
+                    
+                    // Count grass patches
+                    if (cell.hasGrass && cell.type === 'empty') {
+                        stats.grass++;
+                    }
+                    
+                    // Draw crops with SVG-style shapes
+                    if (cell.type === 'crop') {
+                        drawSVGCrop(x, y, cell.cropType, cell.growth, cell.watered, cell.isDead);
+                        if (cell.growth >= 5 && !cell.isDead) stats.crops++; // Only count mature, living crops
+                    }
+                    
+                    // Draw animals with SVG-style shapes
+                    if (cell.animal) {
+                        drawSVGAnimal(x, y, cell.animal);
+                        stats.animals++;
+                    }
+                    
+                    // Draw buildings with SVG-style shapes
+                    if (cell.building) {
+                        drawSVGBuilding(x, y, cell.building);
+                    }
+                    
+                    // Draw trees with SVG-style shapes
+                    if (cell.tree) {
+                        drawSVGTree(x, y, cell.tree);
+                    }
+                    
+                    // Grid lines
+                    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                    ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
+                }
+            }
+            
+            document.getElementById('crops').textContent = stats.crops;
+            document.getElementById('animals').textContent = stats.animals;
+            document.getElementById('grass').textContent = stats.grass;
+        }
+        
+        function drawSVGCrop(x, y, type, growth, watered, isDead) {
+            const crop = cropData[type];
+            const maxGrowth = crop.phases; // Now using 5 phases
+            
+            // If crop is dead, draw death phase
+            if (isDead) {
+                drawDeathPhase(x, y, type);
+                return;
+            }
+            
+            const progress = growth / maxGrowth;
+            
+            // Water status indicator
+            if (!watered && growth < maxGrowth) {
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                ctx.fillRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+            }
+            
+            // Calculate current phase (1-5)
+            const currentPhase = Math.min(Math.max(1, Math.ceil(progress * 5)), 5);
+            
+            // Draw phase-specific crop
+            if (currentPhase === 5) {
+                // Mature crop - draw phase 5 SVG with glow
+                drawCropPhase(x, y, type, 5);
+                
+                // Glow effect for mature crops
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                
+                // Draw crop name
+                ctx.fillStyle = '#000';
+                ctx.font = '8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(crop.name.substring(0, 3), x + 20, y + 35);
+            } else {
+                // Draw current phase SVG
+                drawCropPhase(x, y, type, currentPhase);
+            }
+            
+            // Draw growth indicator
+            ctx.fillStyle = '#000';
+            ctx.font = '6px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`P${currentPhase}`, x + 2, y + 8);
+        }
+        
+        function drawCropPhase(x, y, cropType, phase) {
+            const img = new Image();
+            img.onload = function() {
+                ctx.drawImage(img, x + 4, y + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+            };
+            img.src = `assets/crops/phase${phase}/${cropType}.svg`;
+        }
+        
+        function drawDeathPhase(x, y, cropType) {
+            const img = new Image();
+            img.onload = function() {
+                ctx.drawImage(img, x + 4, y + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+            };
+            img.src = `assets/crops/death/${cropType}.svg`;
+            
+            // Draw death indicator
+            ctx.fillStyle = '#8B0000';
+            ctx.font = 'bold 8px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('💀', x + 20, y + 8);
+        }
+        
+        function drawCropShape(cx, cy, shape, color, size) {
+            ctx.fillStyle = color;
+            switch(shape) {
+                case 'vertical':
+                    ctx.fillRect(cx - size/4, cy - size/2, size/2, size);
+                    break;
+                case 'triangle':
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy - size);
+                    ctx.lineTo(cx - size, cy + size);
+                    ctx.lineTo(cx + size, cy + size);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                case 'round':
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'oval':
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy, size * 1.2, size * 0.6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'tall':
+                    ctx.fillRect(cx - size/3, cy - size * 1.2, size * 2/3, size * 2.4);
+                    break;
+                case 'spread':
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy, size * 1.5, size, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'large':
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, size * 1.2, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'small':
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, size * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'cluster':
+                    for (let i = 0; i < 3; i++) {
+                        ctx.beginPath();
+                        ctx.arc(cx + (i-1) * 8, cy + Math.abs(i-1) * 4, size * 0.4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    break;
+                case 'pear':
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy - size/4, size * 0.8, size * 1.2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'tree':
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(cx - size/6, cy, size/3, size/2);
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy - size/3, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'long':
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy, size * 0.3, size * 1.5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'cap':
+                    ctx.fillStyle = '#F5DEB3';
+                    ctx.fillRect(cx - size/6, cy, size/3, size/2);
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy - size/4, size, size/2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                default:
+                    ctx.fillRect(cx - size/2, cy - size/2, size, size);
+                    break;
+            }
+        }
+        
+        function drawSVGAnimal(x, y, type) {
+            const animal = animalData[type];
+            ctx.fillStyle = animal.color;
+            
+            // Draw simple animal shapes
+            switch(type) {
+                case 'chicken':
+                    ctx.beginPath();
+                    ctx.ellipse(x + 20, y + 25, 8, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + 20, y + 15, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'cow':
+                    ctx.fillRect(x + 12, y + 20, 16, 12);
+                    ctx.beginPath();
+                    ctx.arc(x + 20, y + 15, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'pig':
+                    ctx.beginPath();
+                    ctx.ellipse(x + 20, y + 25, 10, 8, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + 20, y + 15, 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'sheep':
+                    ctx.beginPath();
+                    ctx.ellipse(x + 20, y + 25, 9, 7, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(x + 20, y + 15, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+            }
+            
+            // Animal pen indicator
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+        }
+        
+        function drawSVGBuilding(x, y, type) {
+            switch(type) {
+                case 'house':
+                    // House base
+                    ctx.fillStyle = '#FFE4B5';
+                    ctx.fillRect(x + 8, y + 15, 24, 20);
+                    // Roof
+                    ctx.fillStyle = '#FF6347';
+                    ctx.beginPath();
+                    ctx.moveTo(x + 5, y + 15);
+                    ctx.lineTo(x + 20, y + 5);
+                    ctx.lineTo(x + 35, y + 15);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Door
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(x + 16, y + 25, 8, 10);
+                    break;
+                case 'barn':
+                    ctx.fillStyle = '#DC143C';
+                    ctx.fillRect(x + 5, y + 10, 30, 25);
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(x + 10, y + 20, 20, 15);
+                    break;
+                case 'coop':
+                    ctx.fillStyle = '#DEB887';
+                    ctx.fillRect(x + 8, y + 18, 24, 17);
+                    ctx.fillStyle = '#654321';
+                    ctx.fillRect(x + 12, y + 22, 16, 13);
+                    break;
+            }
+        }
+        
+        function drawSVGTree(x, y, type) {
+            // Tree trunk
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x + 17, y + 25, 6, 10);
+            // Tree leaves
+            ctx.fillStyle = '#228B22';
+            ctx.beginPath();
+            ctx.arc(x + 20, y + 20, 10, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function drawWater(x, y, waterType) {
+            const img = new Image();
+            img.onload = function() {
+                ctx.drawImage(img, x, y, CELL_SIZE, CELL_SIZE);
+            };
+            img.src = `assets/water/water-${waterType}.svg`;
+        }
+        
+        // Modal functions
+        function openCropModal() {
+            document.getElementById('cropModal').style.display = 'block';
+        }
+        
+        function closeCropModal() {
+            document.getElementById('cropModal').style.display = 'none';
+        }
+        
+        function openBuildingModal() {
+            document.getElementById('buildingModal').style.display = 'block';
+        }
+        
+        function closeBuildingModal() {
+            document.getElementById('buildingModal').style.display = 'none';
+        }
+        
+        function selectBuilding(buildingType) {
+            selectedBuilding = buildingType;
+            currentTool = 'build';
+            const buildingInfo = buildingData[buildingType];
+            document.getElementById('currentTool').textContent = buildingInfo.name;
+            closeBuildingModal();
+            
+            // Update selection
+            document.querySelectorAll('.building-item').forEach(item => item.classList.remove('selected'));
+            event.target.closest('.building-item').classList.add('selected');
+        }
+        
+        function selectCrop(crop) {
+            selectedCrop = crop;
+            currentTool = 'plant';
+            const cropInfo = cropData[crop];
+            document.getElementById('currentTool').textContent = cropInfo.name;
+            closeCropModal();
+            
+            // Update selection
+            document.querySelectorAll('.crop-item').forEach(item => item.classList.remove('selected'));
+            event.target.closest('.crop-item').classList.add('selected');
+        }
+        
+        // Handle click
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const col = Math.floor(x / CELL_SIZE);
+            const row = Math.floor(y / CELL_SIZE);
+            
+            if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+                const cell = grid[row][col];
+                let message = '';
+                
+                if (currentTool === 'plant' && cell.type === 'empty' && !cell.waterBlock && seeds > 0) {
+                    // Till the soil when planting
+                    cell.tilled = true;
+                    cell.hasGrass = false;
+                    cell.type = 'crop';
+                    cell.cropType = selectedCrop;
+                    cell.growth = 0;
+                    cell.watered = false;
+                    cell.lastWatered = 0;
+                    cell.daysWithoutWater = 0;
+                    cell.isDead = false;
+                    seeds--;
+                    const cropInfo = cropData[selectedCrop];
+                    message = `Planted ${cropInfo.name} on tilled soil! Water it daily for growth.`;
+                } else if (currentTool === 'water' && !cell.waterBlock) {
+                    if (cell.type === 'crop') {
+                        cell.watered = true;
+                        cell.lastWatered = day;
+                        message = 'Watered crop! It will grow overnight.';
+                    } else {
+                        cell.watered = true;
+                        message = 'Watered soil!';
+                    }
+                } else if (currentTool === 'harvest' && cell.type === 'crop') {
+                    if (cell.isDead) {
+                        // Remove dead crop - no reward
+                        cell.type = 'empty';
+                        cell.cropType = null;
+                        cell.growth = 0;
+                        cell.watered = false;
+                        cell.daysWithoutWater = 0;
+                        cell.isDead = false;
+                        // Return grass after removing dead crop
+                        cell.hasGrass = true;
+                        cell.tilled = false;
+                        message = `Removed dead ${cropData[cell.cropType].name}. Grass regrew.`;
+                    } else if (cell.growth >= 5) { // Only harvest at phase 5
+                        const price = cropPrices[cell.cropType];
+                        const cropInfo = cropData[cell.cropType];
+                        coins += price;
+                        cell.type = 'empty';
+                        cell.cropType = null;
+                        cell.growth = 0;
+                        cell.watered = false;
+                        cell.daysWithoutWater = 0;
+                        cell.isDead = false;
+                        // Return grass after harvesting
+                        cell.hasGrass = true;
+                        cell.tilled = false;
+                        message = `Harvested mature ${cropInfo.name} (Phase 5) for ${price} coins! Grass regrew.`;
+                        updateMarketPrices(cell.cropType);
+                    } else {
+                        message = `Crop is only at phase ${cell.growth}. Wait for phase 5 to harvest.`;
+                    }
+                } else if (currentTool === 'build' && cell.type === 'empty' && !cell.waterBlock && selectedBuilding) {
+                    const buildingInfo = buildingData[selectedBuilding];
+                    if (wood >= buildingInfo.cost) {
+                        cell.building = selectedBuilding;
+                        wood -= buildingInfo.cost;
+                        message = `Built ${buildingInfo.name}!`;
+                    } else {
+                        message = `Need ${buildingInfo.cost} wood to build ${buildingInfo.name}!`;
+                    }
+                } else if (currentTool === 'animal' && cell.type === 'empty' && !cell.waterBlock && coins >= 20) {
+                    cell.animal = 'chicken';
+                    coins -= 20;
+                    const animalInfo = animalData['chicken'];
+                    message = `Added a ${animalInfo.name}!`;
+                } else if (currentTool === 'chop' && cell.tree) {
+                    cell.tree = null;
+                    wood += 3;
+                    message = 'Chopped tree for 3 wood!';
+                }
+                
+                updateUI();
+                draw();
+                showMessage(message);
+            }
+        });
+        
+        // Update market prices
+        function updateMarketPrices(cropType) {
+            cropPrices[cropType] = Math.max(5, cropPrices[cropType] * 0.95);
+            for (let crop in cropPrices) {
+                if (crop !== cropType) {
+                    cropPrices[crop] = Math.min(cropData[crop].basePrice * 1.5, cropPrices[crop] * 1.02);
+                }
+            }
+        }
+        
+        // Next day with essential watering and 5-phase growth
+        function nextDay() {
+            day++;
+            if (day % 30 === 0) {
+                season = (season + 1) % 4;
+                document.getElementById('season').textContent = seasons[season];
+            }
+            
+            document.getElementById('day').textContent = day;
+            
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = grid[r][c];
+                    if (cell.type === 'crop' && !cell.isDead) {
+                        // Check for death condition
+                        if (!cell.watered) {
+                            cell.daysWithoutWater++;
+                            const maxWaterDays = cropData[cell.cropType].maxWaterDays;
+                            if (cell.daysWithoutWater >= maxWaterDays) {
+                                cell.isDead = true;
+                                showMessage(`${cropData[cell.cropType].name} died from lack of water!`);
+                                continue;
+                            }
+                        } else {
+                            cell.daysWithoutWater = 0;
+                        }
+                        
+                        // Crops only grow if watered (essential watering system)
+                        if (cell.watered && cell.lastWatered === day - 1) {
+                            if (cell.growth < 5) { // Max 5 phases
+                                cell.growth += 1;
+                            }
+                        } else if (!cell.watered) {
+                            // Unwatered crops may wither (lose growth)
+                            if (cell.growth > 0 && Math.random() < 0.1) {
+                                cell.growth = Math.max(0, cell.growth - 1);
+                            }
+                        }
+                        cell.watered = false;
+                    }
+                    // Reset soil water status
+                    if (cell.type === 'empty') {
+                        cell.watered = false;
+                    }
+                }
+            }
+            
+            draw();
+            showMessage(`Day ${day} - ${seasons[season]}. Remember to water your crops daily for 5-phase growth!`);
+        }
+        
+        // Other functions
+        function selectTool(tool) {
+            currentTool = tool;
+            const toolNames = {
+                'crops': 'Crops',
+                'water': 'Water',
+                'harvest': 'Harvest',
+                'build': 'Build',
+                'animal': 'Animals',
+                'chop': 'Chop'
+            };
+            document.getElementById('currentTool').textContent = toolNames[tool] || tool;
+        }
+        
+        function buySeeds() {
+            if (coins >= 5) {
+                coins -= 5;
+                seeds += 10;
+                showMessage('Bought 10 seeds for 5 coins!');
+                updateUI();
+            }
+        }
+        
+        function saveGame() {
+            const gameData = { grid, day, season, seeds, wood, coins, cropPrices };
+            localStorage.setItem('svgFarmSave', JSON.stringify(gameData));
+            showMessage('Game saved!');
+        }
+        
+        function loadGame() {
+            const savedData = localStorage.getItem('svgFarmSave');
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                grid = data.grid;
+                day = data.day;
+                season = data.season;
+                seeds = data.seeds;
+                wood = data.wood;
+                coins = data.coins;
+                cropPrices = data.cropPrices;
+                document.getElementById('day').textContent = day;
+                document.getElementById('season').textContent = seasons[season];
+                updateUI();
+                draw();
+                showMessage('Game loaded!');
+            } else {
+                showMessage('No saved game found!');
+            }
+        }
+        
+        function resetGame() {
+            if (confirm('Reset game?')) {
+                day = 1;
+                season = 0;
+                seeds = 20;
+                wood = 10;
+                coins = 50;
+                for (let crop in cropData) {
+                    cropPrices[crop] = cropData[crop].basePrice;
+                }
+                initGrid();
+                document.getElementById('day').textContent = day;
+                document.getElementById('season').textContent = seasons[season];
+                updateUI();
+                draw();
+                showMessage('Game reset!');
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('seeds').textContent = seeds;
+            document.getElementById('wood').textContent = wood;
+            document.getElementById('coins').textContent = coins;
+        }
+        
+        function showMessage(msg) {
+            document.getElementById('message').textContent = msg;
+            setTimeout(() => {
+                document.getElementById('message').textContent = '';
+            }, 4000);
+        }
+        
+        // Initialize game
+        initGrid();
+        initCropModal();
+        initBuildingModal();
+        updateUI();
+        draw();
+        selectTool('crops');
+        
+        // Auto-advance day
+        setInterval(() => {
+            nextDay();
+        }, 12000);
+        
+        // Initial message
+        showMessage('Welcome to SVG Farm! Water is essential for crop growth - crops wont grow without daily watering!');
+    </script>
+</body>
+</html>

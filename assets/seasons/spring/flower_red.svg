@@ -1,0 +1,21 @@
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="redFlowerGrad">
+      <stop offset="0%" stop-color="#FF6B6B"/>
+      <stop offset="70%" stop-color="#FF1493"/>
+      <stop offset="100%" stop-color="#DC143C"/>
+    </radialGradient>
+  </defs>
+  <!-- Stem -->
+  <rect x="7.5" y="8" width="1" height="8" fill="#228B22"/>
+  <!-- Petals -->
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#redFlowerGrad)" transform="rotate(0 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#redFlowerGrad)" transform="rotate(60 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#redFlowerGrad)" transform="rotate(120 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#redFlowerGrad)" transform="rotate(180 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#redFlowerGrad)" transform="rotate(240 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#redFlowerGrad)" transform="rotate(300 8 6)"/>
+  <!-- Center -->
+  <circle cx="8" cy="6" r="1.5" fill="#FFD700"/>
+  <circle cx="8" cy="6" r="1" fill="#FF8C00"/>
+</svg>

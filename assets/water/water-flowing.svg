@@ -1,0 +1,46 @@
+<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Flowing water gradient -->
+    <linearGradient id="flowGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#87CEEB;stop-opacity:0.8" />
+      <stop offset="50%" style="stop-color:#4682B4;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#5F9EA0;stop-opacity:0.8" />
+    </linearGradient>
+    
+    <!-- Flow lines pattern -->
+    <pattern id="flowPattern" x="0" y="0" width="20" height="10" patternUnits="userSpaceOnUse">
+      <path d="M0,5 L20,5" stroke="#6495ED" stroke-width="2" opacity="0.4">
+        <animate attributeName="x1" values="0;-20" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="x2" values="20;0" dur="2s" repeatCount="indefinite"/>
+      </path>
+      <path d="M0,8 L20,8" stroke="#4682B4" stroke-width="1.5" opacity="0.3">
+        <animate attributeName="x1" values="0;-20" dur="1.5s" repeatCount="indefinite"/>
+        <animate attributeName="x2" values="20;0" dur="1.5s" repeatCount="indefinite"/>
+      </path>
+    </pattern>
+  </defs>
+  
+  <!-- Base flowing water -->
+  <rect width="40" height="40" fill="url(#flowGradient)"/>
+  
+  <!-- Animated flow pattern -->
+  <rect width="40" height="40" fill="url(#flowPattern)"/>
+  
+  <!-- Surface disturbance -->
+  <ellipse cx="10" cy="10" rx="4" ry="1" fill="#B0E0E6" opacity="0.5">
+    <animate attributeName="rx" values="4;6;4" dur="1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.5;0.3;0.5" dur="1s" repeatCount="indefinite"/>
+  </ellipse>
+  <ellipse cx="30" cy="25" rx="5" ry="1.5" fill="#ADD8E6" opacity="0.4">
+    <animate attributeName="rx" values="5;7;5" dur="1.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.4;0.2;0.4" dur="1.2s" repeatCount="indefinite"/>
+  </ellipse>
+  
+  <!-- White water foam -->
+  <circle cx="15" cy="15" r="0.5" fill="#FFFFFF" opacity="0.7">
+    <animate attributeName="cy" values="15;12;15" dur="0.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="25" cy="30" r="0.8" fill="#FFFFFF" opacity="0.6">
+    <animate attributeName="cy" values="30;27;30" dur="1s" repeatCount="indefinite"/>
+  </circle>
+</svg>

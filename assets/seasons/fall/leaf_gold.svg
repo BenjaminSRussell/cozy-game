@@ -1,0 +1,19 @@
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="goldLeafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="50%" stop-color="#FFA500"/>
+      <stop offset="100%" stop-color="#B8860B"/>
+    </linearGradient>
+  </defs>
+  <!-- Birch leaf shape -->
+  <ellipse cx="8" cy="8" rx="2" ry="5" fill="url(#goldLeafGrad)" stroke="#8B4513" stroke-width="0.5" transform="rotate(15 8 8)"/>
+  <!-- Leaf tip -->
+  <path d="M 8 3 L 7 5 L 9 5 Z" fill="url(#goldLeafGrad)" stroke="#8B4513" stroke-width="0.5"/>
+  <!-- Leaf vein -->
+  <line x1="8" y1="3" x2="8" y2="13" stroke="#8B4513" stroke-width="0.5"/>
+  <line x1="8" y1="6" x2="6" y2="7" stroke="#8B4513" stroke-width="0.3"/>
+  <line x1="8" y1="6" x2="10" y2="7" stroke="#8B4513" stroke-width="0.3"/>
+  <line x1="8" y1="9" x2="6" y2="10" stroke="#8B4513" stroke-width="0.3"/>
+  <line x1="8" y1="9" x2="10" y2="10" stroke="#8B4513" stroke-width="0.3"/>
+</svg>

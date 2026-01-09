@@ -1,0 +1,9 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Phase 5: Mature carrot -->
+  <rect x="15" y="8" width="2" height="16" fill="#228B22"/>
+  <ellipse cx="16" cy="8" rx="5" ry="3" fill="#32CD32"/>
+  <polygon points="16,24 10,32 22,32" fill="#FF8C00"/>
+  <ellipse cx="16" cy="28" rx="5" ry="3" fill="#FF6347"/>
+  <circle cx="14" cy="26" r="1" fill="#FFA500"/>
+  <circle cx="18" cy="26" r="1" fill="#FFA500"/>
+</svg>

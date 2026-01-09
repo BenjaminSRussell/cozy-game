@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Phase 5: Mature wheat -->
+  <rect x="15" y="4" width="2" height="22" fill="#DAA520"/>
+  <ellipse cx="16" cy="4" rx="5" ry="4" fill="#FFD700"/>
+  <rect x="12" y="8" width="1" height="8" fill="#DAA520"/>
+  <rect x="19" y="8" width="1" height="8" fill="#DAA520"/>
+  <rect x="16" y="6" width="1" height="6" fill="#FFD700"/>
+  <circle cx="14" cy="6" r="1" fill="#FFA500"/>
+  <circle cx="18" cy="6" r="1" fill="#FFA500"/>
+  <circle cx="16" cy="8" r="1" fill="#FFA500"/>
+</svg>

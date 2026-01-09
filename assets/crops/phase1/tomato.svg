@@ -1,0 +1,5 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Phase 1: Seed -->
+  <circle cx="16" cy="24" r="2" fill="#8B4513"/>
+  <ellipse cx="16" cy="25" rx="1" ry="0.5" fill="#654321"/>
+</svg>

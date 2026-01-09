@@ -1,0 +1,26 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Wheat stem -->
+  <rect x="31" y="20" width="2" height="40" fill="#DAA520" stroke="#B8860B" stroke-width="1"/>
+  
+  <!-- Wheat grains left side -->
+  <ellipse cx="20" cy="25" rx="4" ry="6" fill="#F4A460" stroke="#D2691E" stroke-width="1" transform="rotate(-30 20 25)"/>
+  <ellipse cx="18" cy="32" rx="4" ry="6" fill="#FFD700" stroke="#DAA520" stroke-width="1" transform="rotate(-25 18 32)"/>
+  <ellipse cx="16" cy="39" rx="4" ry="6" fill="#F4A460" stroke="#D2691E" stroke-width="1" transform="rotate(-20 16 39)"/>
+  <ellipse cx="14" cy="46" rx="4" ry="6" fill="#FFD700" stroke="#DAA520" stroke-width="1" transform="rotate(-15 14 46)"/>
+  
+  <!-- Wheat grains right side -->
+  <ellipse cx="44" cy="25" rx="4" ry="6" fill="#F4A460" stroke="#D2691E" stroke-width="1" transform="rotate(30 44 25)"/>
+  <ellipse cx="46" cy="32" rx="4" ry="6" fill="#FFD700" stroke="#DAA520" stroke-width="1" transform="rotate(25 46 32)"/>
+  <ellipse cx="48" cy="39" rx="4" ry="6" fill="#F4A460" stroke="#D2691E" stroke-width="1" transform="rotate(20 48 39)"/>
+  <ellipse cx="50" cy="46" rx="4" ry="6" fill="#FFD700" stroke="#DAA520" stroke-width="1" transform="rotate(15 50 46)"/>
+  
+  <!-- Top wheat head -->
+  <ellipse cx="32" cy="18" rx="3" ry="5" fill="#FFD700" stroke="#DAA520" stroke-width="1"/>
+  <ellipse cx="28" cy="16" rx="2" ry="4" fill="#F4A460" stroke="#D2691E" stroke-width="1" transform="rotate(-10 28 16)"/>
+  <ellipse cx="36" cy="16" rx="2" ry="4" fill="#F4A460" stroke="#D2691E" stroke-width="1" transform="rotate(10 36 16)"/>
+  
+  <!-- Cute face on stem -->
+  <circle cx="32" cy="35" r="1" fill="#000000"/>
+  <circle cx="32" cy="40" r="1" fill="#000000"/>
+  <path d="M30 45 Q32 47 34 45" stroke="#000000" stroke-width="0.8" fill="none"/>
+</svg>

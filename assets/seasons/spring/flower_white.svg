@@ -1,0 +1,23 @@
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="whiteFlowerGrad">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="70%" stop-color="#F0F8FF"/>
+      <stop offset="100%" stop-color="#E6E6FA"/>
+    </radialGradient>
+  </defs>
+  <!-- Stem -->
+  <rect x="7.5" y="8" width="1" height="8" fill="#228B22"/>
+  <!-- Petals -->
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(0 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(45 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(90 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(135 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(180 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(225 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(270 8 6)"/>
+  <ellipse cx="8" cy="6" rx="3" ry="2" fill="url(#whiteFlowerGrad)" transform="rotate(315 8 6)"/>
+  <!-- Center -->
+  <circle cx="8" cy="6" r="1.5" fill="#FFFACD"/>
+  <circle cx="8" cy="6" r="1" fill="#F0E68C"/>
+</svg>

@@ -1,0 +1,22 @@
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="brownLeafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B4513"/>
+      <stop offset="50%" stop-color="#654321"/>
+      <stop offset="100%" stop-color="#4B2F20"/>
+    </linearGradient>
+  </defs>
+  <!-- Simple rounded leaf -->
+  <ellipse cx="8" cy="8" rx="3" ry="4" fill="url(#brownLeafGrad)" stroke="#4B2F20" stroke-width="0.5"/>
+  <!-- Stem -->
+  <rect x="7.5" y="12" width="1" height="3" fill="#654321"/>
+  <!-- Leaf veins -->
+  <line x1="8" y1="4" x2="8" y2="12" stroke="#4B2F20" stroke-width="0.5"/>
+  <line x1="8" y1="6" x2="6" y2="7" stroke="#4B2F20" stroke-width="0.3"/>
+  <line x1="8" y1="6" x2="10" y2="7" stroke="#4B2F20" stroke-width="0.3"/>
+  <line x1="8" y1="9" x2="6" y2="10" stroke="#4B2F20" stroke-width="0.3"/>
+  <line x1="8" y1="9" x2="10" y2="10" stroke="#4B2F20" stroke-width="0.3"/>
+  <!-- Dry spots -->
+  <circle cx="6" cy="7" r="0.5" fill="#4B2F20" opacity="0.5"/>
+  <circle cx="10" cy="9" r="0.3" fill="#4B2F20" opacity="0.4"/>
+</svg>

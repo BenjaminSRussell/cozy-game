@@ -1,0 +1,40 @@
+<svg width="24" height="20" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rakeHandleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8B4513"/>
+      <stop offset="50%" stop-color="#A0522D"/>
+      <stop offset="100%" stop-color="#654321"/>
+    </linearGradient>
+    <linearGradient id="rakeHeadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#696969"/>
+      <stop offset="50%" stop-color="#808080"/>
+      <stop offset="100%" stop-color="#4B4B4B"/>
+    </linearGradient>
+  </defs>
+  <!-- Handle -->
+  <rect x="11" y="2" width="2" height="16" fill="url(#rakeHandleGrad)" rx="1"/>
+  <!-- Handle grip -->
+  <rect x="10" y="2" width="4" height="3" fill="#654321" rx="1"/>
+  <rect x="9" y="3" width="6" height="2" fill="#8B4513" rx="1"/>
+  <!-- Rake head -->
+  <rect x="4" y="16" width="16" height="3" fill="url(#rakeHeadGrad)" rx="1"/>
+  <!-- Tines -->
+  <rect x="5" y="19" width="1.5" height="3" fill="#696969"/>
+  <rect x="7.5" y="19" width="1.5" height="3" fill="#696969"/>
+  <rect x="10" y="19" width="1.5" height="3" fill="#696969"/>
+  <rect x="12.5" y="19" width="1.5" height="3" fill="#696969"/>
+  <rect x="15" y="19" width="1.5" height="3" fill="#696969"/>
+  <rect x="17.5" y="19" width="1.5" height="3" fill="#696969"/>
+  <!-- Tine tips -->
+  <ellipse cx="5.75" cy="22" rx="0.8" ry="0.5" fill="#4B4B4B"/>
+  <ellipse cx="8.25" cy="22" rx="0.8" ry="0.5" fill="#4B4B4B"/>
+  <ellipse cx="10.75" cy="22" rx="0.8" ry="0.5" fill="#4B4B4B"/>
+  <ellipse cx="13.25" cy="22" rx="0.8" ry="0.5" fill="#4B4B4B"/>
+  <ellipse cx="15.75" cy="22" rx="0.8" ry="0.5" fill="#4B4B4B"/>
+  <ellipse cx="18.25" cy="22" rx="0.8" ry="0.5" fill="#4B4B4B"/>
+  <!-- Wood grain details -->
+  <line x1="11.5" y1="4" x2="11.5" y2="14" stroke="#654321" stroke-width="0.5" opacity="0.6"/>
+  <line x1="12" y1="6" x2="12" y2="12" stroke="#654321" stroke-width="0.3" opacity="0.4"/>
+  <!-- Metal shine -->
+  <rect x="6" y="17" width="12" height="0.5" fill="#A9A9A9" opacity="0.7"/>
+</svg>
