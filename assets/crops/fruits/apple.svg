@@ -1,54 +1,50 @@
 <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Volumetric Radial Highlight (10:00 position) -->
+    <!-- Apple Gradient -->
     <radialGradient id="appleGrad" cx="35%" cy="35%" r="50%" fx="30%" fy="30%">
-      <stop offset="0%" stop-color="#FF6B6B" />   <!-- Soft highlight -->
-      <stop offset="100%" stop-color="#D63031" /> <!-- Saturated base -->
+      <stop offset="0%" stop-color="#FF6B6B" />
+      <stop offset="100%" stop-color="#D63031" />
     </radialGradient>
 
-    <!-- Base Occlusion / Shadow -->
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+    <!-- Shadow -->
+    <filter id="appleShadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#5D1515" flood-opacity="0.4"/>
     </filter>
   </defs>
 
-  <!-- Rim Light / Outer Stroke -->
-  <g filter="url(#shadow)">
-    <!-- Apple Body -->
-    <path d="M32 54 C22 54 12 50 12 36 C12 22 22 14 32 14 C42 14 52 22 52 36 C52 50 42 54 32 54 Z"
+  <g filter="url(#appleShadow)">
+    <!-- Apple Body - Distinctive round shape with indentation -->
+    <path d="M32 48 C24 48 16 44 16 32 C16 20 24 12 32 12 C40 12 48 20 48 32 C48 44 40 48 32 48 Z"
           fill="url(#appleGrad)" 
           stroke="#8E1C1C" 
+          stroke-width="2" 
+          stroke-linejoin="round" />
+
+    <!-- Stem - Short and brown -->
+    <line x1="32" y1="12" x2="32" y2="8" 
+          stroke="#5D3A1A" 
           stroke-width="2.5" 
-          stroke-linejoin="round" 
           stroke-linecap="round" />
 
-    <!-- Stem (Rounded) -->
-    <path d="M32 14 C32 10 30 6 28 4" 
-          fill="none" 
-          stroke="#5D3A1A" 
-          stroke-width="3" 
-          stroke-linecap="round" 
-          stroke-linejoin="round" />
-
-    <!-- Leaf (Puffy) -->
-    <path d="M32 10 C36 10 42 12 42 6 C42 3 38 2 34 6 C32 8 32 10 32 10 Z" 
-          fill="#44BD32" 
-          stroke="#2D5A27" 
-          stroke-width="1.5" 
-          stroke-linejoin="round" />
+    <!-- Leaf - Single small leaf -->
+    <ellipse cx="36" cy="10" rx="4" ry="2" 
+             fill="#44BD32" 
+             stroke="#2D5A27" 
+             stroke-width="1" 
+             transform="rotate(30 36 10)" />
   </g>
 
-  <!-- Kindchenschema Face (Emotional Anchor) -->
+  <!-- Simple face - Minimal and cute -->
   <g fill="#2D0B0B">
-    <circle cx="26" cy="34" r="2" /> <!-- Left Eye -->
-    <circle cx="38" cy="34" r="2" /> <!-- Right Eye -->
-    <path d="M29 40 Q32 43 35 40" 
+    <circle cx="27" cy="30" r="1.5" />
+    <circle cx="37" cy="30" r="1.5" />
+    <path d="M30 36 Q32 38 34 36" 
           fill="none" 
           stroke="#2D0B0B" 
-          stroke-width="1.5" 
+          stroke-width="1.2" 
           stroke-linecap="round" />
   </g>
 
-  <!-- Sparkle / Rim Reflection -->
-  <ellipse cx="24" cy="26" rx="3" ry="1.5" fill="white" fill-opacity="0.3" transform="rotate(-30 24 26)" />
+  <!-- Single highlight -->
+  <ellipse cx="26" cy="24" rx="2" ry="1" fill="white" fill-opacity="0.4" transform="rotate(-30 26 24)" />
 </svg>

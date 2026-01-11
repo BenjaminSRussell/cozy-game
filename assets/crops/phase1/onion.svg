@@ -1,29 +1,32 @@
 <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  
   <defs>
-    <!-- Crop Body Gradient (Spherical Volume) -->
-    <radialGradient id="grad_onion" cx="30%" cy="30%" r="70%" fx="30%" fy="30%">
+    <!-- Onion Body Gradient -->
+    <radialGradient id="onionGrad" cx="35%" cy="35%" r="50%" fx="30%" fy="30%">
       <stop offset="0%" stop-color="#F9E79F" />
       <stop offset="100%" stop-color="#B9770E" />
     </radialGradient>
-    
-    <!-- Foliage Gradient -->
-    <linearGradient id="foliage_onion" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#2ECC71" style="stop-opacity:1" />
-      <stop offset="100%" stop-color="#1B5E20" style="stop-opacity:1" /> <!-- Darker green bottom -->
-    </linearGradient>
 
-    <!-- Soft Drop Shadow for Grounding -->
-    <filter id="shadow_onion" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="4" stdDeviation="2" flood-color="#000000" flood-opacity="0.25"/>
+    <!-- Shadow -->
+    <filter id="onionShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.3"/>
     </filter>
   </defs>
   
-      <g filter="url(#shadow_onion)">
-        <!-- Mound of dirt -->
-        <ellipse cx="32" cy="48" rx="14" ry="6" fill="#795548" stroke="#3E2723" stroke-width="2" />
-        <ellipse cx="32" cy="46" rx="10" ry="4" fill="#8D6E63" />
-        <!-- Tiny speck -->
-        <circle cx="32" cy="44" r="1.5" fill="#C5E1A5" />
-      </g>
+  <g filter="url(#onionShadow)">
+    <!-- Onion Body - Flattened sphere -->
+    <ellipse cx="32" cy="32" rx="12" ry="14" 
+             fill="url(#onionGrad)" 
+             stroke="#935116" 
+             stroke-width="1.5" />
+    
+    <!-- Root hairs at bottom -->
+    <g stroke="#8B4513" stroke-width="0.5" fill="none">
+      <line x1="30" y1="46" x2="28" y2="48" />
+      <line x1="32" y1="46" x2="32" y2="49" />
+      <line x1="34" y1="46" x2="36" y2="48" />
+    </g>
+    
+    <!-- Stem top -->
+    <circle cx="32" cy="18" r="2" fill="#8B7355" stroke="#6B4423" stroke-width="1" />
+  </g>
 </svg>

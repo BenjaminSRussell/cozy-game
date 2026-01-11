@@ -1,29 +1,30 @@
 <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  
   <defs>
-    <!-- Crop Body Gradient (Spherical Volume) -->
-    <radialGradient id="grad_potato" cx="30%" cy="30%" r="70%" fx="30%" fy="30%">
+    <!-- Potato Body Gradient -->
+    <radialGradient id="potatoGrad" cx="35%" cy="35%" r="50%" fx="30%" fy="30%">
       <stop offset="0%" stop-color="#E59866" />
       <stop offset="100%" stop-color="#A04000" />
     </radialGradient>
-    
-    <!-- Foliage Gradient -->
-    <linearGradient id="foliage_potato" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#27AE60" style="stop-opacity:1" />
-      <stop offset="100%" stop-color="#1B5E20" style="stop-opacity:1" /> <!-- Darker green bottom -->
-    </linearGradient>
 
-    <!-- Soft Drop Shadow for Grounding -->
-    <filter id="shadow_potato" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="4" stdDeviation="2" flood-color="#000000" flood-opacity="0.25"/>
+    <!-- Shadow -->
+    <filter id="potatoShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.3"/>
     </filter>
   </defs>
   
-      <g filter="url(#shadow_potato)">
-        <!-- Mound of dirt -->
-        <ellipse cx="32" cy="48" rx="14" ry="6" fill="#795548" stroke="#3E2723" stroke-width="2" />
-        <ellipse cx="32" cy="46" rx="10" ry="4" fill="#8D6E63" />
-        <!-- Tiny speck -->
-        <circle cx="32" cy="44" r="1.5" fill="#C5E1A5" />
-      </g>
+  <g filter="url(#potatoShadow)">
+    <!-- Potato Body - Irregular oval shape -->
+    <ellipse cx="32" cy="32" rx="14" ry="10" 
+             fill="url(#potatoGrad)" 
+             stroke="#8B4513" 
+             stroke-width="1.5" 
+             transform="rotate(15 32 32)" />
+    
+    <!-- Potato "Eyes" - Small indentations -->
+    <g fill="#8B4513">
+      <circle cx="28" cy="30" r="1" />
+      <circle cx="36" cy="34" r="1" />
+      <circle cx="30" cy="36" r="0.8" />
+    </g>
+  </g>
 </svg>
