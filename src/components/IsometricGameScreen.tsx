@@ -12,6 +12,8 @@ import { IsometricRenderer } from '../rendering/IsometricRenderer';
 import { TextureManager } from '../rendering/TextureManager';
 import { AssetManager } from '../systems/AssetManager';
 import { CraftingMenu } from './CraftingMenu';
+import { theme } from '../styles/theme';
+import { CozyIconButton } from './CozyIconButton';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -28,7 +30,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<IsometricRenderer | null>(null);
   const [selectedAction, setSelectedAction] = useState<'plant' | 'water' | 'harvest' | 'build' | 'mine' | 'build_road' | 'spawn_vehicle' | 'fertilize' | null>(null);
-  const [selectedCropType, setSelectedCropType] = useState<'wheat' | 'carrot' | 'tomato'>('wheat');
+  const [selectedCropType, setSelectedCropType] = useState<'wheat' | 'carrot' | 'tomato' | 'apple'>('wheat');
   const [selectedFertilizerType, setSelectedFertilizerType] = useState<'speed' | 'quality' | 'water'>('speed');
   const [selectedBuildingType, setSelectedBuildingType] = useState<'barn' | 'shed' | 'house'>('barn');
   const [selectedRoadType, setSelectedRoadType] = useState<'gravel' | 'paved'>('gravel');
@@ -41,6 +43,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     wheat: { name: 'Wheat', emoji: '🌾', growthDays: 3, sellValue: 50, color: '#DAA520' },
     carrot: { name: 'Carrot', emoji: '🥕', growthDays: 2, sellValue: 40, color: '#FF8C00' },
     tomato: { name: 'Tomato', emoji: '🍅', growthDays: 4, sellValue: 60, color: '#DC143C' },
+    apple: { name: 'Apple Tree', emoji: '🍎', growthDays: 5, sellValue: 100, color: '#D32F2F' },
   };
 
   const BUILDING_TYPES = {
@@ -313,14 +316,20 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     <View style={styles.gameContainer}>
       {showCrafting && <CraftingMenu onClose={() => setShowCrafting(false)} />}
       <View style={styles.header}>
-        <View>
+        <View style={styles.titleContainer}>
           <Text style={styles.title}>🌾 Cozy Haven</Text>
           <Text style={styles.subtitle}>2.5D Isometric World</Text>
         </View>
-        <View style={styles.stats}>
-          <Text style={styles.statText}>💰 {world.player.coins}</Text>
-          <Text style={styles.statText}>⭐ Lvl {world.player.level}</Text>
-          <Text style={styles.statText}>✨ {Math.floor(world.player.experience / 100)}</Text>
+        <View style={styles.statsContainer}>
+          <View style={styles.statChip}>
+            <Text style={styles.statText}>💰 {world.player.coins}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statText}>⭐ {world.player.level}</Text>
+          </View>
+          <View style={styles.statChip}>
+            <Text style={styles.statText}>✨ {Math.floor(world.player.experience / 100)}</Text>
+          </View>
         </View>
       </View>
 
@@ -363,103 +372,73 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
       {/* Action Buttons Row 1 */}
       <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'build_road' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="🛣️"
+          label="Road"
+          isActive={selectedAction === 'build_road'}
           onPress={() => setSelectedAction(selectedAction === 'build_road' ? null : 'build_road')}
-        >
-          <Text style={styles.actionEmoji}>🛣️</Text>
-          <Text style={styles.actionText}>Road</Text>
-        </TouchableOpacity>
+        />
 
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'spawn_vehicle' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="🚜"
+          label="Vehicles"
+          isActive={selectedAction === 'spawn_vehicle'}
           onPress={() => setSelectedAction(selectedAction === 'spawn_vehicle' ? null : 'spawn_vehicle')}
-        >
-          <Text style={styles.actionEmoji}>🚜</Text>
-          <Text style={styles.actionText}>Vehicles</Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {/* Action Buttons Row 2 */}
       <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'plant' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="🌱"
+          label="Plant"
+          isActive={selectedAction === 'plant'}
           onPress={() => setSelectedAction(selectedAction === 'plant' ? null : 'plant')}
-        >
-          <Text style={styles.actionEmoji}>🌱</Text>
-          <Text style={styles.actionText}>Plant</Text>
-          {world && world.player.tools[ToolType.HOE] && (
-            <View style={styles.durabilityBar}>
-              <View
-                style={[
-                  styles.durabilityFill,
-                  { width: `${(world.player.tools[ToolType.HOE]!.durability / world.player.tools[ToolType.HOE]!.maxDurability) * 100}%` }
-                ]}
-              />
-            </View>
-          )}
-        </TouchableOpacity>
+          durability={world && world.player.tools[ToolType.HOE]
+            ? world.player.tools[ToolType.HOE]!.durability / world.player.tools[ToolType.HOE]!.maxDurability
+            : undefined}
+        />
 
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'water' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="💧"
+          label="Water"
+          isActive={selectedAction === 'water'}
           onPress={() => setSelectedAction(selectedAction === 'water' ? null : 'water')}
-        >
-          <Text style={styles.actionEmoji}>💧</Text>
-          <Text style={styles.actionText}>Water</Text>
-          {world && world.player.tools[ToolType.WATERING_CAN] && (
-            <View style={styles.durabilityBar}>
-              <View
-                style={[
-                  styles.durabilityFill,
-                  { width: `${(world.player.tools[ToolType.WATERING_CAN]!.durability / world.player.tools[ToolType.WATERING_CAN]!.maxDurability) * 100}%` }
-                ]}
-              />
-            </View>
-          )}
-        </TouchableOpacity>
+          durability={world && world.player.tools[ToolType.WATERING_CAN]
+            ? world.player.tools[ToolType.WATERING_CAN]!.durability / world.player.tools[ToolType.WATERING_CAN]!.maxDurability
+            : undefined}
+        />
 
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'harvest' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="🌾"
+          label="Harvest"
+          isActive={selectedAction === 'harvest'}
           onPress={() => setSelectedAction(selectedAction === 'harvest' ? null : 'harvest')}
-        >
-          <Text style={styles.actionEmoji}>🌾</Text>
-          <Text style={styles.actionText}>Harvest</Text>
-          {/* Scythe check if needed, but simple harvest often just hand */}
-        </TouchableOpacity>
+        />
 
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'fertilize' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="🩹"
+          label="Fertilize"
+          isActive={selectedAction === 'fertilize'}
           onPress={() => setSelectedAction(selectedAction === 'fertilize' ? null : 'fertilize')}
-        >
-          <Text style={styles.actionEmoji}>🩹</Text>
-          <Text style={styles.actionText}>Fertilize</Text>
-        </TouchableOpacity>
+        />
 
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'build' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="🏗️"
+          label="Build"
+          isActive={selectedAction === 'build'}
           onPress={() => setSelectedAction(selectedAction === 'build' ? null : 'build')}
-        >
-          <Text style={styles.actionEmoji}>🏗️</Text>
-          <Text style={styles.actionText}>Build</Text>
-        </TouchableOpacity>
+        />
 
-        <TouchableOpacity
-          style={[styles.actionButton, selectedAction === 'mine' && styles.actionButtonActive]}
+        <CozyIconButton
+          emoji="⛏️"
+          label="Mine"
+          isActive={selectedAction === 'mine'}
           onPress={() => setSelectedAction(selectedAction === 'mine' ? null : 'mine')}
-        >
-          <Text style={styles.actionEmoji}>⛏️</Text>
-          <Text style={styles.actionText}>Mine</Text>
-          {world && world.player.tools[ToolType.PICKAXE] && (
-            <View style={styles.durabilityBar}>
-              <View
-                style={[
-                  styles.durabilityFill,
-                  { width: `${(world.player.tools[ToolType.PICKAXE]!.durability / world.player.tools[ToolType.PICKAXE]!.maxDurability) * 100}%` }
-                ]}
-              />
-            </View>
-          )}
-        </TouchableOpacity>
+          durability={world && world.player.tools[ToolType.PICKAXE]
+            ? world.player.tools[ToolType.PICKAXE]!.durability / world.player.tools[ToolType.PICKAXE]!.maxDurability
+            : undefined}
+        />
       </View>
 
       {/* Selection Panels */}
@@ -630,81 +609,105 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 const styles = StyleSheet.create({
   gameContainer: {
     flex: 1,
-    backgroundColor: '#F0F8FF',
+    backgroundColor: theme.colors.cream,
     padding: 10,
   },
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F0F8FF',
+    backgroundColor: theme.colors.cream,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 15,
-    paddingVertical: 12,
-    backgroundColor: '#E6F3FF',
-    borderRadius: 12,
+    paddingVertical: 15,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  },
+  titleContainer: {
+    flexDirection: 'column',
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2C5F7C',
+    fontWeight: theme.typography.weights.bold as any,
+    color: theme.colors.sage,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   subtitle: {
     fontSize: 14,
-    color: '#5A9FD4',
+    color: theme.colors.cocoa,
+    opacity: 0.7,
     marginTop: 2,
+    fontFamily: theme.typography.fontFamily,
   },
-  stats: {
+  statsContainer: {
     flexDirection: 'row',
-    gap: 20,
+    gap: 8,
+  },
+  statChip: {
+    backgroundColor: theme.colors.glassBg,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.borderRadius.l,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   statText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2C5F7C',
+    color: theme.colors.cocoa,
   },
   notification: {
-    backgroundColor: '#90EE90',
-    color: '#2D5016',
-    padding: 12,
-    borderRadius: 8,
+    position: 'absolute',
+    top: 90,
+    alignSelf: 'center',
+    zIndex: 100,
+    backgroundColor: theme.colors.glassBg,
+    color: theme.colors.cocoa,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: theme.borderRadius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.success,
     textAlign: 'center',
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    overflow: 'hidden',
+    shadowColor: theme.colors.sage,
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
   },
   canvasContainer: {
     position: 'relative',
     marginVertical: 10,
     alignItems: 'center',
+    borderRadius: theme.borderRadius.m,
+    overflow: 'hidden',
+    borderWidth: 4,
+    borderColor: theme.colors.cream,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
   },
   cameraControls: {
     position: 'absolute',
-    right: 10,
-    top: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 8,
-    padding: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    right: 15,
+    top: 15,
+    backgroundColor: theme.colors.glassBg,
+    borderRadius: theme.borderRadius.m,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
   },
   cameraRow: {
     flexDirection: 'row',
@@ -712,154 +715,124 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   cameraButton: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#E6F3FF',
-    borderRadius: 6,
+    width: 36,
+    height: 36,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: theme.borderRadius.s,
     justifyContent: 'center',
     alignItems: 'center',
     margin: 2,
   },
   cameraArrow: {
-    fontSize: 20,
+    fontSize: 18,
+    color: theme.colors.cocoa,
   },
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginVertical: 15,
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    backgroundColor: '#5A9FD4',
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  actionButtonActive: {
-    backgroundColor: '#2C5F7C',
-    borderColor: '#1A3A52',
-    borderWidth: 3,
-  },
-  actionEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  actionText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 12,
+    justifyContent: 'center',
+    marginVertical: 10,
+    gap: 12,
+    paddingHorizontal: 10,
   },
   selectionPanel: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 15,
+    backgroundColor: theme.colors.glassBg,
+    borderRadius: theme.borderRadius.l,
+    padding: 20,
     marginVertical: 10,
+    marginHorizontal: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.glassBorder,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowRadius: 12,
   },
   selectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#2C5F7C',
-    marginBottom: 12,
+    color: theme.colors.cocoa,
+    marginBottom: 15,
     textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   selectionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-around',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 12,
   },
   selectionOption: {
-    width: '28%',
-    backgroundColor: '#F0F8FF',
-    borderRadius: 10,
+    width: '30%',
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: theme.borderRadius.m,
     padding: 12,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#B8D4E3',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   selectionOptionSelected: {
-    backgroundColor: '#5A9FD4',
-    borderColor: '#2C5F7C',
-    borderWidth: 3,
+    backgroundColor: 'white',
+    borderColor: theme.colors.sage,
+    borderWidth: 2,
+    shadowColor: theme.colors.sage,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
   selectionOptionDisabled: {
     opacity: 0.5,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#eee',
   },
   selectionEmoji: {
-    fontSize: 24,
-    marginBottom: 6,
-  },
-  selectionName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2C5F7C',
-    marginBottom: 4,
-  },
-  selectionDetails: {
-    fontSize: 12,
-    color: '#666666',
-  },
-  saveButton: {
-    backgroundColor: '#2C5F7C',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginVertical: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  saveText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  instructions: {
-    backgroundColor: '#F0F8FF',
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 10,
-  },
-  instructionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2C5F7C',
+    fontSize: 32,
     marginBottom: 8,
   },
-  durabilityBar: {
-    width: '80%',
-    height: 4,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 2,
-    marginTop: 4,
-  },
-  durabilityFill: {
-    height: '100%',
-    backgroundColor: '#00FF00', // Green
-    borderRadius: 2,
-  },
-
-  instructionText: {
+  selectionName: {
     fontSize: 13,
-    color: '#5A9FD4',
+    fontWeight: '600',
+    color: theme.colors.cocoa,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  selectionDetails: {
+    fontSize: 11,
+    color: theme.colors.cocoa,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  saveButton: {
+    backgroundColor: theme.colors.clay,
+    padding: 15,
+    borderRadius: theme.borderRadius.xl,
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 5,
+    shadowColor: theme.colors.clay,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  saveText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  instructionTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: theme.colors.cocoa,
+    marginBottom: 5,
+  },
+  instructions: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: theme.borderRadius.m,
+  },
+  instructionText: {
+    fontSize: 12,
+    color: theme.colors.cocoa,
     marginVertical: 2,
   },
 });

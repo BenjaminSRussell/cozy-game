@@ -1,19 +1,29 @@
 <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
   
   <defs>
-    <radialGradient id="grad_blueberry" cx="35%" cy="30%" r="60%" fx="30%" fy="25%">
+    <!-- Crop Body Gradient (Spherical Volume) -->
+    <radialGradient id="grad_blueberry" cx="30%" cy="30%" r="70%" fx="30%" fy="30%">
       <stop offset="0%" stop-color="#5DADE2" />
       <stop offset="100%" stop-color="#1F618D" />
     </radialGradient>
+    
+    <!-- Foliage Gradient -->
+    <linearGradient id="foliage_blueberry" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#27AE60" style="stop-opacity:1" />
+      <stop offset="100%" stop-color="#1B5E20" style="stop-opacity:1" /> <!-- Darker green bottom -->
+    </linearGradient>
+
+    <!-- Soft Drop Shadow for Grounding -->
     <filter id="shadow_blueberry" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.3"/>
+      <feDropShadow dx="0" dy="4" stdDeviation="2" flood-color="#000000" flood-opacity="0.25"/>
     </filter>
   </defs>
   
-    <g filter="url(#shadow_blueberry)">
-      <path d="M32 40 L32 48" stroke="#5D4037" stroke-width="2" stroke-linecap="round" />
-      <circle cx="32" cy="48" r="3" fill="#5D4037" /> <!-- Seed embedded -->
-      <path d="M32 40 Q28 32 24 34" fill="none" stroke="#2ECC71" stroke-width="2" stroke-linecap="round" />
-      <path d="M32 40 Q36 32 40 34" fill="none" stroke="#2ECC71" stroke-width="2" stroke-linecap="round" />
-    </g>
+      <g filter="url(#shadow_blueberry)">
+        <!-- Mound of dirt -->
+        <ellipse cx="32" cy="48" rx="14" ry="6" fill="#795548" stroke="#3E2723" stroke-width="2" />
+        <ellipse cx="32" cy="46" rx="10" ry="4" fill="#8D6E63" />
+        <!-- Tiny speck -->
+        <circle cx="32" cy="44" r="1.5" fill="#C5E1A5" />
+      </g>
 </svg>

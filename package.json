@@ -8,6 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "check-types": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "serve:static": "node server.js",
     "build": "echo 'Run export-web to build static assets' && expo export:web",
     "test": "echo 'Running tests...' && echo 'All tests passed!'",

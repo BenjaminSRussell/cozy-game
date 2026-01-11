@@ -1,0 +1,162 @@
+:root {
+    /* Theme Tokens (Matched to theme.ts) */
+    --color-sage: #8FBC8F;
+    --color-clay: #E07A5F;
+    --color-cream: #FDFBF7;
+    --color-cocoa: #5D4037;
+    --color-sky: #A8DADC;
+    
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    
+    --shadow-soft: 0 8px 32px rgba(31, 38, 135, 0.15);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Nunito', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--color-cream);
+    /* Subtle mesh gradient background */
+    background-image: 
+        radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+        radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+        radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+    background: linear-gradient(135deg, #e0f7fa 0%, #fff8e1 100%); /* Fallback lighter Cozy gradient */
+    overflow: hidden;
+    position: relative;
+    color: var(--color-cocoa);
+}
+
+#gameContainer {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    background: url('../assets/bg_pattern.png'); /* Hypothetical pattern */
+    background-size: cover;
+}
+
+#gameCanvas {
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    box-shadow: var(--shadow-soft);
+    max-width: 95vw;
+    max-height: 95vh;
+    cursor: crosshair;
+    background-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(4px);
+}
+
+/* Loading Screen - Cozy Style */
+#loadingScreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(253, 251, 247, 0.95);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    color: var(--color-cocoa);
+    backdrop-filter: blur(10px);
+}
+
+.loading-content {
+    text-align: center;
+    max-width: 500px;
+    padding: 60px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 32px;
+    box-shadow: var(--shadow-soft);
+}
+
+.loading-title {
+    font-size: 3em;
+    margin-bottom: 10px;
+    font-weight: 700;
+    color: var(--color-sage);
+}
+
+.loading-subtitle {
+    font-size: 1.2em;
+    margin-bottom: 40px;
+    opacity: 0.8;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 16px;
+    background: rgba(143, 188, 143, 0.2);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--color-sage);
+    border-radius: 999px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Buttons */
+#startButton {
+    background: var(--color-sage);
+    color: white;
+    border: none;
+    padding: 16px 48px;
+    font-size: 1.2em;
+    font-weight: 600;
+    border-radius: 999px;
+    cursor: pointer;
+    margin-top: 30px;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(143, 188, 143, 0.4);
+}
+
+#startButton:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 16px rgba(143, 188, 143, 0.5);
+}
+
+#startButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    background: #ccc;
+    box-shadow: none;
+}
+
+/* Utility */
+.hidden {
+    display: none !important;
+}
+
+.fade-out {
+    animation: fadeOut 0.8s ease forwards;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(1.05); }
+}
+
+.error-message {
+    background: var(--color-clay);
+    color: white;
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 20px;
+    display: none;
+}

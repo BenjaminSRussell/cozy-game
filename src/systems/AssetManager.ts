@@ -70,6 +70,7 @@ export class AssetManager {
       { id: 'tile_grass', name: 'Grass', category: 'tile', source: 'builtin', path: require('../../assets/tiles/grass.svg'), isAnimated: false, scale: 1, tags: ['terrain'] },
       { id: 'tile_dirt', name: 'Dirt', category: 'tile', source: 'builtin', path: require('../../assets/tiles/dirt.svg'), isAnimated: false, scale: 1, tags: ['terrain', 'tilled'] },
       { id: 'tile_water', name: 'Water', category: 'tile', source: 'builtin', path: require('../../assets/tiles/water.svg'), isAnimated: false, scale: 1, tags: ['terrain', 'water'] },
+      { id: 'tile_grass_hole', name: 'Grass Hole', category: 'tile', source: 'builtin', path: require('../../assets/tiles/grass_hole.svg'), isAnimated: false, scale: 1, tags: ['terrain', 'planting'] },
 
       // Roads
       { id: 'road_dirt', name: 'Dirt Road', category: 'tile', source: 'builtin', path: require('../../assets/tiles/road_dirt.svg'), isAnimated: false, scale: 1, tags: ['road'] },
@@ -91,82 +92,82 @@ export class AssetManager {
       { id: 'building_barn', name: 'Barn', category: 'building', source: 'builtin', path: require('../../assets/buildings/barn.svg'), isAnimated: false, scale: 2, tags: ['building', 'storage'] },
       { id: 'building_shed', name: 'Shed', category: 'building', source: 'builtin', path: require('../../assets/buildings/shed.svg'), isAnimated: false, scale: 1.5, tags: ['building', 'storage'] },
       { id: 'building_house', name: 'House', category: 'building', source: 'builtin', path: require('../../assets/buildings/house.svg'), isAnimated: false, scale: 2.5, tags: ['building', 'home'] },
+      { id: 'building_garage', name: 'Garage', category: 'building', source: 'builtin', path: require('../../assets/buildings/garage.svg'), isAnimated: false, scale: 2.5, tags: ['building', 'garage', 'vehicle'] }, // Re-added from list end
 
-      // Wheat Phases
-      { id: 'crop_wheat_phase1', name: 'Wheat Seed', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase1/wheat.svg'), isAnimated: false, scale: 1, tags: ['crop', 'wheat', 'phase1'] },
-      { id: 'crop_wheat_phase2', name: 'Wheat Sprout', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase2/wheat.svg'), isAnimated: false, scale: 1, tags: ['crop', 'wheat', 'phase2'] },
-      { id: 'crop_wheat_phase3', name: 'Wheat Growing', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase3/wheat.svg'), isAnimated: false, scale: 1, tags: ['crop', 'wheat', 'phase3'] },
-      { id: 'crop_wheat_phase4', name: 'Wheat Mature', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase4/wheat.svg'), isAnimated: false, scale: 1, tags: ['crop', 'wheat', 'phase4'] },
-      { id: 'crop_wheat_phase5', name: 'Wheat Harvest', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase5/wheat.svg'), isAnimated: false, scale: 1, tags: ['crop', 'wheat', 'phase5'] },
-
-      // Carrot Phases
-      { id: 'crop_carrot_phase1', name: 'Carrot Seed', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase1/carrot.svg'), isAnimated: false, scale: 1, tags: ['crop', 'carrot', 'phase1'] },
-      { id: 'crop_carrot_phase2', name: 'Carrot Sprout', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase2/carrot.svg'), isAnimated: false, scale: 1, tags: ['crop', 'carrot', 'phase2'] },
-      { id: 'crop_carrot_phase3', name: 'Carrot Growing', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase3/carrot.svg'), isAnimated: false, scale: 1, tags: ['crop', 'carrot', 'phase3'] },
-      { id: 'crop_carrot_phase4', name: 'Carrot Mature', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase4/carrot.svg'), isAnimated: false, scale: 1, tags: ['crop', 'carrot', 'phase4'] },
-      { id: 'crop_carrot_phase5', name: 'Carrot Harvest', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase5/carrot.svg'), isAnimated: false, scale: 1, tags: ['crop', 'carrot', 'phase5'] },
-
-      // Tomato Phases
-      { id: 'crop_tomato_phase1', name: 'Tomato Seed', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase1/tomato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'tomato', 'phase1'] },
-      { id: 'crop_tomato_phase2', name: 'Tomato Sprout', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase2/tomato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'tomato', 'phase2'] },
-      { id: 'crop_tomato_phase3', name: 'Tomato Growing', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase3/tomato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'tomato', 'phase3'] },
-      { id: 'crop_tomato_phase4', name: 'Tomato Mature', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase4/tomato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'tomato', 'phase4'] },
-      { id: 'crop_tomato_phase5', name: 'Tomato Harvest', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase5/tomato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'tomato', 'phase5'] },
-
-      // Corn Phases
-      { id: 'crop_corn_phase1', name: 'Corn Seed', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase1/corn.svg'), isAnimated: false, scale: 1, tags: ['crop', 'corn', 'phase1'] },
-      { id: 'crop_corn_phase2', name: 'Corn Sprout', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase2/corn.svg'), isAnimated: false, scale: 1, tags: ['crop', 'corn', 'phase2'] },
-      { id: 'crop_corn_phase3', name: 'Corn Growing', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase3/corn.svg'), isAnimated: false, scale: 1, tags: ['crop', 'corn', 'phase3'] },
-      { id: 'crop_corn_phase4', name: 'Corn Mature', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase4/corn.svg'), isAnimated: false, scale: 1, tags: ['crop', 'corn', 'phase4'] },
-      { id: 'crop_corn_phase5', name: 'Corn Harvest', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase5/corn.svg'), isAnimated: false, scale: 1, tags: ['crop', 'corn', 'phase5'] },
-
-      // Potato Phases
-      { id: 'crop_potato_phase1', name: 'Potato Seed', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase1/potato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'potato', 'phase1'] },
-      { id: 'crop_potato_phase2', name: 'Potato Sprout', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase2/potato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'potato', 'phase2'] },
-      { id: 'crop_potato_phase3', name: 'Potato Growing', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase3/potato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'potato', 'phase3'] },
-      { id: 'crop_potato_phase4', name: 'Potato Mature', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase4/potato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'potato', 'phase4'] },
-      { id: 'crop_potato_phase5', name: 'Potato Harvest', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase5/potato.svg'), isAnimated: false, scale: 1, tags: ['crop', 'potato', 'phase5'] },
-
-      // Pumpkin Phases
-      { id: 'crop_pumpkin_phase1', name: 'Pumpkin Seed', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase1/pumpkin.svg'), isAnimated: false, scale: 1, tags: ['crop', 'pumpkin', 'phase1'] },
-      { id: 'crop_pumpkin_phase2', name: 'Pumpkin Sprout', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase2/pumpkin.svg'), isAnimated: false, scale: 1, tags: ['crop', 'pumpkin', 'phase2'] },
-      { id: 'crop_pumpkin_phase3', name: 'Pumpkin Growing', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase3/pumpkin.svg'), isAnimated: false, scale: 1, tags: ['crop', 'pumpkin', 'phase3'] },
-      { id: 'crop_pumpkin_phase4', name: 'Pumpkin Mature', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase4/pumpkin.svg'), isAnimated: false, scale: 1, tags: ['crop', 'pumpkin', 'phase4'] },
-      { id: 'crop_pumpkin_phase5', name: 'Pumpkin Harvest', category: 'crop', source: 'builtin', path: require('../../assets/crops/phase5/pumpkin.svg'), isAnimated: false, scale: 1, tags: ['crop', 'pumpkin', 'phase5'] },
-
-      // Decorations (Legacy support)
+      // Decorations
       { id: 'tree_oak', name: 'Oak Tree', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/tree_oak.svg'), isAnimated: false, scale: 2, tags: ['tree', 'nature'] },
+      { id: 'tree_oak_trunk', name: 'Oak Trunk', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/tree_oak_premium.svg'), isAnimated: false, scale: 2, tags: ['tree', 'part'] },
+      { id: 'tree_oak_canopy_back', name: 'Oak Canopy Back', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/tree_oak_premium.svg'), isAnimated: false, scale: 2, tags: ['tree', 'part'] },
+      { id: 'tree_oak_canopy_front', name: 'Oak Canopy Front', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/tree_oak_premium.svg'), isAnimated: false, scale: 2, tags: ['tree', 'part'] },
+      { id: 'tree_oak_shadow', name: 'Oak Shadow', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/tree_oak_premium.svg'), isAnimated: false, scale: 2, tags: ['tree', 'part'] },
+      { id: 'tree_oak_fruit', name: 'Oak Fruit', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/tree_oak_premium.svg'), isAnimated: false, scale: 2, tags: ['tree', 'part'] },
+
+      { id: 'grass_tall', name: 'Tall Grass', category: 'tile', source: 'builtin', path: require('../../assets/tiles/grass_tall.svg'), isAnimated: false, scale: 1, tags: ['terrain', 'grass'] },
       { id: 'bench', name: 'Bench', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/bench.svg'), isAnimated: false, scale: 1, tags: ['furniture'] },
       { id: 'lamp', name: 'Lamp', category: 'decoration', source: 'builtin', path: require('../../assets/decorations/lamp.svg'), isAnimated: false, scale: 0.8, tags: ['furniture'] },
 
       // Animals
-      { id: 'animal_chicken', name: 'Chicken', category: 'npc', source: 'builtin', path: require('../assets/animals/chicken.png'), isAnimated: false, scale: 1, tags: ['animal', 'chicken'] },
-      { id: 'animal_cow', name: 'Cow', category: 'npc', source: 'builtin', path: require('../assets/animals/cow.png'), isAnimated: false, scale: 1.5, tags: ['animal', 'cow'] },
-      { id: 'animal_sheep', name: 'Sheep', category: 'npc', source: 'builtin', path: require('../assets/animals/sheep.png'), isAnimated: false, scale: 1.5, tags: ['animal', 'sheep'] },
+      { id: 'animal_chicken', name: 'Chicken', category: 'npc', source: 'builtin', path: require('../../assets/animals/chicken.svg'), isAnimated: false, scale: 1, tags: ['animal', 'chicken'] },
+      { id: 'animal_cow', name: 'Cow', category: 'npc', source: 'builtin', path: require('../../assets/animals/cow.svg'), isAnimated: false, scale: 1.5, tags: ['animal', 'cow'] },
+      { id: 'animal_sheep', name: 'Sheep', category: 'npc', source: 'builtin', path: require('../../assets/animals/sheep.svg'), isAnimated: false, scale: 1.5, tags: ['animal', 'sheep'] },
 
       // Artisan Machines
-      { id: 'building_keg', name: 'Keg', category: 'building', source: 'builtin', path: require('../assets/machines/keg.png'), isAnimated: false, scale: 1.2, tags: ['machine', 'keg'] },
-      { id: 'building_preserves_jar', name: 'Preserves Jar', category: 'building', source: 'builtin', path: require('../assets/machines/preserves_jar.png'), isAnimated: false, scale: 1.2, tags: ['machine', 'jar'] },
+      { id: 'building_keg', name: 'Keg', category: 'building', source: 'builtin', path: require('../../assets/machines/keg.svg'), isAnimated: false, scale: 1.2, tags: ['machine', 'keg'] },
+      { id: 'building_preserves_jar', name: 'Preserves Jar', category: 'building', source: 'builtin', path: require('../../assets/machines/preserves.svg'), isAnimated: false, scale: 1.2, tags: ['machine', 'jar'] },
 
       // Artisan Goods
-      { id: 'item_juice', name: 'Juice', category: 'item', source: 'builtin', path: require('../assets/goods/juice.png'), isAnimated: false, scale: 0.8, tags: ['artisan', 'juice'] },
-      { id: 'item_jam', name: 'Jam', category: 'item', source: 'builtin', path: require('../assets/goods/jam.png'), isAnimated: false, scale: 0.8, tags: ['artisan', 'jam'] },
-      { id: 'item_wine', name: 'Wine', category: 'item', source: 'builtin', path: require('../assets/goods/wine.png'), isAnimated: false, scale: 0.8, tags: ['artisan', 'wine'] },
-      { id: 'item_pickles', name: 'Pickles', category: 'item', source: 'builtin', path: require('../assets/goods/pickles.png'), isAnimated: false, scale: 0.8, tags: ['artisan', 'pickles'] },
-      { id: 'item_beer', name: 'Beer', category: 'item', source: 'builtin', path: require('../assets/goods/beer.png'), isAnimated: false, scale: 0.8, tags: ['artisan', 'beer'] },
-      { id: 'item_flour', name: 'Flour', category: 'item', source: 'builtin', path: require('../assets/goods/flour.png'), isAnimated: false, scale: 0.8, tags: ['artisan', 'flour'] },
+      { id: 'item_juice', name: 'Juice', category: 'item', source: 'builtin', path: require('../../assets/goods/juice.svg'), isAnimated: false, scale: 0.8, tags: ['artisan', 'juice'] },
+      { id: 'item_jam', name: 'Jam', category: 'item', source: 'builtin', path: require('../../assets/goods/jam.svg'), isAnimated: false, scale: 0.8, tags: ['artisan', 'jam'] },
+      // Artisan Goods
+      { id: 'item_wine', name: 'Wine', category: 'item', source: 'builtin', path: require('../../assets/goods/wine.svg'), isAnimated: false, scale: 0.8, tags: ['artisan', 'wine'] },
+      { id: 'item_pickles', name: 'Pickles', category: 'item', source: 'builtin', path: require('../../assets/goods/pickles.svg'), isAnimated: false, scale: 0.8, tags: ['artisan', 'pickles'] },
+      { id: 'item_beer', name: 'Beer', category: 'item', source: 'builtin', path: require('../../assets/goods/beer.svg'), isAnimated: false, scale: 0.8, tags: ['artisan', 'beer'] },
+      { id: 'item_flour', name: 'Flour', category: 'item', source: 'builtin', path: require('../../assets/goods/flour.svg'), isAnimated: false, scale: 0.8, tags: ['artisan', 'flour'] },
 
       // Fertilizers
-      { id: 'item_fertilizer_speed', name: 'Speed-Grow', category: 'item', source: 'builtin', path: require('../assets/fertilizers/speed.png'), isAnimated: false, scale: 0.7, tags: ['fertilizer', 'speed'] },
-      { id: 'item_fertilizer_quality', name: 'Quality Fertilizer', category: 'item', source: 'builtin', path: require('../assets/fertilizers/quality.png'), isAnimated: false, scale: 0.7, tags: ['fertilizer', 'quality'] },
-      { id: 'item_fertilizer_water', name: 'Water Retaining Soil', category: 'item', source: 'builtin', path: require('../assets/fertilizers/water.png'), isAnimated: false, scale: 0.7, tags: ['fertilizer', 'water'] },
+      { id: 'item_fertilizer_speed', name: 'Speed-Grow', category: 'item', source: 'builtin', path: require('../../assets/fertilizers/speed.svg'), isAnimated: false, scale: 0.7, tags: ['fertilizer', 'speed'] },
+      { id: 'item_fertilizer_quality', name: 'Quality Fertilizer', category: 'item', source: 'builtin', path: require('../../assets/fertilizers/quality.svg'), isAnimated: false, scale: 0.7, tags: ['fertilizer', 'quality'] },
+      { id: 'item_fertilizer_water', name: 'Water Retaining Soil', category: 'item', source: 'builtin', path: require('../../assets/fertilizers/water.svg'), isAnimated: false, scale: 0.7, tags: ['fertilizer', 'water'] },
 
       // Automation
-      { id: 'building_sprinkler_basic', name: 'Basic Sprinkler', category: 'building', source: 'builtin', path: require('../assets/automation/sprinkler_basic.png'), isAnimated: false, scale: 1, tags: ['automation', 'sprinkler'] },
-      { id: 'building_sprinkler_quality', name: 'Quality Sprinkler', category: 'building', source: 'builtin', path: require('../assets/automation/sprinkler_quality.png'), isAnimated: false, scale: 1, tags: ['automation', 'sprinkler'] },
-      { id: 'building_sprinkler_iridium', name: 'Iridium Sprinkler', category: 'building', source: 'builtin', path: require('../assets/automation/sprinkler_iridium.png'), isAnimated: false, scale: 1, tags: ['automation', 'sprinkler'] },
-      { id: 'building_garage', name: 'Garage', category: 'building', source: 'builtin', path: require('../../assets/buildings/garage.svg'), isAnimated: false, scale: 2.5, tags: ['building', 'garage', 'vehicle'] },
+      { id: 'building_sprinkler_basic', name: 'Basic Sprinkler', category: 'building', source: 'builtin', path: require('../../assets/automation/sprinkler_basic.svg'), isAnimated: false, scale: 1, tags: ['automation', 'sprinkler'] },
+      { id: 'building_sprinkler_quality', name: 'Quality Sprinkler', category: 'building', source: 'builtin', path: require('../../assets/automation/sprinkler_quality.svg'), isAnimated: false, scale: 1, tags: ['automation', 'sprinkler'] },
+      { id: 'building_sprinkler_iridium', name: 'Iridium Sprinkler', category: 'building', source: 'builtin', path: require('../../assets/automation/sprinkler_iridium.svg'), isAnimated: false, scale: 1, tags: ['automation', 'sprinkler'] },
     ];
+
+    // --- DYNAMIC CROP REGISTRATION ---
+    // --- DYNAMIC CROP REGISTRATION (Using Static Manifest) ---
+    // Import generated manifest (ensure this file exists via generate-crop-phases.js)
+    const { GeneratedCrops } = require('../assets/GeneratedCrops');
+
+    const registerCrop = (name: string, phases: number = 5) => {
+      for (let i = 1; i <= phases; i++) {
+        const id = `crop_${name}_phase${i}`;
+        const assetPath = GeneratedCrops[id];
+
+        if (assetPath) {
+          builtinAssets.push({
+            id: id,
+            name: `${name.charAt(0).toUpperCase() + name.slice(1)} Phase ${i}`,
+            category: 'crop',
+            source: 'builtin',
+            path: assetPath, // Static require from manifest
+            isAnimated: false,
+            scale: 1,
+            tags: ['crop', name, `phase${i}`]
+          });
+        }
+      }
+    };
+
+    const cropTypes = [
+      'apple', 'peach', 'pear', 'cherry', 'strawberry', 'watermelon',
+      'carrot', 'corn', 'tomato', 'asparagus', 'broccoli', 'cabbage',
+      'mushroom', 'cucumber', 'pepper', 'potato', 'onion', 'garlic',
+      'radish', 'lettuce', 'spinach', 'pumpkin', 'wheat', 'blueberry', 'grape'
+    ];
+
+    cropTypes.forEach(name => registerCrop(name));
 
     builtinAssets.forEach((asset) => {
       this.assets.set(asset.id, asset);

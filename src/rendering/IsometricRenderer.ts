@@ -10,22 +10,24 @@ import { TextureManager } from './TextureManager';
 import { WindSystem, WindVector } from '../systems/WindSystem';
 import { DemoAssets } from '../assets/DemoAssets';
 
-// Master vehicle source for premium component animation
-const TRACTOR_SOURCE = require('../../assets/vehicles/tractor.svg');
 
 interface Voxel {
   x: number;
   y: number;
   z: number;
-  type: 'grass' | 'dirt' | 'water' | 'crop' | 'building' | 'ore' | 'wood' | 'player' | 'road' | 'vehicle' | 'animal';
+  type: 'grass' | 'dirt' | 'grass_hole' | 'water' | 'crop' | 'building' | 'ore' | 'wood' | 'player' | 'road' | 'vehicle' | 'animal';
   color?: string;
   texture?: string;
   height?: number;
   cropType?: string;
   cropStage?: CropStage;
   buildingType?: string;
+  dimensions?: { x: number; y: number }; // Dimensions in grid units
   oreType?: string;
   treeType?: string;
+  treeFruitStage?: number;
+  treeFruitType?: string;
+  grassGrowth?: number; // 0.0 to 1.0
   roadType?: 'dirt' | 'paved';
   roadGrade?: 'gravel' | 'paved';
   roadLanes?: 1 | 2;
@@ -36,6 +38,7 @@ interface Voxel {
   machineState?: any;
   animalType?: 'chicken' | 'cow' | 'sheep';
   animalState?: any;
+  grassNeighbors?: number; // Bitmask: N=1, E=2, S=4, W=8
 }
 
 interface IsometricPoint {
@@ -53,6 +56,7 @@ export class IsometricRenderer {
   private voxelHeight = 16;
   private textureManager: TextureManager;
   private windSystem: WindSystem;
+  private playerGridPos: { x: number, y: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -64,6 +68,16 @@ export class IsometricRenderer {
 
     // Set closer default zoom/tile size
     this.tileSize = 64;
+  }
+
+  private isTreeCrop(world: GameWorld, x: number, y: number): boolean {
+    const plot = world.farmPlots.find(p => Math.floor(p.position.x) === x && Math.floor(p.position.y) === y);
+    if (!plot || !plot.crop) return false;
+
+    // List of crops that should use the planting hole visual (Trees)
+    // Adding 'apple', 'pear' etc.
+    const treeTypes = ['apple', 'pear', 'peach', 'cherry', 'orange', 'apple_tree'];
+    return treeTypes.includes(plot.crop.type.toLowerCase());
   }
 
   /**
@@ -143,19 +157,33 @@ export class IsometricRenderer {
     const centerX = Math.floor(world.mapSize.x / 2); // Assuming map is centered on 10,10 in demo
     // But store.gameStore creates plots at 10,10... let's just render 0-30 for now to match demo area
 
+    const plotSet = new Set(world.farmPlots.map(p => `${Math.floor(p.position.x)},${Math.floor(p.position.y)}`));
+
     for (let x = 0; x < 30; x++) {
       for (let y = 0; y < 30; y++) {
-        // Check if there's a farm plot here
-        const hasPlot = world.farmPlots.some(plot =>
-          Math.floor(plot.position.x) === x && Math.floor(plot.position.y) === y
-        );
+        const hasPlot = plotSet.has(`${x},${y}`);
+
+        let grassNeighbors = 0;
+        if (hasPlot) {
+          // Check neighbors (Grid coordinates)
+          // If neighbor is NOT a plot, it's grass
+          if (!plotSet.has(`${x},${y - 1}`)) grassNeighbors |= 1; // N (Top-Left iso)
+          if (!plotSet.has(`${x + 1},${y}`)) grassNeighbors |= 2; // E (Top-Right iso)
+          if (!plotSet.has(`${x},${y + 1}`)) grassNeighbors |= 4; // S (Bottom-Right iso)
+          if (!plotSet.has(`${x - 1},${y}`)) grassNeighbors |= 8; // W (Bottom-Left iso)
+        }
+
+        const growthKey = `${x},${y}`;
+        const grassGrowth = world.grassGrowth?.[growthKey] || 0;
 
         this.voxels.push({
           x,
           y,
           z: 0,
-          type: hasPlot ? 'dirt' : 'grass',
-          height: 1
+          type: hasPlot ? (this.isTreeCrop(world, x, y) ? 'grass_hole' : 'dirt') : 'grass',
+          height: 1,
+          grassGrowth: hasPlot ? 0 : grassGrowth,
+          grassNeighbors: hasPlot ? grassNeighbors : 0
         });
       }
     }
@@ -224,7 +252,9 @@ export class IsometricRenderer {
           y,
           z: 1,
           type: 'wood',
-          treeType: source.treeType // 'oak', 'pine', etc.
+          treeType: source.treeType, // 'oak', 'pine', etc.
+          treeFruitStage: source.fruitStage,
+          treeFruitType: source.fruitType
         });
       }
     });
@@ -287,7 +317,7 @@ export class IsometricRenderer {
     if (voxel.type === 'grass' || voxel.type === 'dirt') {
       this.drawTerrainTile(iso, voxel);
     } else if (voxel.type === 'crop' && voxel.cropType) {
-      this.drawCrop(iso, voxel.cropType, voxel.cropStage || CropStage.SEED);
+      this.drawCrop(iso, voxel.cropType, voxel.cropStage || CropStage.SEED, voxel.x, voxel.y);
     } else if (voxel.type === 'building' && voxel.buildingType) {
       this.drawBuilding(iso, voxel.buildingType, voxel.machineState);
     } else if (voxel.type === 'animal' && voxel.animalType) {
@@ -295,7 +325,7 @@ export class IsometricRenderer {
     } else if (voxel.type === 'ore' && voxel.oreType) {
       this.drawOre(iso, voxel.oreType);
     } else if (voxel.type === 'wood' && voxel.treeType) {
-      this.drawTree(iso, voxel.treeType);
+      this.drawTree(iso, voxel.treeType, voxel);
     } else if (voxel.type === 'player') {
       this.drawPlayer(iso, voxel);
     } else if (voxel.type === 'road' && (voxel.roadGrade || voxel.roadType)) {
@@ -308,7 +338,7 @@ export class IsometricRenderer {
   }
 
   private drawTerrainTile(iso: IsometricPoint, voxel: Voxel): void {
-    const type = voxel.type as 'grass' | 'dirt';
+    const type = voxel.type as 'grass' | 'dirt' | 'grass_hole';
     // Try to get texture
     const textureId = `tile_${type}`;
     const texture = this.textureManager.getTexture(textureId);
@@ -358,9 +388,14 @@ export class IsometricRenderer {
 
       // --- DETAIL OVERLAY PASS ---
       if (type === 'grass') {
-        this.drawGrassDetails(iso, variation);
+        this.drawGrassDetails(iso, variation, voxel.grassGrowth || 0);
       } else {
         this.drawDirtDetails(iso, variation);
+
+        // Draw Grass Transitions on Dirt
+        if (voxel.grassNeighbors) {
+          this.drawGrassTransitions(iso, voxel.grassNeighbors);
+        }
       }
     }
   }
@@ -370,11 +405,11 @@ export class IsometricRenderer {
     return val - Math.floor(val);
   }
 
-  private drawGrassDetails(iso: IsometricPoint, variation: number): void {
+  private drawGrassDetails(iso: IsometricPoint, variation: number, growth: number): void {
     const { screenX, screenY } = iso;
     const size = this.tileSize;
 
-    // Draw 2-3 small clumps of grass
+    // Draw 2-3 small clumps of grass (Flat details)
     const numClumps = Math.floor(variation * 3) + 1;
     this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Highlight blades
     this.ctx.lineWidth = 1;
@@ -391,6 +426,43 @@ export class IsometricRenderer {
       this.ctx.stroke();
     }
 
+    // --- TALL GRASS BILLBOARDS (2.5D) ---
+    if (growth > 0.3) {
+      const numBillboards = Math.floor(growth * 4);
+      const texture = this.textureManager.getTexture('grass_tall');
+
+      const wind = this.windSystem.getWindAt(screenX / 100, screenY / 100);
+      const sway = wind.x * 0.2;
+
+      for (let i = 0; i < numBillboards; i++) {
+        // Seeded offsets for consistent placement
+        const ox = (this.getTileVariation(variation + 0.1, i) - 0.5) * (size * 0.6);
+        const oy = (this.getTileVariation(i + 0.2, variation) - 0.5) * (size * 0.3);
+
+        this.ctx.save();
+        this.ctx.translate(screenX + ox, screenY + oy);
+
+        // Sway pivot at base
+        this.ctx.transform(1, 0, sway, 1, 0, 0);
+
+        if (texture) {
+          const bScale = 0.5 + (growth * 0.5); // Taller grass with growth
+          const w = 24 * bScale;
+          const h = 24 * bScale;
+          this.ctx.drawImage(texture.image, -w / 2, -h, w, h);
+        } else {
+          // Procedural fallback for tall blades
+          this.ctx.strokeStyle = '#388E3C';
+          this.ctx.lineWidth = 1.5;
+          this.ctx.beginPath();
+          this.ctx.moveTo(0, 0);
+          this.ctx.lineTo(-2, -15 * growth);
+          this.ctx.stroke();
+        }
+        this.ctx.restore();
+      }
+    }
+
     // Rare Wildflower
     if (variation > 0.95) {
       this.ctx.fillStyle = '#FFFFFF';
@@ -400,6 +472,61 @@ export class IsometricRenderer {
       this.ctx.fillStyle = '#FFEB3B'; // Yellow center
       this.ctx.beginPath();
       this.ctx.arc(screenX + 5, screenY - 5, 0.6, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+  }
+
+  private drawGrassTransitions(iso: IsometricPoint, mask: number): void {
+    const { screenX, screenY } = iso;
+    const size = this.tileSize;
+    const hSize = size / 2;
+
+    this.ctx.fillStyle = '#4CAF50'; // Grass color
+
+    // Smooth overlap width
+    const overlap = 4;
+
+    // 1: Top-Right Edge (N neighbor, NE visual edge)
+    if (mask & 1) {
+      this.drawEdgeSpikes(screenX, screenY - hSize / 2, screenX + size / 2, screenY);
+    }
+
+    // 2: Bottom-Right Edge (E neighbor, SE visual edge)
+    if (mask & 2) {
+      this.drawEdgeSpikes(screenX + size / 2, screenY, screenX, screenY + hSize / 2);
+    }
+
+    // 4: Bottom-Left Edge (S neighbor, SW visual edge)
+    if (mask & 4) {
+      this.drawEdgeSpikes(screenX, screenY + hSize / 2, screenX - size / 2, screenY);
+    }
+
+    // 8: Top-Left Edge (W neighbor, NW visual edge)
+    if (mask & 8) {
+      this.drawEdgeSpikes(screenX - size / 2, screenY, screenX, screenY - hSize / 2);
+    }
+  }
+
+  private drawEdgeSpikes(x1: number, y1: number, x2: number, y2: number): void {
+    const spikes = 5;
+
+    const dx = (x2 - x1) / spikes;
+    const dy = (y2 - y1) / spikes;
+
+    // Draw fuzzy edge using multiple small overlaps
+    // Instead of complex curves, we'll draw "tufts" along the seam
+    this.ctx.fillStyle = '#4CAF50';
+
+    for (let i = 0; i <= spikes; i++) {
+      const cx = x1 + dx * i;
+      const cy = y1 + dy * i;
+
+      // Random offset
+      const ox = (Math.random() - 0.5) * 5;
+      const oy = (Math.random() - 0.5) * 5;
+
+      this.ctx.beginPath();
+      this.ctx.arc(cx + ox, cy + oy, 4, 0, Math.PI * 2);
       this.ctx.fill();
     }
   }
@@ -479,16 +606,11 @@ export class IsometricRenderer {
     this.ctx.stroke();
   }
 
-  private drawCrop(iso: IsometricPoint, type: string, stage: CropStage): void {
+  private drawCrop(iso: IsometricPoint, type: string, stage: CropStage, gridX: number, gridY: number): void {
     // Map stage enum (0-4) to phase folder (1-5)
-    // crop.stage is 0..4 (SEED..HARVESTABLE)
-    // phases are phase1..phase5
-    // However, we need to handle stage 5 (DEAD)
-
     let phase = 1;
     if (stage === CropStage.DEAD) {
-      phase = 5; // Use mature as base? Or need death asset?
-      // For now fallback to 5 (mature) but maybe filtered grayscale
+      phase = 5;
     } else {
       phase = Math.min(5, Math.floor(stage) + 1);
     }
@@ -498,36 +620,38 @@ export class IsometricRenderer {
 
     if (texture) {
       // Scale crop relative to tile
-      // New 64x64 assets should be slightly larger than the tile base for "pop"
-      const scale = 1.0;
+      // 2.5D assets are 64x64, tile is usually 32-48. 
+      // We want them to feel lush, so scale 1.1 relative to tile
+      const scale = 1.1;
       const width = this.tileSize * scale;
       const height = width * (texture.height / texture.width);
 
-      // Get Wind Force at this tile (iso coords -> roughly grid coords)
-      // We use the voxel grid coordinates passed implicitly or we'd need them passed in
-      // IsoPoint doesn't have grid coords. We need to pass grid X/Y to drawCrop.
-      // OR we calculate wind based on iso screen coords (works for screen-space waves)
-      // BETTER: Wind is world-space. We should pass gridX, gridY to drawCrop.
+      // --- Wind Logic ---
+      const wind = this.windSystem.getWindAt(gridX, gridY);
 
-      // Let's modify drawVoxel to pass x/y to drawCrop, or calculate wind here crudely from Iso
-      // Since iso.screenX/Y correlates to world, we can use it for the noise offset
+      const swayAmount = wind.strength * 0.15;
+      let skewX = wind.x * swayAmount;
 
-      // Approximate world X/Y from screen for wind noise (good enough for visual wave)
-      const noiseX = iso.screenX / 100;
-      const noiseY = iso.screenY / 100;
-      const wind = this.windSystem.getWindAt(noiseX, noiseY);
+      // --- Interaction Logic (Squish) ---
+      let interactionSquish = 0;
+      let interactionStretch = 0;
 
-      const swayAmount = wind.strength * 0.10;
-      const skewX = wind.x * swayAmount;
+      // Check precise grid position
+      if (this.playerGridPos && Math.round(this.playerGridPos.x) === gridX && Math.round(this.playerGridPos.y) === gridY) {
+        interactionSquish = -0.4; // Flatten significantly for impact
+        interactionStretch = 0.25; // Widen
+      }
 
-      // Squash & Stretch Logic:
-      const squashFactor = 1.0 - (Math.abs(skewX) * 0.2);
-      const stretchFactor = 1.0 + (Math.abs(skewX) * 0.1);
+      // Cozy breathing effect
+      const breathe = Math.sin(Date.now() / 600 + gridX + gridY) * 0.02;
 
-      // --- Segmented Rendering: Only the parts the wind touches react ---
-      // We divide the crop into "Base" (bottom 30%) and "Tops" (top 70%)
-      const baseHeightRatio = 0.3;
-      const topHeightRatio = 1.0 - baseHeightRatio;
+      // Squash & Stretch Logic (Wind + Breathe + Interaction):
+      const squashFactor = 1.0 - (Math.abs(skewX) * 0.2) + breathe + interactionSquish;
+      const stretchFactor = 1.0 + (Math.abs(skewX) * 0.1) - breathe + interactionStretch;
+
+      // --- Segmented Rendering ---
+      // 2.5D Assets have stems at bottom ~25%.
+      const baseHeightRatio = 0.25;
 
       const drawX = iso.screenX - width / 2;
       const drawY = iso.screenY - height; // Grounded at iso.screenY
@@ -535,14 +659,14 @@ export class IsometricRenderer {
       // 1. Draw Stationary Base (Roots/Grounded part)
       (this.ctx as any).drawImage(
         texture.image,
-        0, texture.height * (1.0 - baseHeightRatio), texture.width, texture.height * baseHeightRatio, // Source
-        drawX, drawY + height * (1.0 - baseHeightRatio), width, height * baseHeightRatio // Destination
+        0, texture.height * (1.0 - baseHeightRatio), texture.width, texture.height * baseHeightRatio,
+        drawX, drawY + height * (1.0 - baseHeightRatio), width, height * baseHeightRatio
       );
 
       // 2. Draw Wind-Affected Tops
       this.ctx.save();
 
-      // Pivot at the boundary between base and top for smooth stitching
+      // Pivot at the boundary
       const pivotX = iso.screenX;
       const pivotY = drawY + height * (1.0 - baseHeightRatio);
 
@@ -553,13 +677,12 @@ export class IsometricRenderer {
 
       (this.ctx as any).drawImage(
         texture.image,
-        0, 0, texture.width, texture.height * (1.0 - baseHeightRatio), // Source Top
-        drawX, drawY, width, height * (1.0 - baseHeightRatio) // Destination Top
+        0, 0, texture.width, texture.height * (1.0 - baseHeightRatio),
+        drawX, drawY, width, height * (1.0 - baseHeightRatio)
       );
 
-      // --- Happy Reaction (Localized to top) ---
+      // --- Happy Reaction / Particles ---
       if (wind.strength > 0.6 && stage >= CropStage.MATURE) {
-        // We pass the pivot-relative Y for the face so it stays with the tops
         this.drawHappyReaction(iso, wind.strength, pivotY);
       }
 
@@ -693,62 +816,68 @@ export class IsometricRenderer {
     this.ctx.fill();
   }
 
-  private drawTree(iso: IsometricPoint, type: string): void {
-    const textureId = `tree_${type}`;
-    const texture = this.textureManager.getTexture(textureId);
+  private drawTree(iso: IsometricPoint, type: string, voxel: Voxel): void {
+    const time = Date.now();
+    const fruitStage = voxel.treeFruitStage || 0;
 
-    // Calculate wind at this position
-    const noiseX = iso.screenX / 100;
-    const noiseY = iso.screenY / 100;
-    const wind = this.windSystem.getWindAt(noiseX, noiseY);
+    // Calculate wind at this position for sway
+    const wind = this.windSystem.getWindAt(iso.screenX / 100, iso.screenY / 100);
+    const sway = wind.x * 0.15;
 
-    // Sway factor
-    const skewX = wind.x * 0.1;
+    // Parts config
+    const isOak = type.includes('oak');
+    const prefix = isOak ? 'tree_oak' : 'tree_oak'; // Fallback to oak for now
+
+    const parts = [
+      { id: `${prefix}_shadow`, type: 'shadow', swayScale: 0 },
+      { id: `${prefix}_trunk`, type: 'trunk', swayScale: 0.1 },
+      { id: `${prefix}_canopy_back`, type: 'canopy', swayScale: 1.0 },
+      { id: `${prefix}_canopy_front`, type: 'canopy', swayScale: 1.2 },
+      { id: `${prefix}_fruit`, type: 'fruit', swayScale: 1.2, visible: fruitStage > 0 }
+    ];
 
     this.ctx.save();
-    this.ctx.translate(iso.screenX, iso.screenY);
 
-    // Apply sway pivot at base
-    this.ctx.transform(1, 0, skewX, 1, 0, 0);
+    parts.forEach(p => {
+      if (p.visible === false) return;
 
-    if (texture) {
-      // Trees are usually taller
-      const scale = 1.2;
-      const width = this.tileSize * scale;
-      const height = width * (texture.height / texture.width);
+      const texture = this.textureManager.getTexture(p.id);
 
-      this.ctx.drawImage(
-        texture.image,
-        -width / 2,
-        -height,
-        width,
-        height
-      );
-    } else {
-      // Fallback drawing adjusted for local coords (0,0 is base)
+      this.ctx.save();
+      this.ctx.translate(iso.screenX, iso.screenY);
 
-      // Trunk (Static base slightly affected?)
-      this.ctx.fillStyle = '#8B4513';
-      this.ctx.fillRect(-5, -30, 10, 30);
+      // Apply sway pivot at base, scaled by layer (trunk sways less than leaves)
+      this.ctx.transform(1, 0, sway * p.swayScale, 1, 0, 0);
 
-      // Leaves
-      this.ctx.fillStyle = type === 'tree_pine' || type === 'pine' ? '#2E7D32' : '#4CAF50';
+      if (texture) {
+        const scale = 2.0; // Standard premium scale
+        const width = this.tileSize * scale;
+        const height = width * (texture.height / texture.width);
 
-      if (type.includes('pine')) {
-        // Triangle shape for pine
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, -90);
-        this.ctx.lineTo(20, -30);
-        this.ctx.lineTo(-20, -30);
-        this.ctx.closePath();
-        this.ctx.fill();
+        // Fruit stage scaling
+        let fruitAlpha = 1.0;
+        if (p.type === 'fruit') {
+          // Adjust alpha or scale based on fruitStage (1: budding, 2: small, 3: ripe)
+          fruitAlpha = fruitStage === 1 ? 0.3 : fruitStage === 2 ? 0.7 : 1.0;
+        }
+
+        this.ctx.globalAlpha = fruitAlpha;
+        this.ctx.drawImage(texture.image, -width / 2, -height, width, height);
       } else {
-        // Circle for oak
-        this.ctx.beginPath();
-        this.ctx.arc(0, -50, 25, 0, Math.PI * 2);
-        this.ctx.fill();
+        // Fallback for missing parts
+        if (p.type === 'trunk') {
+          this.ctx.fillStyle = '#5D4037';
+          this.ctx.fillRect(-4, -40, 8, 40);
+        } else if (p.type === 'canopy' && p.id.includes('front')) {
+          this.ctx.fillStyle = '#4CAF50';
+          this.ctx.beginPath();
+          this.ctx.arc(0, -60, 30, 0, Math.PI * 2);
+          this.ctx.fill();
+        }
       }
-    }
+      this.ctx.restore();
+    });
+
     this.ctx.restore();
   }
 
@@ -864,32 +993,22 @@ export class IsometricRenderer {
     const type = voxel.vehicleType;
     const rotation = voxel.rotation || 0;
     const isMoving = voxel.playerState?.animation?.action === 'walk'; // Approximation if player is inside
+    const time = Date.now();
 
     // Map rotation (0-360) to 4 iso directions (0: SE, 1: SW, 2: NW, 3: NE)
     const directions = ['se', 'sw', 'nw', 'ne'];
     const dirIndex = Math.floor(((rotation + 45) % 360) / 90);
     const dirSuffix = directions[dirIndex] || 'se';
 
-    // Premium Component Animation for Tractor
-    if (type === 'tractor') {
-      // Check if we can use component rendering
-      this.drawTractorComponents(iso, voxel);
-      // If drawTractorComponents returns (e.g. not ready), we fall through?
-      // Actually, let's make drawTractorComponents void and handle fallback internally inside it?
-      // Better: check if loaded inside drawTractorComponents. 
-      // If it renders, we are good. But we need to know IF it rendered.
-      // Let's rely on checking if the textures are loaded.
-      if (this.textureManager.isTextureLoaded('vehicle_tractor_chassis')) {
-        return;
-      }
-    }
-
     const textureId = `vehicle_${type}_${dirSuffix}`;
     const texture = this.textureManager.getTexture(textureId);
 
-    if (texture) {
-      const time = Date.now();
+    // DEBUG: Log vehicle rendering
+    if (Math.random() < 0.01) { // Throttle logs
+      console.log('Rendering Vehicle:', { type, dirSuffix, textureId, hasTexture: !!texture, w: texture?.width, h: texture?.height });
+    }
 
+    if (texture) {
       // 1. DIESEL BOUNCE (Idle animation)
       const bounce = Math.sin(time / 150) * 0.02;
       const idleScale = 1.0 + (isMoving ? 0 : bounce);
@@ -957,83 +1076,9 @@ export class IsometricRenderer {
       this.ctx.fillStyle = '#111';
       this.ctx.fillRect(x + 5, y + 5, 10, 20); // Window?
     }
-  }
 
-  private drawTractorComponents(iso: IsometricPoint, voxel: Voxel): void {
-    const time = Date.now();
-    const isMoving = voxel.playerState?.animation?.action === 'walk';
-
-    const parts = [
-      { id: 'vehicle_tractor_shadow', part: 'shadow', z: 0 },
-      { id: 'vehicle_tractor_wheels_rear', part: 'wheels_rear', z: 1 },
-      { id: 'vehicle_tractor_wheels_front', part: 'wheels_front', z: 2 },
-      { id: 'vehicle_tractor_chassis', part: 'chassis', z: 3, animated: true },
-    ];
-
-    // Check availability and load if needed
-    let allLoaded = true;
-    for (const p of parts) {
-      if (!this.textureManager.isTextureLoaded(p.id)) {
-        allLoaded = false;
-        // Lazy load using local constant source path
-        this.textureManager.loadTexture({
-          id: p.id,
-          path: `${TRACTOR_SOURCE}#${p.part}`,
-          scale: 1.5,
-          cacheKey: `vehicle_tractor_${p.part}`
-        }).catch(err => {
-          // Silently ignore loading errors to avoid spam, or log once
-        });
-      }
-    }
-
-    if (!allLoaded) {
-      return;
-    }
-
-    // Render Components
-    const scale = 1.3;
-    const chassisBounce = Math.sin(time / 150) * 2; // Pixel bounce
-    const tilt = isMoving ? Math.sin(time / 100) * 0.05 : 0;
-
-    this.ctx.save();
-    this.ctx.translate(iso.screenX, iso.screenY);
-    if (isMoving) this.ctx.rotate(tilt);
-
-    parts.sort((a, b) => a.z - b.z).forEach(p => {
-      const tex = this.textureManager.getTexture(p.id);
-      if (tex) {
-        const width = this.tileSize * scale;
-        const height = width * (tex.height / tex.width);
-        const pivotY = 0.65;
-
-        let offsetY = 0;
-        if (p.animated) {
-          offsetY = isMoving ? 0 : chassisBounce; // Bounce when IDLE
-        }
-
-        this.ctx.drawImage(tex.image, -width / 2, -height * pivotY + offsetY, width, height);
-      }
-    });
-
-    // Draw driver attached to chassis layer
-    if (voxel.playerState) {
-      const driverBounce = isMoving ? 0 : chassisBounce;
-      const height = (this.tileSize * scale) * (256 / 256); // approx
-
-      this.ctx.fillStyle = '#FFCC80';
-      this.ctx.beginPath();
-      this.ctx.arc(0, -height * 0.45 + driverBounce, 6, 0, Math.PI * 2);
-      this.ctx.fill();
-
-      this.ctx.fillStyle = '#E6C348';
-      this.ctx.beginPath();
-      this.ctx.ellipse(0, -height * 0.45 - 5 + driverBounce, 8, 3, 0, 0, Math.PI * 2);
-      this.ctx.fill();
-    }
-
-    // Particle Emitter for Exhaust
-    if (isMoving && time % 200 < 20) {
+    // 3. EXHAUST PUFFS (if tractor) - Moved from drawTractorComponents
+    if (type === 'tractor' && isMoving && time % 200 < 20) {
       // Offset relative to center (approx where exhaust stack is)
       // Rotation is in degrees.
       const rotRad = (voxel.rotation || 0) * (Math.PI / 180);
@@ -1065,6 +1110,16 @@ export class IsometricRenderer {
    */
   render(world: GameWorld): void {
     const { width, height } = this.canvas;
+
+    // Cache player position for interactive effects
+    if (world.player) {
+      this.playerGridPos = {
+        x: Math.round(world.player.position.x),
+        y: Math.round(world.player.position.y)
+      };
+    } else {
+      this.playerGridPos = null;
+    }
 
     // Update wind
     this.windSystem.update(0.016); // Approx 60fps dt

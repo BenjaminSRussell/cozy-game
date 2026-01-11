@@ -1,0 +1,45 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Layer IDs for extraction by TextureManager -->
+  
+  <g id="shadow" opacity="0.3">
+    <ellipse cx="64" cy="110" rx="40" ry="12" fill="#000000"/>
+  </g>
+
+  <g id="trunk">
+    <!-- Main Trunk -->
+    <path d="M60 110 L68 110 L66 60 L62 60 Z" fill="#5D4037" stroke="#3E2723" stroke-width="1"/>
+    <!-- Roots/Base -->
+    <path d="M55 112 Q64 108 73 112" stroke="#3E2723" stroke-width="2" fill="none"/>
+    <!-- Bark Texture -->
+    <line x1="63" y1="100" x2="63" y2="80" stroke="#3E2723" stroke-width="1" opacity="0.4"/>
+    <line x1="65" y1="90" x2="65" y2="70" stroke="#3E2723" stroke-width="1" opacity="0.4"/>
+  </g>
+
+  <g id="canopy_back">
+    <!-- Darker back leaves -->
+    <circle cx="64" cy="50" r="35" fill="#2E7D32"/>
+    <circle cx="45" cy="65" r="25" fill="#2E7D32"/>
+    <circle cx="83" cy="65" r="25" fill="#2E7D32"/>
+  </g>
+
+  <g id="canopy_front">
+    <!-- Lighter front leaves with depth -->
+    <circle cx="64" cy="45" r="30" fill="#4CAF50"/>
+    <circle cx="45" cy="60" r="20" fill="#4CAF50"/>
+    <circle cx="83" cy="60" r="20" fill="#4CAF50"/>
+    <circle cx="64" cy="75" r="20" fill="#4CAF50"/>
+    
+    <!-- Leaf Highlights -->
+    <circle cx="55" cy="40" r="10" fill="#81C784" opacity="0.4"/>
+    <circle cx="75" cy="55" r="8" fill="#81C784" opacity="0.4"/>
+  </g>
+
+  <g id="fruit">
+    <!-- Apples appearing at different spots -->
+    <circle cx="50" cy="50" r="4" fill="#D32F2F" stroke="#B71C1C" stroke-width="0.5"/>
+    <circle cx="78" cy="45" r="4" fill="#D32F2F" stroke="#B71C1C" stroke-width="0.5"/>
+    <circle cx="64" cy="70" r="4" fill="#D32F2F" stroke="#B71C1C" stroke-width="0.5"/>
+    <circle cx="40" cy="75" r="3.5" fill="#D32F2F" stroke="#B71C1C" stroke-width="0.5"/>
+    <circle cx="85" cy="70" r="3.5" fill="#D32F2F" stroke="#B71C1C" stroke-width="0.5"/>
+  </g>
+</svg>

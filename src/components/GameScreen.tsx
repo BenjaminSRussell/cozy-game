@@ -1036,6 +1036,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
         protectedAreas: [], // Will be calculated by store
         size: { x: damSize, y: damSize },
         operational: true,
+        unlocked: true,  // Added missing property
+        level: 1,        // Added missing property
+        spriteId: selectedBuildingType // Added missing property
       };
 
       placeBuilding({

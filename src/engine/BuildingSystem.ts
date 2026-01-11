@@ -36,7 +36,8 @@ export interface InteractiveBuilding {
   id: string;
   type: string;
   position: { x: number; y: number };
-  size: { width: number; height: number };
+  dimensions: { x: number; y: number }; // Grid units (e.g., 2x2)
+  size: { width: number; height: number }; // Pixel size for rendering reference
   state: BuildingState;
   animations: Map<string, BuildingAnimation>;
   particleEffects: Array<{
@@ -61,7 +62,8 @@ export class InteractiveBuildingSystem {
       id: 'barn_template',
       type: 'barn',
       position: { x: 0, y: 0 },
-      size: { width: 128, height: 128 },
+      dimensions: { x: 2, y: 3 }, // Occupies 2x3 tiles
+      size: { width: 128, height: 192 }, // Scaled pixel size
       state: {
         health: 100,
         level: 1,
@@ -136,7 +138,8 @@ export class InteractiveBuildingSystem {
       id: 'house_template',
       type: 'house',
       position: { x: 0, y: 0 },
-      size: { width: 96, height: 96 },
+      dimensions: { x: 2, y: 2 }, // Occupies 2x2 tiles
+      size: { width: 128, height: 128 },
       state: {
         health: 100,
         level: 1,
@@ -202,7 +205,8 @@ export class InteractiveBuildingSystem {
       id: 'greenhouse_template',
       type: 'greenhouse',
       position: { x: 0, y: 0 },
-      size: { width: 112, height: 80 },
+      dimensions: { x: 2, y: 2 },
+      size: { width: 128, height: 128 },
       state: {
         health: 100,
         level: 1,
@@ -267,7 +271,8 @@ export class InteractiveBuildingSystem {
       id: 'windmill_template',
       type: 'windmill',
       position: { x: 0, y: 0 },
-      size: { width: 96, height: 144 },
+      dimensions: { x: 1, y: 1 }, // Small footprint, large visual
+      size: { width: 64, height: 128 },
       state: {
         health: 100,
         level: 1,
@@ -342,6 +347,7 @@ export class InteractiveBuildingSystem {
       ...template,
       id: `${type}_${Date.now()}_${Math.random()}`,
       position: { ...position },
+      dimensions: { ...template.dimensions },
       animations: new Map(template.animations),
       particleEffects: template.particleEffects.map((effect: any) => ({ ...effect }))
     };

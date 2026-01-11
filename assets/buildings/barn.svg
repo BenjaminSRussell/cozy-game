@@ -1,67 +1,81 @@
-<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-  <!-- Stone foundation -->
-  <rect x="18" y="115" width="92" height="5" fill="#808080" stroke="#696969" stroke-width="1"/>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- 
+    Isometric Barn (Standardized)
+    Logical Footprint: 2x3 tiles
+    Perspective: True Isometric (30 deg / 2:1 pixel ratio)
+    Orientation: Facing South (Seeing SE and SW walls)
+  -->
   
-  <!-- Barn base -->
-  <rect x="20" y="60" width="88" height="55" fill="#D2691E" stroke="#8B4513" stroke-width="2"/>
-  
-  <!-- Wood planks texture -->
-  <rect x="20" y="65" width="88" height="4" fill="#CD853F" opacity="0.7"/>
-  <rect x="20" y="75" width="88" height="4" fill="#CD853F" opacity="0.7"/>
-  <rect x="20" y="85" width="88" height="4" fill="#CD853F" opacity="0.7"/>
-  <rect x="20" y="95" width="88" height="4" fill="#CD853F" opacity="0.7"/>
-  <rect x="20" y="105" width="88" height="4" fill="#CD853F" opacity="0.7"/>
-  
-  <!-- Vertical wood beams -->
-  <rect x="30" y="60" width="4" height="55" fill="#A0522D"/>
-  <rect x="50" y="60" width="4" height="55" fill="#A0522D"/>
-  <rect x="70" y="60" width="4" height="55" fill="#A0522D"/>
-  <rect x="90" y="60" width="4" height="55" fill="#A0522D"/>
-  
-  <!-- Roof -->
-  <polygon points="10,60 64,20 118,60" fill="#DC143C" stroke="#8B0000" stroke-width="2"/>
-  
-  <!-- Roof shingles -->
-  <line x1="20" y1="50" x2="40" y2="35" stroke="#8B0000" stroke-width="1"/>
-  <line x1="45" y1="28" x2="65" y2="18" stroke="#8B0000" stroke-width="1"/>
-  <line x1="70" y1="23" x2="90" y2="38" stroke="#8B0000" stroke-width="1"/>
-  
-  <!-- Main door -->
-  <rect x="50" y="85" width="28" height="30" fill="#654321" stroke="#4B2F20" stroke-width="2"/>
-  <rect x="52" y="87" width="24" height="2" fill="#8B4513"/>
-  <rect x="52" y="92" width="24" height="2" fill="#8B4513"/>
-  <rect x="52" y="97" width="24" height="2" fill="#8B4513"/>
-  <rect x="52" y="102" width="24" height="2" fill="#8B4513"/>
-  <circle cx="70" cy="100" r="2" fill="#FFD700"/>
-  
-  <!-- Door handles -->
-  <rect x="55" y="98" width="2" height="4" fill="#8B4513"/>
-  <rect x="71" y="98" width="2" height="4" fill="#8B4513"/>
-  
-  <!-- Windows -->
-  <rect x="30" y="70" width="12" height="12" fill="#87CEEB" stroke="#4682B4" stroke-width="2"/>
-  <line x1="36" y1="70" x2="36" y2="82" stroke="#4682B4" stroke-width="1"/>
-  <line x1="30" y1="76" x2="42" y2="76" stroke="#4682B4" stroke-width="1"/>
-  
-  <rect x="86" y="70" width="12" height="12" fill="#87CEEB" stroke="#4682B4" stroke-width="2"/>
-  <line x1="92" y1="70" x2="92" y2="82" stroke="#4682B4" stroke-width="1"/>
-  <line x1="86" y1="76" x2="98" y2="76" stroke="#4682B4" stroke-width="1"/>
-  
-  <!-- Hay loft door -->
-  <rect x="45" y="35" width="38" height="20" fill="#8B4513" stroke="#654321" stroke-width="2"/>
-  <line x1="64" y1="35" x2="64" y2="55" stroke="#654321" stroke-width="2"/>
-  
-  <!-- Loft door handles -->
-  <circle cx="55" cy="45" r="1" fill="#654321"/>
-  <circle cx="73" cy="45" r="1" fill="#654321"/>
-  
-  <!-- Hay sticking out -->
-  <rect x="47" y="32" width="8" height="3" fill="#F4A460" opacity="0.8"/>
-  <rect x="73" y="32" width="8" height="3" fill="#F4A460" opacity="0.8"/>
-  
-  <!-- Ventilation slots -->
-  <rect x="25" y="50" width="2" height="8" fill="#654321"/>
-  <rect x="35" y="50" width="2" height="8" fill="#654321"/>
-  <rect x="91" y="50" width="2" height="8" fill="#654321"/>
-  <rect x="101" y="50" width="2" height="8" fill="#654321"/>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+      <feOffset dx="0" dy="4" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge> 
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/> 
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Ground Shadow/Footprint Guide (Hidden in final, useful for debug) -->
+  <!-- <path d="M128 240 L64 208 L128 176 L192 208 Z" fill="rgba(0,0,0,0.2)" /> -->
+
+  <!-- Main Structure Group -->
+  <g filter="url(#shadow)" transform="translate(0, -32)">
+    
+    <!-- LEFT WALL (SW Face) - Darker Shade -->
+    <!-- Base: (64, 208) to (128, 240) -->
+    <!-- Height: 100px -->
+    <path d="M64 208 L64 108 L128 140 L128 240 Z" fill="#8B4513" stroke="#5D4037" stroke-width="2"/>
+    
+    <!-- RIGHT WALL (SE Face) - Lighter Shade -->
+    <!-- Base: (128, 240) to (192, 208) -->
+    <!-- Height: 100px -->
+    <path d="M128 240 L128 140 L192 108 L192 208 Z" fill="#A0522D" stroke="#5D4037" stroke-width="2"/>
+
+    <!-- WOOD SIDING TEXTURE (Left) -->
+    <path d="M64 128 L128 160" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+    <path d="M64 148 L128 180" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+    <path d="M64 168 L128 200" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+    <path d="M64 188 L128 220" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+
+    <!-- WOOD SIDING TEXTURE (Right) -->
+    <path d="M128 160 L192 128" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+    <path d="M128 180 L192 148" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+    <path d="M128 200 L192 168" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+    <path d="M128 220 L192 188" stroke="#5D4037" stroke-width="1" opacity="0.5"/>
+
+    <!-- ROOF (Left Slope) -->
+    <path d="M64 108 L128 140 L128 80 L64 48 Z" fill="#A52A2A" stroke="#800000" stroke-width="2"/>
+
+    <!-- ROOF (Right Slope) -->
+    <path d="M128 140 L192 108 L192 48 L128 80 Z" fill="#CD5C5C" stroke="#800000" stroke-width="2"/>
+    
+    <!-- ROOF TOP RIDGE -->
+    <path d="M64 48 L128 80 L192 48 L128 16 Z" fill="#800000" stroke="#500000" stroke-width="2"/>
+
+    <!-- LARGE BARN DOOR (Right Wall) -->
+    <g transform="translate(140, 160)">
+       <!-- Frame -->
+       <path d="M0 0 L0 50 L30 35 L30 -15 Z" fill="#3E2723"/>
+       <!-- Door Left -->
+       <path d="M2 2 L2 48 L14 42 L14 8 Z" fill="#5D4037"/>
+       <!-- Door Right -->
+       <path d="M16 7 L16 41 L28 35 L28 13 Z" fill="#5D4037"/>
+       <!-- X Brace -->
+       <path d="M2 2 L14 42" stroke="#3E2723" stroke-width="1"/>
+       <path d="M2 48 L14 8" stroke="#3E2723" stroke-width="1"/>
+    </g>
+
+    <!-- HAY LOFT WINDOW (Left Wall) -->
+    <g transform="translate(85, 130)">
+       <path d="M0 0 L0 25 L20 35 L20 10 Z" fill="#212121" stroke="#3E2723" stroke-width="2"/>
+       <!-- Hay sticking out -->
+       <path d="M5 25 L15 30 L10 35 Z" fill="#FDD835"/>
+    </g>
+
+  </g>
 </svg>

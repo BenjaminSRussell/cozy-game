@@ -59,15 +59,9 @@ export interface WeatherEvent {
  * Dam building for flood protection
  * Multi-block structure that protects crops from flood damage
  */
-export interface DamBuilding {
-  /** Unique identifier for this dam */
-  id: string;
+export interface DamBuilding extends Omit<Building, 'type'> {
   /** Dam type affects protection capacity */
   type: 'small_dam' | 'medium_dam' | 'large_dam';
-  /** 3D position for isometric rendering */
-  position: Vector3D;
-  /** Rotation angle in degrees */
-  rotation: number;
   /** Protection level (1-5, higher = better protection) */
   protectionLevel: number;
   /** Current structural integrity (0-100) */
@@ -298,6 +292,8 @@ export interface Building {
   automationType?: 'sprinkler_basic' | 'sprinkler_quality' | 'sprinkler_iridium';
   /** Range/radius for automation effects (in tiles) */
   range?: number;
+  /** Dimensions in grid units (width, height) used for multi-tile occupancy */
+  dimensions?: Vector2D;
   /** Machine processing state for artisans/factories */
   machineState?: {
     processingItemId?: string;
@@ -403,6 +399,12 @@ export interface WoodSource {
   lastHarvestedAt?: number;
   /** Time in milliseconds until tree fully regrows (5 days) */
   regrowthTime: number;
+  /** Current fruit stage (0: none, 1: budding, 2: small, 3: ripe) */
+  fruitStage?: number;
+  /** Number of fruits currently on tree */
+  fruitCount?: number;
+  /** Type of fruit ('apple', 'orange', etc.) */
+  fruitType?: string;
 }
 
 // ============================================================================
@@ -590,6 +592,8 @@ export interface GameWorld {
   tilledLand: Vector2D[];
   /** Map expansions (future feature) */
   expansions: GameExpansion[];
+  /** Grass growth levels (0.0-1.0) indexed by "x,y" */
+  grassGrowth: Record<string, number>;
   /** Available land expansions for purchase */
   landExpansions: LandExpansion[];
   /** Total map dimensions in grid units */

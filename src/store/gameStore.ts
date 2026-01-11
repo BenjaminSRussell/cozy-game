@@ -501,6 +501,8 @@ interface GameStore {
    * @param dam - Dam building object with position and properties
    */
   buildDam: (dam: DamBuilding) => void;
+  // Natural Simulation
+  advanceNature: () => void;
 
   /**
    * Remove a dam building
@@ -871,6 +873,7 @@ const createInitialWorld = (playerName: string): GameWorld => {
     animals: [],
     tilledLand: [],
     expansions: [],
+    grassGrowth: {}, // Start with empty growth (clean slate)
     landExpansions: initialLandExpansions,
     mapSize: { x: 100, y: 100 }, // Grid units
     currentWeather: 'normal',
@@ -951,69 +954,81 @@ export const useGameStore = create<GameStore>()(
             // Update crop growth based on time advancement
             const updatedWorld = { ...state.world, dayTime: newDayTime };
 
-            if (daysAdvanced > 0) {
-              updatedWorld.totalDaysPlayed += daysAdvanced;
+            const newDaysPlayed = state.world.totalDaysPlayed + daysAdvanced;
+            if (newDaysPlayed > state.world.totalDaysPlayed) {
+              updatedWorld.totalDaysPlayed = newDaysPlayed;
 
-              // RUN AUTOMATION - Sprinklers water crops
-              const sprinklers = updatedWorld.buildings.filter(b => b.automationType?.startsWith('sprinkler'));
-              const wateredPlots = new Set<string>();
+              // NEW DAY LOGIC
+              get().advanceNature(); // Simulate nature growth
 
-              sprinklers.forEach(sprinkler => {
-                const range = sprinkler.automationType === 'sprinkler_basic' ? 1 :
-                  sprinkler.automationType === 'sprinkler_quality' ? 1 : 2;
-                const pattern = sprinkler.automationType === 'sprinkler_basic' ? 'cross' : 'square';
-
-                // Find plots in range
-                updatedWorld.farmPlots.forEach(plot => {
-                  const dx = Math.abs(plot.position.x - sprinkler.position.x);
-                  const dy = Math.abs(plot.position.y - sprinkler.position.y);
-
-                  let inRange = false;
-                  if (pattern === 'cross') {
-                    // Basic: only cardinal directions (N, S, E, W)
-                    inRange = (dx === 0 && dy <= range) || (dy === 0 && dx <= range);
-                  } else {
-                    // Quality/Iridium: all tiles in square
-                    inRange = dx <= range && dy <= range;
-                  }
-
-                  if (inRange && plot.crop) {
-                    wateredPlots.add(plot.id);
-                  }
-                });
-              });
-
-              updatedWorld.farmPlots = updatedWorld.farmPlots.map((plot) => {
-                if (!plot.crop) return plot;
-
-                const crop = plot.crop;
-                const healthDecay = 0.05;
-
-                // Fertilizer logic
-                const speedFactor = plot.fertilizerType === 'speed' ? 1.5 : 1.0;
-                const waterRetainFactor = plot.fertilizerType === 'water' ? 0.5 : 1.0;
-
-                // Apply sprinkler watering
-                const wasWatered = wateredPlots.has(plot.id);
-                const newWaterLevel = wasWatered ? 100 : Math.max(0, crop.waterLevel - (10 * daysAdvanced * waterRetainFactor));
-
-                return {
-                  ...plot,
-                  watered: wasWatered,
-                  crop: {
-                    ...crop,
-                    health: Math.max(0, crop.health - healthDecay * daysAdvanced),
-                    waterLevel: newWaterLevel,
-                    stage:
-                      crop.health < 30
-                        ? CropStage.DEAD
-                        : newWaterLevel < 20
-                          ? crop.stage
-                          : Math.min(CropStage.HARVESTABLE, crop.stage + (0.1 * daysAdvanced * speedFactor)) as any,
-                  },
-                };
-              });
+              // Reset animal products and hunger
+              if (updatedWorld.animals) {
+                updatedWorld.animals = updatedWorld.animals.map(a => ({
+                  ...a,
+                  hasProduct: false, // Reset product status for new day
+                  hunger: Math.max(0, a.hunger - 20) // Daily hunger decay
+                }));
+              }
             }
+            // RUN AUTOMATION - Sprinklers water crops
+            const sprinklers = updatedWorld.buildings.filter(b => b.automationType?.startsWith('sprinkler'));
+            const wateredPlots = new Set<string>();
+
+            sprinklers.forEach(sprinkler => {
+              const range = sprinkler.automationType === 'sprinkler_basic' ? 1 :
+                sprinkler.automationType === 'sprinkler_quality' ? 1 : 2;
+              const pattern = sprinkler.automationType === 'sprinkler_basic' ? 'cross' : 'square';
+
+              // Find plots in range
+              updatedWorld.farmPlots.forEach(plot => {
+                const dx = Math.abs(plot.position.x - sprinkler.position.x);
+                const dy = Math.abs(plot.position.y - sprinkler.position.y);
+
+                let inRange = false;
+                if (pattern === 'cross') {
+                  // Basic: only cardinal directions (N, S, E, W)
+                  inRange = (dx === 0 && dy <= range) || (dy === 0 && dx <= range);
+                } else {
+                  // Quality/Iridium: all tiles in square
+                  inRange = dx <= range && dy <= range;
+                }
+
+                if (inRange && plot.crop) {
+                  wateredPlots.add(plot.id);
+                }
+              });
+            });
+
+            updatedWorld.farmPlots = updatedWorld.farmPlots.map((plot) => {
+              if (!plot.crop) return plot;
+
+              const crop = plot.crop;
+              const healthDecay = 0.05;
+
+              // Fertilizer logic
+              const speedFactor = plot.fertilizerType === 'speed' ? 1.5 : 1.0;
+              const waterRetainFactor = plot.fertilizerType === 'water' ? 0.5 : 1.0;
+
+              // Apply sprinkler watering
+              const wasWatered = wateredPlots.has(plot.id);
+              const newWaterLevel = wasWatered ? 100 : Math.max(0, crop.waterLevel - (10 * daysAdvanced * waterRetainFactor));
+
+              return {
+                ...plot,
+                watered: wasWatered,
+                crop: {
+                  ...crop,
+                  health: Math.max(0, crop.health - healthDecay * daysAdvanced),
+                  waterLevel: newWaterLevel,
+                  stage:
+                    crop.health < 30
+                      ? CropStage.DEAD
+                      : newWaterLevel < 20
+                        ? crop.stage
+                        : Math.min(CropStage.HARVESTABLE, crop.stage + (0.1 * daysAdvanced * speedFactor)) as any,
+                },
+              };
+            });
 
             // Update machine processing
             if (updatedWorld.buildings) {
@@ -1802,11 +1817,88 @@ export const useGameStore = create<GameStore>()(
             return {
               world: {
                 ...state.world,
-                damBuildings: [...state.world.damBuildings, newDam],
-              },
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins - 5000 // Dam cost
+                },
+                buildings: [...state.world.buildings, newDam]
+              }
             };
           });
         },
+
+        // ========================================================================
+        // NATURE SIMULATION
+        // ========================================================================
+
+        advanceNature: () => {
+          set((state) => {
+            if (!state.world) return state;
+            const world = state.world; // Local ref for type narrowing
+
+            // 1. GRASS GROWTH & SPREADING
+            const newGrassGrowth = { ...world.grassGrowth };
+            const growthChance = 0.1;
+
+            Object.entries(world.grassGrowth).forEach(([key, level]) => {
+              if (level > 0.5 && Math.random() < growthChance) {
+                const [x, y] = key.split(',').map(Number);
+                const neighbors = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+                neighbors.forEach(([nx, ny]) => {
+                  const nKey = `${nx},${ny}`;
+                  if (!newGrassGrowth[nKey]) {
+                    if (nx >= 0 && nx < world.mapSize.x && ny >= 0 && ny < world.mapSize.y) {
+                      newGrassGrowth[nKey] = 0.1;
+                    }
+                  }
+                });
+              }
+              if (newGrassGrowth[key] < 1.0) {
+                newGrassGrowth[key] = Math.min(1.0, newGrassGrowth[key] + 0.1);
+              }
+            });
+
+            // Random growth
+            for (let i = 0; i < 5; i++) {
+              const rx = Math.floor(Math.random() * world.mapSize.x);
+              const ry = Math.floor(Math.random() * world.mapSize.y);
+              const rKey = `${rx},${ry}`;
+              if (!newGrassGrowth[rKey]) newGrassGrowth[rKey] = 0.2;
+            }
+
+            // 2. TREE & FRUIT GROWTH
+            const updatedWoodSources = world.woodSources.map(tree => {
+              if (tree.health <= 0) return tree;
+
+              let newFruitStage = tree.fruitStage || 0;
+              let newFruitCount = tree.fruitCount || 0;
+
+              if (Math.random() < 0.3) {
+                if (newFruitStage < 3) {
+                  newFruitStage++;
+                } else {
+                  newFruitCount = Math.min(5, newFruitCount + 1);
+                }
+              }
+
+              return {
+                ...tree,
+                fruitStage: newFruitStage,
+                fruitCount: newFruitCount,
+                fruitType: 'apple'
+              };
+            });
+
+            return {
+              world: {
+                ...world,
+                grassGrowth: newGrassGrowth,
+                woodSources: updatedWoodSources
+              }
+            };
+          });
+        },
+
 
         removeDam: (damId: string) => {
           set((state) => {
