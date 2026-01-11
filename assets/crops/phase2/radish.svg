@@ -1,6 +1,20 @@
-<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-  <!-- Phase 2: Sprout -->
-  <rect x="15" y="20" width="2" height="4" fill="#90EE90"/>
-  <ellipse cx="16" cy="20" rx="2" ry="1" fill="#7CFC00"/>
-  <circle cx="16" cy="24" r="1" fill="#8B0000"/>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  
+  <defs>
+    <radialGradient id="grad_radish" cx="35%" cy="30%" r="60%" fx="30%" fy="25%">
+      <stop offset="0%" stop-color="#FF4081" />
+      <stop offset="100%" stop-color="#C2185B" />
+    </radialGradient>
+    <filter id="shadow_radish" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+    <g filter="url(#shadow_radish)">
+      <path d="M32 30 L32 48" stroke="#2ECC71" stroke-width="3" stroke-linecap="round" />
+      <path d="M32 30 Q24 20 18 24" fill="none" stroke="#27AE60" stroke-width="2.5" stroke-linecap="round" />
+      <ellipse cx="18" cy="24" rx="5" ry="3" fill="#2ECC71" stroke="#27AE60" stroke-width="1.5" />
+      <path d="M32 30 Q40 20 46 24" fill="none" stroke="#27AE60" stroke-width="2.5" stroke-linecap="round" />
+      <ellipse cx="46" cy="24" rx="5" ry="3" fill="#2ECC71" stroke="#27AE60" stroke-width="1.5" />
+    </g>
 </svg>

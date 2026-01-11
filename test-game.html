@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cozy Game - Test</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #87CEEB; font-family: Arial; }
+        canvas { border: 2px solid #333; }
+        .info { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🌾 Cozy Haven - Test Version</h1>
+    <div class="info">Click on the grid to place crops and buildings!</div>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const cellSize = 20;
+        const gridWidth = 30;
+        const gridHeight = 20;
+        
+        let world = [];
+        let selectedTool = 'wheat';
+        
+        // Initialize world
+        for (let x = 0; x < gridWidth; x++) {
+            world[x] = [];
+            for (let y = 0; y < gridHeight; y++) {
+                world[x][y] = 'grass';
+            }
+        }
+        
+        // Add some initial items
+        world[5][5] = 'wheat';
+        world[10][10] = 'house';
+        world[15][8] = 'tree';
+        
+        function draw() {
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            for (let x = 0; x < gridWidth; x++) {
+                for (let y = 0; y < gridHeight; y++) {
+                    const px = x * cellSize;
+                    const py = y * cellSize;
+                    
+                    // Draw terrain
+                    switch(world[x][y]) {
+                        case 'grass':
+                            ctx.fillStyle = '#90EE90';
+                            break;
+                        case 'wheat':
+                            ctx.fillStyle = '#DAA520';
+                            break;
+                        case 'house':
+                            ctx.fillStyle = '#8B4513';
+                            break;
+                        case 'tree':
+                            ctx.fillStyle = '#228B22';
+                            break;
+                        default:
+                            ctx.fillStyle = '#90EE90';
+                    }
+                    
+                    ctx.fillRect(px, py, cellSize, cellSize);
+                    
+                    // Draw details
+                    if (world[x][y] === 'house') {
+                        ctx.fillStyle = '#654321';
+                        ctx.beginPath();
+                        ctx.moveTo(px, py);
+                        ctx.lineTo(px + cellSize/2, py - 5);
+                        ctx.lineTo(px + cellSize, py);
+                        ctx.fill();
+                    }
+                    
+                    if (world[x][y] === 'tree') {
+                        ctx.fillStyle = '#8B4513';
+                        ctx.fillRect(px + 8, py + 10, 4, 8);
+                        ctx.fillStyle = '#228B22';
+                        ctx.beginPath();
+                        ctx.arc(px + 10, py + 8, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    
+                    // Grid lines
+                    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                    ctx.strokeRect(px, py, cellSize, cellSize);
+                }
+            }
+        }
+        
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / cellSize);
+            const y = Math.floor((e.clientY - rect.top) / cellSize);
+            
+            if (x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) {
+                world[x][y] = selectedTool;
+                draw();
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'w': selectedTool = 'wheat'; break;
+                case 'h': selectedTool = 'house'; break;
+                case 't': selectedTool = 'tree'; break;
+                case 'g': selectedTool = 'grass'; break;
+            }
+            console.log('Selected:', selectedTool);
+        });
+        
+        // Initial draw
+        draw();
+        console.log('Cozy Game loaded successfully!');
+    </script>
+</body>
+</html>

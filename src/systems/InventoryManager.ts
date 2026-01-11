@@ -113,7 +113,7 @@ export class InventoryManager {
 
     // Try to stack with existing items first
     const remainingQuantity = this.stackItem(inventory, item, quantity);
-    
+
     // If still have items, add to empty slots
     if (remainingQuantity > 0) {
       const success = this.addToEmptySlot(inventory, item, remainingQuantity);
@@ -135,7 +135,7 @@ export class InventoryManager {
 
     for (const slot of inventory.slots) {
       if (remainingQuantity <= 0) break;
-      
+
       if (slot.item && slot.item.id === item.id && !slot.locked) {
         const canAdd = Math.min(remainingQuantity, slot.maxStack - slot.quantity);
         slot.quantity += canAdd;
@@ -186,9 +186,9 @@ export class InventoryManager {
     }
 
     const success = remainingQuantity === 0;
-    this.recordTransaction('remove', itemId, quantity, undefined, undefined, success, 
+    this.recordTransaction('remove', itemId, quantity, undefined, undefined, success,
       success ? undefined : 'Insufficient items');
-    
+
     return success;
   }
 
@@ -214,7 +214,7 @@ export class InventoryManager {
       fromSlot.quantity = 0;
     }
     // If target slot has same item, stack
-    else if (toSlot.item.id === fromSlot.item.id) {
+    else if (fromSlot.item && toSlot.item && toSlot.item.id === fromSlot.item.id) {
       const canStack = Math.min(fromSlot.quantity, toSlot.maxStack - toSlot.quantity);
       toSlot.quantity += canStack;
       fromSlot.quantity -= canStack;
@@ -227,10 +227,10 @@ export class InventoryManager {
     else {
       const tempItem = toSlot.item;
       const tempQuantity = toSlot.quantity;
-      
+
       toSlot.item = fromSlot.item;
       toSlot.quantity = fromSlot.quantity;
-      
+
       fromSlot.item = tempItem;
       fromSlot.quantity = tempQuantity;
     }
@@ -343,7 +343,7 @@ export class InventoryManager {
 
     // Extract all items from slots
     const itemsWithSlots: Array<{ item: Item; quantity: number; slotIndex: number }> = [];
-    
+
     inventory.slots.forEach((slot, index) => {
       if (slot.item) {
         itemsWithSlots.push({
@@ -446,7 +446,7 @@ export class InventoryManager {
    */
   public getTransactionHistory(inventoryId?: string, limit: number = 50): InventoryTransaction[] {
     let transactions = [...this.transactions];
-    
+
     // Filter by inventory if specified
     if (inventoryId) {
       // This is a simplified filter - in a real implementation, we'd need to track

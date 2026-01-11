@@ -1,0 +1,14 @@
+<svg width="64" height="32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Paved Road - Dark gray isometric tile -->
+  <defs>
+    <linearGradient id="pavedGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#616161;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#424242;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Diamond shape -->
+  <polygon points="32,2 62,16 32,30 2,16" fill="url(#pavedGrad)" stroke="#212121" stroke-width="1"/>
+  <!-- Road markings -->
+  <line x1="32" y1="8" x2="32" y2="12" stroke="#FFEB3B" stroke-width="1.5" opacity="0.8"/>
+  <line x1="32" y1="20" x2="32" y2="24" stroke="#FFEB3B" stroke-width="1.5" opacity="0.8"/>
+</svg>

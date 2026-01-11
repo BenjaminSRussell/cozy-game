@@ -17,7 +17,7 @@ const MARKET_ITEMS: { [key: string]: { basePrice: number; demandMultiplier: numb
   pumpkin: { basePrice: 8, demandMultiplier: 0.7, icon: '🎃' },
   strawberries: { basePrice: 6, demandMultiplier: 1.5, icon: '🍓' },
   blueberries: { basePrice: 7, demandMultiplier: 1.6, icon: '🫐' },
-  
+
   // Ore - More valuable but still reasonable (5-20 bucks)
   copper: { basePrice: 5, demandMultiplier: 1.0, icon: '🟠' },
   iron: { basePrice: 8, demandMultiplier: 0.9, icon: '⚫' },
@@ -25,13 +25,13 @@ const MARKET_ITEMS: { [key: string]: { basePrice: number; demandMultiplier: numb
   gold: { basePrice: 18, demandMultiplier: 1.5, icon: '🟡' },
   diamond: { basePrice: 20, demandMultiplier: 2.0, icon: '💎' },
   coal: { basePrice: 3, demandMultiplier: 0.8, icon: '⚫' },
-  
+
   // Wood - Common materials (1-5 bucks)
   oak: { basePrice: 4, demandMultiplier: 0.8, icon: '🪵' },
   pine: { basePrice: 3, demandMultiplier: 0.9, icon: '🌲' },
   maple: { basePrice: 5, demandMultiplier: 1.1, icon: '🍁' },
   birch: { basePrice: 3, demandMultiplier: 0.9, icon: '🌳' },
-  
+
   // Special items - Premium prices (10-20 bucks)
   honey: { basePrice: 15, demandMultiplier: 1.4, icon: '🍯' },
   eggs: { basePrice: 8, demandMultiplier: 1.2, icon: '🥚' },
@@ -44,44 +44,32 @@ interface MarketplaceScreenProps {
   onClose: () => void;
 }
 
+import { EconomySystem } from '../systems/EconomySystem';
+
 export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, onClose }) => {
   const { world, addCoins, removeItem, getInventoryItem } = useGameStore();
   const [selectedTab, setSelectedTab] = useState<'crops' | 'ore' | 'wood' | 'all'>('all');
-  const [marketPrices, setMarketPrices] = useState(MARKET_ITEMS);
-  const [refreshTime, setRefreshTime] = useState(300); // 5 minutes until next price refresh
+  const [refreshTime, setRefreshTime] = useState(300);
+  const [updateTrigger, setUpdateTrigger] = useState(0); // To force re-render when economy changes
 
-  // Update market prices periodically
+  const economy = EconomySystem.getInstance();
+
+  // Update market prices periodically (simulation step)
   useEffect(() => {
     if (!visible) return;
 
     const interval = setInterval(() => {
-      updateMarketPrices();
-      setRefreshTime(300);
-    }, 30000); // Update every 30 seconds for demo (would be 5 minutes in production)
-
-    const countdownInterval = setInterval(() => {
-      setRefreshTime(prev => Math.max(0, prev - 1));
+      // visualization update only
+      setUpdateTrigger(prev => prev + 1);
     }, 1000);
 
-    return () => {
-      clearInterval(interval);
-      clearInterval(countdownInterval);
-    };
+    return () => clearInterval(interval);
   }, [visible]);
 
-  const updateMarketPrices = () => {
-    setMarketPrices(prev => {
-      const newPrices = { ...prev };
-      Object.keys(newPrices).forEach(item => {
-        // Random price fluctuation ±20%
-        const fluctuation = 0.8 + Math.random() * 0.4;
-        newPrices[item] = {
-          ...newPrices[item],
-          demandMultiplier: fluctuation
-        };
-      });
-      return newPrices;
-    });
+  // Temporary dev tool: button to advance day and force price updates
+  const debugAdvanceDay = () => {
+    economy.advanceDay(world?.season || 'spring');
+    setUpdateTrigger(prev => prev + 1);
   };
 
   const getSellableItems = () => {
@@ -101,15 +89,17 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
     // Add harvestable crops from farm plots
     world.farmPlots.forEach(plot => {
       if (plot.crop && plot.crop.stage === CropStage.HARVESTABLE) {
-        const marketItem = marketPrices[plot.crop.type];
+        const cropId = plot.crop.type.toLowerCase();
+        const currentPrice = economy.getPrice(cropId) || 10; // Fallback if not in registry
+
         items.push({
           id: `crop_${plot.id}`,
           name: plot.crop.type.charAt(0).toUpperCase() + plot.crop.type.slice(1),
           type: 'crop',
           quantity: 1,
-          basePrice: marketItem.basePrice,
-          currentPrice: Math.round(marketItem.basePrice * marketItem.demandMultiplier),
-          icon: marketItem.icon,
+          basePrice: 0, // Not used in display currently
+          currentPrice: currentPrice,
+          icon: '🌾', // TODO: Map icons from AssetManager or strict type
           quality: Math.round(plot.crop.health)
         });
       }
@@ -118,17 +108,20 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
     // Add inventory items
     world.player.inventory.forEach(item => {
       if (item.type === ItemType.CROP || item.type === ItemType.ORE || item.type === ItemType.WOOD) {
-        const marketItem = MARKET_ITEMS[item.name.toLowerCase()];
-        if (marketItem) {
+        const itemId = item.name.toLowerCase();
+        const currentPrice = economy.getPrice(itemId);
+
+        // Only show items that have a market value
+        if (currentPrice > 0) {
           items.push({
             id: item.id,
             name: item.name,
             type: item.type.toLowerCase() as 'crop' | 'ore' | 'wood',
             quantity: item.quantity,
-            basePrice: marketItem.basePrice,
-            currentPrice: Math.round(marketItem.basePrice * marketItem.demandMultiplier),
-            icon: marketItem.icon,
-            quality: 100 // Default quality for inventory items
+            basePrice: 0,
+            currentPrice: currentPrice,
+            icon: '📦',
+            quality: 100
           });
         }
       }
@@ -147,7 +140,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
     if (!world) return;
 
     const totalPrice = item.currentPrice * item.quantity;
-    
+
     // Quality bonus
     let qualityBonus = 1;
     if (item.quality && item.quality > 80) {
@@ -180,11 +173,17 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
               removeItem(item.id, item.quantity);
             }
 
+            // Perform the sale within the economy to affect supply/prices
+            const saleValue = economy.sellItem(item.name.toLowerCase(), item.quantity);
+
             // Add coins
             addCoins(finalPrice);
-            
+
             // Show success message
             Alert.alert('Sold!', `Earned ${finalPrice} bucks from selling ${item.quantity}x ${item.name}`);
+
+            // Trigger visual update
+            setUpdateTrigger(prev => prev + 1);
           }
         }
       ]
@@ -202,7 +201,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
       let qualityBonus = 1;
       if (item.quality && item.quality > 80) qualityBonus = 1.2;
       else if (item.quality && item.quality > 60) qualityBonus = 1.1;
-      
+
       return sum + (item.currentPrice * item.quantity * qualityBonus);
     }, 0);
 
@@ -242,11 +241,13 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
   };
 
   const getPriceTrend = (item: any) => {
-    const basePrice = item.basePrice;
-    const currentPrice = item.currentPrice;
-    const trend = currentPrice > basePrice ? '📈' : currentPrice < basePrice ? '📉' : '➡️';
-    const percentChange = Math.round(((currentPrice - basePrice) / basePrice) * 100);
-    return { trend, percentChange };
+    const itemId = item.name.toLowerCase();
+    const trendDir = economy.getTrend(itemId);
+    const trend = trendDir === 'up' ? '📈' : trendDir === 'down' ? '📉' : '➡️';
+
+    // Calculate simulated percent change for display relative to base
+    // In a real app we'd fetch base from config
+    return { trend, percentChange: 0 };
   };
 
   if (!visible) return null;
@@ -316,7 +317,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
                       )}
                     </View>
                   </View>
-                  
+
                   <View style={styles.priceInfo}>
                     <View style={styles.priceRow}>
                       <Text style={styles.currentPrice}>{item.currentPrice} bucks</Text>
@@ -328,7 +329,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
                       Total: {item.currentPrice * item.quantity} bucks
                     </Text>
                   </View>
-                  
+
                   <TouchableOpacity
                     style={styles.sellButton}
                     onPress={() => sellItem(item)}
@@ -343,10 +344,10 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
 
         {/* Bottom Actions */}
         <View style={styles.bottomActions}>
-          <TouchableOpacity style={styles.refreshButton} onPress={updateMarketPrices}>
-            <Text style={styles.refreshButtonText}>🔄 Refresh Prices</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={debugAdvanceDay}>
+            <Text style={styles.refreshButtonText}>⏩ Next Day (Debug)</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.sellAllButton} onPress={sellAll}>
             <Text style={styles.sellAllButtonText}>💰 Sell All</Text>
           </TouchableOpacity>

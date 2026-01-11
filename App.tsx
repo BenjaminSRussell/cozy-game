@@ -4,6 +4,9 @@ import { useGameStore } from './src/store/gameStore';
 import { PersistenceManager } from './src/systems/PersistenceManager';
 import { AudioManager } from './src/systems/AudioManager';
 import { IsometricGameScreen } from './src/components/IsometricGameScreen';
+import { LoadingScreen } from './src/components/LoadingScreen';
+import { AssetLoader, LoadingProgress } from './src/rendering/AssetLoader';
+import { EconomySystem } from './src/systems/EconomySystem';
 
 /**
  * Application state interface tracking initialization and game status
@@ -11,6 +14,9 @@ import { IsometricGameScreen } from './src/components/IsometricGameScreen';
 interface GameAppState {
   /** Whether systems are currently loading (audio, persistence) */
   isLoading: boolean;
+  loadingProgress: number;
+  loadingStage: string;
+  loadingAsset: string;
   /** Whether a saved game exists on device */
   hasGame: boolean;
   /** Whether the player has started or loaded a game */
@@ -36,12 +42,16 @@ interface GameAppState {
 export default function App() {
   const [state, setState] = useState<GameAppState>({
     isLoading: true,
+    loadingProgress: 0,
+    loadingStage: 'Initializing...',
+    loadingAsset: '',
     hasGame: false,
     gameStarted: false,
   });
 
   const persistenceRef = useRef<PersistenceManager | null>(null);
   const audioRef = useRef<AudioManager | null>(null);
+  const assetLoaderRef = useRef<AssetLoader | null>(null);
   const gameStoreRef = useRef(useGameStore());
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -51,30 +61,89 @@ export default function App() {
   useEffect(() => {
     const initializeSystems = async () => {
       try {
+        // Stage 1: System Initialization
+        setState(prev => ({
+          ...prev,
+          loadingProgress: 10,
+          loadingStage: 'Initializing systems...',
+          loadingAsset: 'Audio Manager'
+        }));
+
         // Initialize audio manager
         const audio = new AudioManager();
         audioRef.current = audio;
-        // Start background music
-        audio.playMusic('farm_morning');
 
         // Initialize persistence manager
         const persistence = new PersistenceManager();
         await persistence.initialize();
         persistenceRef.current = persistence;
 
+        setState(prev => ({
+          ...prev,
+          loadingProgress: 20,
+          loadingStage: 'Initializing systems...',
+          loadingAsset: 'Asset Loader'
+        }));
+
+        // Stage 2: Asset Loading (20% -> 90%)
+        const assetLoader = new AssetLoader();
+        assetLoaderRef.current = assetLoader;
+
+        await assetLoader.preloadCriticalAssets((progress: LoadingProgress) => {
+          // Map asset loading progress (0-1) to app loading range (20-90)
+          const appProgress = 20 + (progress.progress * 70);
+
+          setState(prev => ({
+            ...prev,
+            loadingProgress: appProgress,
+            loadingStage: 'Loading Assets...',
+            loadingAsset: progress.currentAsset
+          }));
+        });
+
+        // Stage 3: Game Data Check (90% -> 100%)
+        setState(prev => ({
+          ...prev,
+          loadingProgress: 95,
+          loadingStage: 'Checking save data...',
+          loadingAsset: 'Save Files'
+        }));
+
+        // Start background music only after assets are loaded
+        audio.playMusic('farm_morning');
+
+        // Initialize economy system
+        setState(prev => ({ ...prev, loadingStage: 'Checking Game Data...', loadingProgress: 0.9 }));
+        const economy = EconomySystem.getInstance();
+        const savedEconomy = await persistence.loadEconomyState();
+        if (savedEconomy) {
+          economy.loadSaveData(savedEconomy);
+        } else {
+          // New game or no data? We could advance a few days to simulate a running market
+          // economy.advanceDay('spring'); 
+        }
+
         // Check for existing saves
         const saveSlots = await persistence.getSaveSlots();
         const hasExistingSave = saveSlots.length > 0;
 
-        setState({
-          isLoading: false,
-          hasGame: hasExistingSave,
-          gameStarted: false,
-        });
+        setState(prev => ({
+          ...prev,
+          loadingProgress: 100,
+          loadingStage: 'Ready!',
+          loadingAsset: 'Starting...',
+          hasGame: hasExistingSave
+        }));
+
+        // Delay slightly to let the 100% animation play
+        // The LoadingScreen component handles the fade out callback
       } catch (error) {
         console.error('Failed to initialize systems:', error);
         setState({
           isLoading: false,
+          loadingProgress: 0,
+          loadingStage: 'Error',
+          loadingAsset: 'Failed to load',
           hasGame: false,
           gameStarted: false,
         });
@@ -173,17 +242,17 @@ export default function App() {
     try {
       // Update store timestamp first
       await store.saveGame();
-      
+
       // Save to PersistenceManager
       await persistenceRef.current.saveWorld(store.world);
-      
+
       // Ensure save slot exists
       const existingSlots = await persistenceRef.current.getSaveSlots();
       const hasSlot = existingSlots.some(slot => slot.worldId === store.world!.id);
       if (!hasSlot) {
         await persistenceRef.current.createSaveSlot(store.world);
       }
-      
+
       alert('Game saved!');
     } catch (error) {
       console.error('Failed to save game:', error);
@@ -193,10 +262,12 @@ export default function App() {
 
   if (state.isLoading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#8B4513" />
-        <Text style={styles.loadingText}>Initializing Cozy Haven...</Text>
-      </View>
+      <LoadingScreen
+        progress={state.loadingProgress}
+        currentAsset={state.loadingAsset}
+        stage={state.loadingStage}
+        onLoadingComplete={() => setState(prev => ({ ...prev, isLoading: false }))}
+      />
     );
   }
 

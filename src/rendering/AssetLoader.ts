@@ -299,7 +299,7 @@ export class AssetLoader {
 
     // Start loading
     this.loadingQueue.add(assetId);
-    
+
     const loadPromise = this.performAssetLoad(assetId, onProgress);
     this.loadPromises.set(assetId, loadPromise);
 
@@ -322,7 +322,7 @@ export class AssetLoader {
     onProgress?: (progress: LoadingProgress) => void
   ): Promise<LoadedAsset> {
     const metadata = this.assetRegistry.get(assetId)!;
-    
+
     onProgress?.({
       totalAssets: 1,
       loadedAssets: 0,
@@ -388,10 +388,10 @@ export class AssetLoader {
   private async parseGLB(arrayBuffer: ArrayBuffer): Promise<any> {
     // Simplified GLB parsing
     // In production, use proper GLTF parser like three.js GLTFLoader
-    
+
     const view = new DataView(arrayBuffer);
     const magic = view.getUint32(0, true);
-    
+
     if (magic !== 0x46546C67) { // "glTF"
       throw new Error('Invalid GLB file');
     }
@@ -481,10 +481,10 @@ export class AssetLoader {
     for (const material of gltf.materials) {
       materials.push({
         name: material.name || 'unnamed',
-        diffuseColor: [material.pbrMetallicRoughness?.baseColorFactor?.[0] || 1, 
-                     material.pbrMetallicRoughness?.baseColorFactor?.[1] || 1, 
-                     material.pbrMetallicRoughness?.baseColorFactor?.[2] || 1, 
-                     material.pbrMetallicRoughness?.baseColorFactor?.[3] || 1],
+        diffuseColor: [material.pbrMetallicRoughness?.baseColorFactor?.[0] || 1,
+        material.pbrMetallicRoughness?.baseColorFactor?.[1] || 1,
+        material.pbrMetallicRoughness?.baseColorFactor?.[2] || 1,
+        material.pbrMetallicRoughness?.baseColorFactor?.[3] || 1],
         diffuseTexture: material.pbrMetallicRoughness?.baseColorTexture?.index?.toString(),
         normalTexture: material.normalTexture?.index?.toString(),
         roughness: material.pbrMetallicRoughness?.roughnessFactor || 1,
@@ -507,7 +507,7 @@ export class AssetLoader {
   private processGeometry(gltf: any, binaryChunk: Uint8Array): ArrayBuffer {
     // Simplified geometry processing
     // In production, use proper GLTF geometry processing
-    
+
     const positions = new Float32Array(gltf.accessors[0].count * 3);
     const normals = new Float32Array(gltf.accessors[1].count * 3);
     const uvs = new Float32Array(gltf.accessors[2].count * 2);
@@ -559,7 +559,7 @@ export class AssetLoader {
           keyframes.push({
             time: i / sampler.input, // Normalized time
             position: [0, 0, 0], // Extract from actual data
-            rotation: [0, 0, 0],
+            rotation: [0, 0, 0, 1],
             scale: [1, 1, 1],
             morphTargets: {}
           });
@@ -591,10 +591,10 @@ export class AssetLoader {
     for (let level = 0; level < metadata.lodLevels; level++) {
       const distance = this.lodSettings.distances[level];
       const polyCount = Math.floor(metadata.polyCount * Math.pow(0.5, level));
-      
+
       // Simplify geometry for LOD level
       const simplifiedGeometry = await this.simplifyGeometry(gltf.geometry, polyCount);
-      
+
       lodLevels.push({
         level,
         distance,
@@ -613,7 +613,7 @@ export class AssetLoader {
   private async simplifyGeometry(geometry: ArrayBuffer, targetPolyCount: number): Promise<ArrayBuffer> {
     // Simplified geometry simplification
     // In production, use proper mesh simplification library
-    
+
     // For now, return original geometry
     return geometry;
   }
@@ -624,7 +624,7 @@ export class AssetLoader {
   private calculateBoundingBox(gltf: any): BoundingBox {
     // Simplified bounding box calculation
     // In production, calculate from actual vertex positions
-    
+
     return {
       min: [-1, -1, -1],
       max: [1, 1, 1],
@@ -644,7 +644,7 @@ export class AssetLoader {
     for (const [assetId, asset] of assetsToUnload) {
       this.loadedAssets.delete(assetId);
       this.usedMemory -= asset.metadata.fileSize;
-      
+
       // Clean up textures
       if (asset.textures.diffuse) {
         asset.textures.diffuse.close();
@@ -729,7 +729,7 @@ export class AssetLoader {
       'ui_icon_set_complete'
     ];
 
-    const promises = criticalAssets.map(assetId => 
+    const promises = criticalAssets.map(assetId =>
       this.loadAsset(assetId, onProgress)
     );
 

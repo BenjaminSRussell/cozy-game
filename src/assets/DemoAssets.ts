@@ -10,10 +10,10 @@
 // ============================================================================
 
 export class DemoAssets {
-  
+
   // Generate simple SVG assets as data URLs (instant, no loading)
   static getAsset(type: string, name: string): string {
-    switch(type) {
+    switch (type) {
       case 'character':
         return this.getCharacterAsset(name);
       case 'item':
@@ -1031,18 +1031,28 @@ export class DemoAssets {
     `)}`;
   }
 
+  // ============================================================================
+  // BUILDING ASSETS (SVG data URLs - instant)
+  // ============================================================================
+
   static getBuildingAsset(name: string): string {
     const buildings: Record<string, string> = {
-      'house': this.createHouseBuilding(),
       'barn': this.createBarnBuilding(),
       'shed': this.createShedBuilding(),
-      'windmill': this.createWindmillBuilding(),
-      'greenhouse': this.createGreenhouseBuilding(),
-      'well': this.createWellBuilding(),
+      'house': this.createHouseBuilding(),
       'fence': this.createFenceBuilding(),
-      'tower': this.createTowerBuilding(),
-      'bridge': this.createBridgeBuilding(),
-      'market': this.createMarketBuilding(),
+      'cottage': this.createPlaceholderBuilding(),
+      'ranch_house': this.createPlaceholderBuilding(),
+      'forest_cabin': this.createPlaceholderBuilding(),
+      'victorian_house': this.createPlaceholderBuilding(),
+      'farmhouse': this.createPlaceholderBuilding(),
+      'lake_house': this.createPlaceholderBuilding(),
+      'mansion': this.createPlaceholderBuilding(),
+      'treehouse_estate': this.createPlaceholderBuilding(),
+      'beach_villa': this.createPlaceholderBuilding(),
+      'greenhouse_home': this.createPlaceholderBuilding(),
+      'windmill_residence': this.createPlaceholderBuilding(),
+      'wizard_tower': this.createPlaceholderBuilding(),
     };
     return buildings[name] || this.createPlaceholderBuilding();
   }
@@ -1283,11 +1293,103 @@ export class DemoAssets {
 
   static getDamAsset(name: string): string {
     const dams: Record<string, string> = {
-      'small_dam_sprite': this.createSmallDamSprite(),
+      'small_dam_sprite': this.createPlaceholderDam(),
       'medium_dam_sprite': this.createMediumDamSprite(),
       'large_dam_sprite': this.createLargeDamSprite(),
+    };
+    return dams[name] || this.createPlaceholderDam();
+  }
+
+  static getRoadAsset(name: string): string {
+    // Expected format: road_[grade]_[lanes]_mask[connections]
+    // Example: road_gravel_1_mask15
+    const parts = name.split('_');
+    if (parts.length >= 4) {
+      const grade = parts[1] as any;
+      const lanes = parseInt(parts[2]) as any;
+      const maskStr = parts[3].replace('mask', '');
+      const connections = parseInt(maskStr);
+      return this.createRoadAsset(grade, lanes, connections);
+    }
+    return this.createPlaceholderTile();
+  }
+
+  static createRoadAsset(grade: 'gravel' | 'paved', lanes: 1 | 2, connections: number): string {
+    const baseColor = grade === 'gravel' ? '#8D6E63' : '#333333';
+    const lineColor = '#FFD700'; // Yellow for double lane
+    const roadWidth = lanes === 1 ? 40 : 60;
+    const center = 64;
+
+    // Helper to draw a segment
+    const drawSegment = (targetX: number, targetY: number) => {
+      return `<line x1="${center}" y1="${center}" x2="${targetX}" y2="${targetY}" stroke="${baseColor}" stroke-width="${roadWidth}" stroke-linecap="butt" />`;
+    };
+
+    // Helper to draw lines
+    const drawLines = (targetX: number, targetY: number) => {
+      if (grade === 'paved' && lanes === 2) {
+        return `<line x1="${center}" y1="${center}" x2="${targetX}" y2="${targetY}" stroke="${lineColor}" stroke-width="2" stroke-dasharray="8,4" />`;
+      }
+      return '';
+    };
+
+    let segments = '';
+    let markings = '';
+
+    // Draw central hub
+    segments += `<circle cx="${center}" cy="${center}" r="${roadWidth / 2}" fill="${baseColor}" />`;
+
+    // Top (1)
+    if (connections & 1) {
+      segments += drawSegment(center, 0);
+      markings += drawLines(center, 0);
+    }
+    // Right (2)
+    if (connections & 2) {
+      segments += drawSegment(128, center);
+      markings += drawLines(128, center);
+    }
+    // Bottom (4)
+    if (connections & 4) {
+      segments += drawSegment(center, 128);
+      markings += drawLines(center, 128);
+    }
+    // Left (8)
+    if (connections & 8) {
+      segments += drawSegment(0, center);
+      markings += drawLines(0, center);
+    }
+
+    // Curved smoothing for corners
+    // If (1 & 2), (2 & 4), (4 & 8), or (8 & 1)
+    const corners = [
+      { mask: 3, cx: 128, cy: 0 },   // Top-Right
+      { mask: 6, cx: 128, cy: 128 }, // Right-Bottom
+      { mask: 12, cx: 0, cy: 128 },  // Bottom-Left
+      { mask: 9, cx: 0, cy: 0 }      // Left-Top
+    ];
+
+    let curves = '';
+    corners.forEach(c => {
+      if ((connections & c.mask) === c.mask) {
+        // Draw a filled arc/circle at inner corner?
+        // Actually, for isometric, it's better to just overlap the straight segments
+        // But the user specifically asked for "curved".
+        // Let's add a circle at the junction for better flow
+        curves += `<circle cx="${center}" cy="${center}" r="${roadWidth / 2}" fill="${baseColor}" />`;
+      }
+    });
+
+    return `data:image/svg+xml;base64,${btoa(`
+      <svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+        <rect width="128" height="128" fill="none" />
+        ${segments}
+        ${curves}
+        ${markings}
+      </svg>
     `)}`;
   }
+
 
   static createMediumDamSprite(): string {
     return `data:image/svg+xml;base64,${btoa(`
@@ -1446,7 +1548,7 @@ export class DemoAssets {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
 
-    switch(type) {
+    switch (type) {
       case 'character':
         this.drawCharacterCanvas(ctx, name, canvas);
         break;
@@ -1470,7 +1572,7 @@ export class DemoAssets {
     // Simple character drawing
     ctx.fillStyle = '#8B4513';
     ctx.fillRect(8, 20, 16, 20); // Body
-    
+
     ctx.fillStyle = '#FDBCB4';
     ctx.beginPath();
     ctx.arc(16, 12, 8, 0, Math.PI * 2); // Head
@@ -1488,7 +1590,7 @@ export class DemoAssets {
     // Simple item drawing
     ctx.fillStyle = '#8B4513';
     ctx.fillRect(2, 2, 12, 12);
-    
+
     ctx.fillStyle = '#654321';
     ctx.fillRect(4, 4, 8, 2);
     ctx.fillRect(4, 8, 8, 2);
@@ -1501,7 +1603,7 @@ export class DemoAssets {
     // Simple tile drawing
     ctx.fillStyle = '#90EE90';
     ctx.fillRect(0, 0, 16, 16);
-    
+
     ctx.fillStyle = '#7CB342';
     ctx.fillRect(2, 2, 2, 2);
     ctx.fillRect(8, 4, 2, 2);
@@ -1514,7 +1616,7 @@ export class DemoAssets {
 
     ctx.fillStyle = '#CCC';
     ctx.fillRect(0, 0, 16, 16);
-    
+
     ctx.fillStyle = '#666';
     ctx.font = '10px Arial';
     ctx.textAlign = 'center';
@@ -1729,7 +1831,7 @@ export class DemoAssets {
       'player_walk': this.getAsset('character', 'player_walk'),
       'npc_shopkeeper': this.getAsset('character', 'npc_shopkeeper'),
       'npc_villager': this.getAsset('character', 'npc_villager'),
-      
+
       // Items
       'wood': this.getAsset('item', 'wood'),
       'stone': this.getAsset('item', 'stone'),
@@ -1739,14 +1841,14 @@ export class DemoAssets {
       'corn': this.getAsset('item', 'corn'),
       'diamond': this.getAsset('item', 'diamond'),
       'gold': this.getAsset('item', 'gold'),
-      
+
       // Tiles
       'grass': this.getAsset('tile', 'grass'),
       'dirt': this.getAsset('tile', 'dirt'),
       'stone_tile': this.getAsset('tile', 'stone'),
       'water': this.getAsset('tile', 'water'),
       'path': this.getAsset('tile', 'path'),
-      
+
       // Tools
       'hoe': this.getAsset('tool', 'hoe'),
       'watering_can': this.getAsset('tool', 'watering_can'),
@@ -1757,7 +1859,7 @@ export class DemoAssets {
       'lawn_mower_basic': this.getAsset('tool', 'lawn_mower_basic'),
       'lawn_mower_pro': this.getAsset('tool', 'lawn_mower_pro'),
       'lawn_mower_riding': this.getAsset('tool', 'lawn_mower_riding'),
-      
+
       // Crops (all growth stages)
       'wheat_seed': this.getAsset('crop', 'wheat_seed'),
       'wheat_sprout': this.getAsset('crop', 'wheat_sprout'),
@@ -1779,19 +1881,19 @@ export class DemoAssets {
       'potato_sprout': this.getAsset('crop', 'potato_sprout'),
       'potato_growing': this.getAsset('crop', 'potato_growing'),
       'potato_mature': this.getAsset('crop', 'potato_mature'),
-      
+
       // Weather
       'heat_wave': this.getAsset('weather', 'heat_wave'),
       'water_overlay': this.getAsset('weather', 'water_overlay'),
       'rain_effect': this.getAsset('weather', 'rain_effect'),
       'storm_cloud': this.getAsset('weather', 'storm_cloud'),
-      
+
       // Dams
       'small_dam_sprite': this.getAsset('dam', 'small_dam_sprite'),
       'medium_dam_sprite': this.getAsset('dam', 'medium_dam_sprite'),
       'large_dam_sprite': this.getAsset('dam', 'large_dam_sprite'),
       'protection_area': this.getAsset('dam', 'protection_area'),
-      
+
       // Mining
       'mining_cart': this.getAsset('mining', 'mining_cart'),
       'ore_iron': this.getAsset('mining', 'ore_iron'),
@@ -1801,7 +1903,7 @@ export class DemoAssets {
       'mine_entrance': this.getAsset('mining', 'mine_entrance'),
       'mine_tunnel': this.getAsset('mining', 'mine_tunnel'),
       'mining_lamp': this.getAsset('mining', 'mining_lamp'),
-      
+
       // UI
       'inventory_slot': this.getAsset('ui', 'inventory_slot'),
       'button_primary': this.getAsset('ui', 'button_primary'),
@@ -1824,5 +1926,54 @@ export class DemoAssets {
   static getBackgroundStyle(assetType: string, assetName: string): string {
     const dataUrl = this.getAsset(assetType, assetName);
     return `background-image: url('${dataUrl}'); background-size: cover;`;
+  }
+
+  // Home asset creation methods
+  static createCottage(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#8B4513"/><rect x="4" y="8" width="24" height="20" fill="#DEB887"/><polygon points="2,8 16,2 30,8" fill="#A52A2A"/><rect x="12" y="16" width="8" height="12" fill="#654321"/><rect x="6" y="12" width="6" height="6" fill="#87CEEB"/><rect x="20" y="12" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createRanchHouse(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#D2691E"/><rect x="4" y="10" width="24" height="18" fill="#F4A460"/><polygon points="2,10 16,4 30,10" fill="#8B4513"/><rect x="12" y="18" width="8" height="10" fill="#654321"/><rect x="6" y="14" width="6" height="6" fill="#87CEEB"/><rect x="20" y="14" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createForestCabin(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#654321"/><rect x="4" y="12" width="24" height="16" fill="#8B4513"/><polygon points="2,12 16,6 30,12" fill="#228B22"/><rect x="12" y="20" width="8" height="8" fill="#654321"/><rect x="6" y="16" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createVictorianHouse(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#4B0082"/><rect x="4" y="8" width="24" height="20" fill="#9370DB"/><polygon points="2,8 16,2 30,8" fill="#8B008B"/><rect x="12" y="16" width="8" height="12" fill="#654321"/><rect x="6" y="12" width="6" height="6" fill="#87CEEB"/><rect x="20" y="12" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createFarmhouse(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#CD853F"/><rect x="4" y="10" width="24" height="18" fill="#DEB887"/><polygon points="2,10 16,4 30,10" fill="#8B4513"/><rect x="12" y="18" width="8" height="10" fill="#654321"/><rect x="6" y="14" width="6" height="6" fill="#87CEEB"/><rect x="20" y="14" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createLakeHouse(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#4682B4"/><rect x="4" y="12" width="24" height="16" fill="#87CEEB"/><polygon points="2,12 16,6 30,12" fill="#1E90FF"/><rect x="12" y="20" width="8" height="8" fill="#654321"/><rect x="6" y="16" width="6" height="6" fill="#87CEEB"/><rect x="20" y="16" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createMansion(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#FFD700"/><rect x="4" y="6" width="24" height="22" fill="#FFA500"/><polygon points="2,6 16,0 30,6" fill="#B8860B"/><rect x="12" y="14" width="8" height="14" fill="#654321"/><rect x="6" y="10" width="6" height="6" fill="#87CEEB"/><rect x="20" y="10" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createTreehouseEstate(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#228B22"/><rect x="4" y="8" width="24" height="20" fill="#8FBC8F"/><polygon points="2,8 16,2 30,8" fill="#006400"/><rect x="12" y="16" width="8" height="12" fill="#654321"/><rect x="6" y="12" width="6" height="6" fill="#87CEEB"/><rect x="20" y="12" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createBeachVilla(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#FFA500"/><rect x="4" y="10" width="24" height="18" fill="#FFE4B5"/><polygon points="2,10 16,4 30,10" fill="#FF8C00"/><rect x="12" y="18" width="8" height="10" fill="#654321"/><rect x="6" y="14" width="6" height="6" fill="#87CEEB"/><rect x="20" y="14" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createGreenhouseHome(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#90EE90"/><rect x="4" y="8" width="24" height="20" fill="#98FB98"/><polygon points="2,8 16,2 30,8" fill="#228B22"/><rect x="12" y="16" width="8" height="12" fill="#654321"/><rect x="6" y="12" width="6" height="6" fill="#87CEEB"/><rect x="20" y="12" width="6" height="6" fill="#87CEEB"/></svg>')}`;
+  }
+
+  static createWindmillResidence(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#F0E68C"/><rect x="4" y="10" width="24" height="18" fill="#FFDEAD"/><polygon points="2,10 16,4 30,10" fill="#DAA520"/><rect x="12" y="18" width="8" height="10" fill="#654321"/><rect x="6" y="14" width="6" height="6" fill="#87CEEB"/><rect x="20" y="14" width="6" height="6" fill="#87CEEB"/><circle cx="16" cy="8" r="6" fill="none" stroke="#8B4513" stroke-width="1"/></svg>')}`;
+  }
+
+  static createWizardTower(): string {
+    return `data:image/svg+xml;base64,${btoa('<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#4B0082"/><polygon points="8,32 8,4 16,0 24,4 24,32" fill="#663399"/><rect x="12" y="12" width="8" height="8" fill="#87CEEB"/><circle cx="16" cy="8" r="3" fill="#FFD700"/><polygon points="16,0 14,6 18,6" fill="#FF0000"/></svg>')}`;
   }
 }

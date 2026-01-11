@@ -1,0 +1,62 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Cap Radial Gradient -->
+    <radialGradient id="capGrad" cx="35%" cy="30%" r="60%" fx="30%" fy="25%">
+      <stop offset="0%" stop-color="#E74C3C" />   <!-- Soft red cap -->
+      <stop offset="100%" stop-color="#922B21" /> <!-- Deep red cap -->
+    </radialGradient>
+
+    <!-- Stem Radial Gradient -->
+    <radialGradient id="stemGrad" cx="40%" cy="30%" r="60%" fx="35%" fy="25%">
+      <stop offset="0%" stop-color="#FAD7A0" />   <!-- Soft cream stem -->
+      <stop offset="100%" stop-color="#D68910" /> <!-- Golden brown base -->
+    </radialGradient>
+
+    <!-- Base Occlusion / Shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#4D1D09" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Rim Light / Shadow Group -->
+  <g filter="url(#shadow)">
+    <!-- Stem (Rounded/Sturdy) -->
+    <path d="M32 58 C26 58 22 52 22 40 C22 35 24 30 32 30 C40 30 42 35 42 40 C42 52 38 58 32 58 Z" 
+          fill="url(#stemGrad)" 
+          stroke="#935116" 
+          stroke-width="2.5" 
+          stroke-linejoin="round" 
+          stroke-linecap="round" />
+
+    <!-- Cap (Puffy/Rounded) -->
+    <path d="M32 42 C12 42 4 32 4 20 C4 8 16 4 32 4 C48 4 60 8 60 20 C60 32 52 42 32 42 Z" 
+          fill="url(#capGrad)" 
+          stroke="#7B241C" 
+          stroke-width="2.5" 
+          stroke-linejoin="round" 
+          stroke-linecap="round" />
+
+    <!-- Spots (Rounded/Irregular) -->
+    <g fill="white" fill-opacity="0.3">
+      <circle cx="20" cy="15" r="4" />
+      <circle cx="44" cy="15" r="5" />
+      <circle cx="32" cy="25" r="3" />
+      <circle cx="12" cy="24" r="2" />
+      <circle cx="52" cy="24" r="2" />
+    </g>
+  </g>
+
+  <!-- Kindchenschema Face (On the stem) -->
+  <g fill="#2D1B00">
+    <circle cx="28" cy="40" r="1.8" /> <!-- Left Eye -->
+    <circle cx="36" cy="40" r="1.8" /> <!-- Right Eye -->
+    <path d="M30 45 Q32 47 34 45" 
+          fill="none" 
+          stroke="#2D1B00" 
+          stroke-width="1.2" 
+          stroke-linecap="round" />
+  </g>
+
+  <!-- Surface Highlight -->
+  <ellipse cx="24" cy="12" rx="6" ry="3" fill="white" fill-opacity="0.3" transform="rotate(-20 24 12)" />
+</svg>

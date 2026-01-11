@@ -1,0 +1,95 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- PREMIUM ISOMETRIC TRUCK | 2:1 Projection -->
+  <defs>
+    <!-- Deep Blue Metallic Body -->
+    <linearGradient id="truckBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2979FF"/>
+      <stop offset="50%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#0D47A1"/>
+    </linearGradient>
+
+    <!-- Wood Texture for Bed -->
+    <linearGradient id="woodBed" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8D6E63"/>
+      <stop offset="20%" stop-color="#795548"/>
+      <stop offset="40%" stop-color="#8D6E63"/>
+      <stop offset="60%" stop-color="#6D4C41"/>
+      <stop offset="100%" stop-color="#8D6E63"/>
+    </linearGradient>
+
+    <!-- Glass Reflection -->
+    <linearGradient id="truckGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E1F5FE" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#0277BD" stop-opacity="0.6"/>
+    </linearGradient>
+
+    <filter id="truckShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+      <feOffset dx="0" dy="10" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.5"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(128, 160)">
+    
+    <!-- Shadow -->
+    <path d="M-80,20 L0,60 L80,20 L0,-20 Z" fill="#000000" opacity="0.3" filter="url(#truckShadow)" transform="translate(0, 5) scale(1, 0.6)"/>
+
+    <!-- === CARGO BED === -->
+    <g transform="translate(20, -10)">
+       <!-- Bed Floor (Wood) -->
+       <path d="M-40,-20 L20,10 L60,-10 L0,-40 Z" fill="url(#woodBed)"/>
+       
+       <!-- Side Walls Exterior -->
+       <path d="M-40,-20 L20,10 L20,25 L-40,-5 Z" fill="#5D4037"/> <!-- Left Side -->
+       <path d="M20,10 L60,-10 L60,5 L20,25 Z" fill="#4E342E"/> <!-- Right Side -->
+       
+       <!-- Tailgate -->
+       <path d="M60,-10 L60,5 L58,4 L58,-11 Z" fill="#3E2723"/>
+
+       <!-- Wheel Arch Cutout Covers (Fenders) -->
+       <path d="M-10,15 Q20,30 50,15" stroke="#3E2723" stroke-width="2" fill="none"/>
+    </g>
+
+    <!-- === CABIN === -->
+    <g transform="translate(-50, -20)">
+       <!-- Main Block -->
+       <path d="M-30,-15 L10,5 L10,40 L-30,20 Z" fill="url(#truckBlue)"/> <!-- Side (Door) -->
+       <path d="M10,5 L50,-15 L50,20 L10,40 Z" fill="#1565C0"/> <!-- Front -->
+       <path d="M-30,-15 L10,5 L50,-15 L10,-35 Z" fill="#64B5F6"/> <!-- Roof -->
+       
+       <!-- Windshield -->
+       <path d="M15,0 L45,-15 L45,5 L15,20 Z" fill="url(#truckGlass)" transform="scale(0.8) translate(15, 10)"/>
+
+       <!-- Side Window -->
+       <path d="M-20,-5 L5,8 L5,25 L-20,12 Z" fill="url(#truckGlass)" opacity="0.8" transform="scale(0.8) translate(-5, 5)"/>
+       
+       <!-- Bumper -->
+       <path d="M10,40 L50,20 L50,28 L10,48 Z" fill="#CFD8DC"/>
+       
+       <!-- Headlights -->
+       <ellipse cx="40" cy="25" rx="3" ry="5" fill="#FFFF00" filter="blur(1px)"/>
+    </g>
+
+    <!-- === WHEELS === -->
+    <g transform="translate(-40, 30)"> <!-- Front Left -->
+       <ellipse cx="0" cy="0" rx="10" ry="16" fill="#111" transform="rotate(-15)"/>
+       <ellipse cx="0" cy="0" rx="4" ry="6" fill="#CFD8DC" transform="rotate(-15)"/>
+    </g>
+    
+    <g transform="translate(30, 20)"> <!-- Rear Left -->
+       <ellipse cx="0" cy="0" rx="12" ry="18" fill="#111" transform="rotate(-15)"/>
+       <ellipse cx="0" cy="0" rx="5" ry="7" fill="#CFD8DC" transform="rotate(-15)"/>
+    </g>
+     <g transform="translate(70, 0)"> <!-- Rear Right (Visible under bed?) -->
+       <ellipse cx="0" cy="0" rx="12" ry="18" fill="#111" transform="rotate(-15)"/>
+    </g>
+
+  </g>
+</svg>

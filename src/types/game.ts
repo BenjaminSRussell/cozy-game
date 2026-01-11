@@ -126,6 +126,17 @@ export enum ItemType {
   DECORATION = 'decoration',
   /** Tools for farming, mining, etc. */
   TOOL = 'tool',
+  /** Products from animals (milk, eggs, wool) */
+  ANIMAL_PRODUCT = 'animal_product',
+}
+
+/**
+ * Animal products (milk, eggs, wool)
+ */
+export enum AnimalProductType {
+  EGG = 'egg',
+  MILK = 'milk',
+  WOOL = 'wool',
 }
 
 /**
@@ -148,6 +159,8 @@ export interface Item {
   spriteId: string;
   /** Item rarity affects value and availability */
   rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
+  /** Item quality (affects sell price and effect) */
+  quality?: 'normal' | 'silver' | 'gold' | 'iridium';
 }
 
 // ============================================================================
@@ -196,6 +209,10 @@ export interface Crop {
   waterLevel: number;
   /** Health 0-100 (decreases each day without water, increases with care) */
   health: number;
+  /** Quality determined by fertilizer and player luck (calculated at harvest) */
+  qualityPreference?: 'silver' | 'gold' | 'iridium';
+  /** Whether the parent plot has fertilizer applied */
+  fertilizerType?: 'speed' | 'quality' | 'water';
 }
 
 /**
@@ -210,12 +227,45 @@ export interface FarmPlot {
   position: Vector2D;
   /** Physical size of plot in grid units (usually 1x1) */
   size: Vector2D;
-  /** Currently growing crop (if any) */
-  crop?: Crop;
   /** Whether plot has been tilled (ready for planting) */
   tilled: boolean;
   /** Timestamp when plot was tilled */
   tilledAt?: number;
+  /** Type of fertilizer applied to this plot */
+  fertilizerType?: 'speed' | 'quality' | 'water';
+  /** Active crop growing in this plot */
+  crop?: Crop;
+}
+
+// ============================================================================
+// RANCHING SYSTEM - Livestock and animal products
+// ============================================================================
+
+/**
+ * Animal on the farm
+ * Animals produce products if fed and cared for
+ */
+export interface Animal {
+  /** Unique identifier for this animal instance */
+  id: string;
+  /** Animal species ('chicken', 'cow', 'sheep') */
+  type: 'chicken' | 'cow' | 'sheep';
+  /** Human-readable name */
+  name: string;
+  /** Reference to building (Coop/Barn) they belong to */
+  buildingId: string;
+  /** Hunger level (0-100, 100 = full) */
+  hunger: number;
+  /** Affection/Friendship level (0-1000) */
+  affection: number;
+  /** Timestamp when animal was last fed */
+  lastFedDay: number;
+  /** Whether the animal has a product ready to be collected */
+  hasProduct: boolean;
+  /** Target or current grid position */
+  position: Vector2D;
+  /** Facing direction */
+  rotation: number;
 }
 
 // ============================================================================
@@ -223,7 +273,7 @@ export interface FarmPlot {
 // ============================================================================
 
 /**
- * Building placed on the farm map
+ * Building placed on farm map
  * Buildings provide functionality, aesthetics, and progression
  * Can be customized with colors and textures
  */
@@ -244,6 +294,51 @@ export interface Building {
   spriteId: string;
   /** Optional customization data (colors, patterns, drawings) */
   customization?: FurnitureCustomization;
+  /** Automation type for buildings that perform automated tasks */
+  automationType?: 'sprinkler_basic' | 'sprinkler_quality' | 'sprinkler_iridium';
+  /** Range/radius for automation effects (in tiles) */
+  range?: number;
+  /** Machine processing state for artisans/factories */
+  machineState?: {
+    processingItemId?: string;
+    startTime?: number;
+    duration?: number;
+    outputItemId?: string;
+    isFinished?: boolean;
+  };
+}
+
+/**
+ * Home building with unique benefits and progression system
+ * Homes provide passive benefits and can be upgraded for enhanced effects
+ */
+export interface HomeBuilding extends Building {
+  /** Home type determines benefits and progression path */
+  homeType: HomeType;
+  /** Type of benefit this home provides */
+  benefitType: HomeBenefitType;
+  /** Numerical value of the benefit (percentage, coins per day, etc.) */
+  benefitValue: number;
+  /** Current upgrade level (1-3) */
+  upgradeLevel: number;
+  /** Maximum upgrade level for this home type */
+  maxUpgradeLevel: number;
+  /** Daily coins generated (for coin_gen homes) */
+  dailyCoinsGenerated?: number;
+  /** Timestamp when benefits were last claimed */
+  lastBenefitClaimed?: number;
+  /** Whether this home is currently occupied/active */
+  occupied: boolean;
+  /** Required player level to purchase this home */
+  requiredLevel: number;
+  /** Base cost in coins */
+  baseCost: number;
+  /** Upgrade costs for each level */
+  upgradeCosts: number[];
+  /** Description of home benefits */
+  description: string;
+  /** Tier classification: starter, mid-tier, premium, special */
+  tier: 'starter' | 'mid-tier' | 'premium' | 'special';
 }
 
 /**
@@ -315,10 +410,79 @@ export interface WoodSource {
 // ============================================================================
 
 /**
+ * Tool types available in the game
+ */
+export enum ToolType {
+  HOE = 'hoe',
+  AXE = 'axe',
+  PICKAXE = 'pickaxe',
+  WATERING_CAN = 'watering_can',
+  SCYTHE = 'scythe'
+}
+
+/**
+ * Tool material tiers affecting durability and efficiency
+ */
+export enum ToolTier {
+  WOOD = 'wood',
+  STONE = 'stone',
+  IRON = 'iron',
+  GOLD = 'gold',
+  DIAMOND = 'diamond'
+}
+
+/**
+ * Tool item extending base Item
+ */
+export interface Tool extends Item {
+  type: ItemType.TOOL;
+  toolType: ToolType;
+  tier: ToolTier;
+  /** Current durability (0-max) */
+  durability: number;
+  /** Maximum durability */
+  maxDurability: number;
+  /** Efficiency multiplier (1.0 = base) */
+  efficiency: number;
+}
+
+/**
+ * Recipe for crafting or upgrading items/tools
+ */
+export interface CraftingRecipe {
+  id: string;
+  name: string;
+  description: string;
+  inputs: Record<string, number>; // itemId -> quantity
+  output: {
+    type: 'item' | 'tool' | 'building';
+    id: string; // itemId or toolType or buildingType
+    toolTier?: ToolTier; // only if tool
+    quantity?: number; // only if item, default 1
+  };
+  type: 'craft' | 'repair' | 'upgrade';
+  cost: number; // coin cost
+  requiredLevel: number;
+}
+
+// ============================================================================
+// PLAYER PROGRESSION - Character stats and progression
+// ============================================================================
+
+/**
  * Player character state
  * Tracks player progress, inventory, skills, and achievements
  * Persisted with game save data
  */
+export type PlayerAction = 'idle' | 'walk' | 'hoe' | 'water' | 'axe' | 'pickaxe';
+
+export interface PlayerAnimationState {
+  action: PlayerAction;
+  frame: number;
+  direction: number; // 0: SE, 1: SW, 2: NW, 3: NE (Isometric directions)
+  isPlaying: boolean;
+}
+
 export interface PlayerState {
   /** Unique identifier for player */
   id: string;
@@ -332,6 +496,10 @@ export interface PlayerState {
   coins: number;
   /** Player's inventory (stacked items) */
   inventory: Item[];
+  /** Currently equipped tools */
+  tools: {
+    [key in ToolType]?: Tool;
+  };
   /** Set of unlocked features by featureId */
   unlocks: Set<string>;
   /** Specialization levels tracking skill progress */
@@ -345,6 +513,37 @@ export interface PlayerState {
     /** Total playtime in milliseconds */
     total_play_time: number;
   };
+  /** Current animation state */
+  animation: PlayerAnimationState;
+  /** Current world position */
+  position: Vector3D;
+  /** Target position for movement */
+  targetPosition?: Vector3D;
+  /** Facing direction (0-360 degrees or 0-3 iso index) */
+  rotation: number;
+  /** ID of the vehicle the player is currently mounting, if any */
+  mountedVehicleId?: string;
+}
+
+export type RoadGrade = 'gravel' | 'paved';
+
+export interface Road {
+  id: string;
+  type: 'dirt' | 'paved'; // Legacy, keeping for compatibility
+  grade: RoadGrade;
+  lanes: 1 | 2;
+  position: Vector2D;
+  /** Bitmask for connections: 1=Top, 2=Right, 4=Bottom, 8=Left */
+  connections: number;
+}
+
+export interface Vehicle {
+  id: string;
+  type: 'tractor' | 'truck';
+  position: Vector3D;
+  rotation: number;
+  speed: number;
+  mountedBy?: string; // Player ID
 }
 
 // ============================================================================
@@ -375,10 +574,18 @@ export interface GameWorld {
   farmPlots: FarmPlot[];
   /** All buildings and structures */
   buildings: Building[];
+  /** All home buildings with special benefits */
+  homeBuildings: HomeBuilding[];
+  /** All roads placed in the world */
+  roads: Road[];
+  /** All vehicles present in the world */
+  vehicles: Vehicle[];
   /** All ore deposits available for mining */
   oreDeposits: OreDeposit[];
   /** All trees available for harvesting */
   woodSources: WoodSource[];
+  /** All animals on the farm */
+  animals: Animal[];
   /** Grid locations that have been tilled */
   tilledLand: Vector2D[];
   /** Map expansions (future feature) */
@@ -387,9 +594,9 @@ export interface GameWorld {
   landExpansions: LandExpansion[];
   /** Total map dimensions in grid units */
   mapSize: Vector2D;
-  /** Current weather type affecting the farm */
+  /** Current weather type affecting farm */
   currentWeather: WeatherType;
-  /** Active weather events currently affecting the farm */
+  /** Active weather events currently affecting farm */
   activeWeatherEvents: WeatherEvent[];
   /** Dam buildings for flood protection */
   damBuildings: DamBuilding[];
@@ -494,11 +701,11 @@ export interface SpriteAsset {
   /** Human-readable asset name */
   name: string;
   /** Asset category (determines usage and rendering) */
-  category: 'crop' | 'building' | 'decoration' | 'npc' | 'tile' | 'ui';
+  category: 'crop' | 'building' | 'decoration' | 'npc' | 'tile' | 'ui' | 'vehicle' | 'item';
   /** Asset source (builtin emoji vs free/custom/AI) */
   source: 'builtin' | 'free' | 'custom' | 'ai_generated';
   /** Path to asset file or emoji reference */
-  path: string;
+  path: any;
   /** Number of animation frames (if animated) */
   animationFrames?: number;
   /** Whether asset has animation frames */
@@ -526,3 +733,62 @@ export interface AnimationData {
   /** Whether animation loops continuously */
   loop: boolean;
 }
+
+// ============================================================================
+// TILE SYSTEM TYPES - For tile-based 2.5D rendering
+// ============================================================================
+
+/**
+ * Tile types for the tile-based world system
+ * Each type has different properties and visual representations
+ */
+export type TileType = 'grass' | 'dirt' | 'water' | 'sand' | 'stone' | 'plowed';
+
+/**
+ * Building types for construction
+ * Each building type has different functionality and requirements
+ */
+export type BuildingType = 'house' | 'barn' | 'silo' | 'coop' | 'greenhouse' | 'shed' | 'windmill' |
+  'cottage' | 'ranch_house' | 'forest_cabin' | 'victorian_house' | 'farmhouse' | 'lake_house' |
+  'mansion' | 'treehouse_estate' | 'beach_villa' | 'greenhouse_home' | 'windmill_residence' | 'wizard_tower';
+
+/**
+ * Home types with unique benefits and progression
+ * Homes provide passive benefits and active abilities
+ */
+export type HomeType =
+  | 'cottage'           // Starter: Boosts crop growth speed by 10%
+  | 'ranch_house'       // Starter: Increases animal product value by 15%
+  | 'forest_cabin'      // Starter: Reduces tree regrowth time by 20%
+  | 'victorian_house'   // Mid-tier: Daily coin generation (50 coins/day)
+  | 'farmhouse'         // Mid-tier: Stores more crops, reduces spoilage
+  | 'lake_house'        // Mid-tier: Improves irrigation, reduces water needs
+  | 'mansion'           // Premium: Significant daily coin generation (200 coins/day)
+  | 'treehouse_estate'  // Premium: Boosts all nearby building efficiency
+  | 'beach_villa'       // Premium: Attracts tourists (special events)
+  | 'greenhouse_home'   // Special: Year-round growing regardless of season
+  | 'windmill_residence' // Special: Generates free energy for tools
+  | 'wizard_tower';     // Special: Magical crop bonuses and weather protection
+
+/**
+ * Home benefit types that determine what advantages a home provides
+ */
+export type HomeBenefitType =
+  | 'crop_boost'         // Increases crop growth speed
+  | 'coin_gen'          // Generates coins daily
+  | 'storage'           // Increases storage capacity
+  | 'weather_protection' // Protects from weather damage
+  | 'irrigation'        // Reduces water needs
+  | 'efficiency'        // Boosts nearby buildings
+  | 'animal_boost'      // Increases animal product value
+  | 'tree_boost'        // Reduces tree regrowth time
+  | 'tourism'          // Attracts special events/tourists
+  | 'season_override'   // Allows year-round growing
+  | 'energy_gen'        // Provides free tool energy
+  | 'magical_bonuses';  // Special magical benefits
+
+/**
+ * Crop types that can be planted and harvested
+ * Each crop has different growth times, values, and requirements
+ */
+export type CropType = 'wheat' | 'carrot' | 'tomato' | 'corn' | 'potato' | 'lettuce' | 'onion' | 'garlic' | 'peppers' | 'pumpkin' | 'strawberries' | 'blueberries';

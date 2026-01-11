@@ -1,5 +1,19 @@
-<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-  <!-- Phase 1: Seed -->
-  <circle cx="16" cy="24" r="2" fill="#8B4513"/>
-  <ellipse cx="16" cy="25" rx="1" ry="0.5" fill="#654321"/>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  
+  <defs>
+    <radialGradient id="grad_spinach" cx="35%" cy="30%" r="60%" fx="30%" fy="25%">
+      <stop offset="0%" stop-color="#58D68D" />
+      <stop offset="100%" stop-color="#145A32" />
+    </radialGradient>
+    <filter id="shadow_spinach" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+    <g filter="url(#shadow_spinach)">
+      <path d="M32 40 L32 48" stroke="#5D4037" stroke-width="2" stroke-linecap="round" />
+      <circle cx="32" cy="48" r="3" fill="#5D4037" /> <!-- Seed embedded -->
+      <path d="M32 40 Q28 32 24 34" fill="none" stroke="#2ECC71" stroke-width="2" stroke-linecap="round" />
+      <path d="M32 40 Q36 32 40 34" fill="none" stroke="#2ECC71" stroke-width="2" stroke-linecap="round" />
+    </g>
 </svg>

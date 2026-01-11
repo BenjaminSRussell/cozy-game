@@ -1,0 +1,69 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Cob Radial Highlight -->
+    <radialGradient id="cornGrad" cx="40%" cy="30%" r="60%" fx="35%" fy="25%">
+      <stop offset="0%" stop-color="#FFEB3B" />   <!-- Bright yellow -->
+      <stop offset="100%" stop-color="#FBC02D" /> <!-- Golden yellow -->
+    </radialGradient>
+
+    <!-- Husk Radial Highlight -->
+    <radialGradient id="huskGrad" cx="40%" cy="30%" r="60%" fx="35%" fy="25%">
+      <stop offset="0%" stop-color="#8BC34A" />   <!-- Soft green -->
+      <stop offset="100%" stop-color="#558B2F" /> <!-- Deep green -->
+    </radialGradient>
+
+    <!-- Base Occlusion / Shadow -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#2D4A1A" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Rim Light / Shadow Group -->
+  <g filter="url(#shadow)">
+    <!-- Silk / Top Strings -->
+    <path d="M30 10 Q32 4 34 10" fill="none" stroke="#FFF9C4" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Corn Cob (Rounded Rectangle) -->
+    <rect x="22" y="12" width="20" height="36" rx="10" 
+          fill="url(#cornGrad)" 
+          stroke="#F9A825" 
+          stroke-width="2" />
+
+    <!-- Kernels (Subtle grid of dots) -->
+    <g fill="#F9A825" opacity="0.4">
+      <circle cx="28" cy="20" r="1.5" /><circle cx="32" cy="20" r="1.5" /><circle cx="36" cy="20" r="1.5" />
+      <circle cx="28" cy="28" r="1.5" /><circle cx="32" cy="28" r="1.5" /><circle cx="36" cy="28" r="1.5" />
+      <circle cx="28" cy="36" r="1.5" /><circle cx="32" cy="36" r="1.5" /><circle cx="36" cy="36" r="1.5" />
+    </g>
+
+    <!-- Husk Left (Puffy) -->
+    <path d="M32 48 C20 48 16 35 16 25 C16 18 20 14 26 14 C26 14 28 30 32 48" 
+          fill="url(#huskGrad)" 
+          stroke="#33691E" 
+          stroke-width="2.5" 
+          stroke-linejoin="round" 
+          stroke-linecap="round" />
+
+    <!-- Husk Right (Puffy) -->
+    <path d="M32 48 C44 48 48 35 48 25 C48 18 44 14 38 14 C38 14 36 30 32 48" 
+          fill="url(#huskGrad)" 
+          stroke="#33691E" 
+          stroke-width="2.5" 
+          stroke-linejoin="round" 
+          stroke-linecap="round" />
+  </g>
+
+  <!-- Kindchenschema Face (On the Husk) -->
+  <g fill="#1B3310">
+    <circle cx="24" cy="28" r="1.8" /> <!-- Left Eye -->
+    <circle cx="40" cy="28" r="1.8" /> <!-- Right Eye -->
+    <path d="M30 34 Q32 37 34 34" 
+          fill="none" 
+          stroke="#1B3310" 
+          stroke-width="1.5" 
+          stroke-linecap="round" />
+  </g>
+
+  <!-- Surface Highlight -->
+  <ellipse cx="26" cy="20" rx="4" ry="1.5" fill="white" fill-opacity="0.3" transform="rotate(-15 26 20)" />
+</svg>

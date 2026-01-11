@@ -7,8 +7,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useGameStore } from '../store/gameStore';
-import { CropStage } from '../types/game';
+import { CropStage, ToolType } from '../types/game';
 import { IsometricRenderer } from '../rendering/IsometricRenderer';
+import { TextureManager } from '../rendering/TextureManager';
+import { AssetManager } from '../systems/AssetManager';
+import { CraftingMenu } from './CraftingMenu';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -17,14 +20,22 @@ interface IsometricGameScreenProps {
 }
 
 export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave }) => {
-  const { world, plantCrop, harvestCrop, waterCrop, createFarmPlot, addCoins, addExperience, placeBuilding, createOreDeposit, mineOre } = useGameStore();
+  const {
+    world, plantCrop, harvestCrop, waterCrop, createFarmPlot, addCoins, addExperience,
+    placeBuilding, createOreDeposit, mineOre,
+    buildRoad, upgradeRoad, spawnVehicle, mountVehicle, dismountVehicle, movePlayer, applyFertilizer
+  } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<IsometricRenderer | null>(null);
-  const [selectedAction, setSelectedAction] = useState<'plant' | 'water' | 'harvest' | 'build' | 'mine' | null>(null);
+  const [selectedAction, setSelectedAction] = useState<'plant' | 'water' | 'harvest' | 'build' | 'mine' | 'build_road' | 'spawn_vehicle' | 'fertilize' | null>(null);
   const [selectedCropType, setSelectedCropType] = useState<'wheat' | 'carrot' | 'tomato'>('wheat');
+  const [selectedFertilizerType, setSelectedFertilizerType] = useState<'speed' | 'quality' | 'water'>('speed');
   const [selectedBuildingType, setSelectedBuildingType] = useState<'barn' | 'shed' | 'house'>('barn');
+  const [selectedRoadType, setSelectedRoadType] = useState<'gravel' | 'paved'>('gravel');
+  const [selectedVehicleType, setSelectedVehicleType] = useState<'tractor' | 'truck'>('tractor');
   const [notification, setNotification] = useState('');
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
+  const [showCrafting, setShowCrafting] = useState(false);
 
   const CROP_TYPES = {
     wheat: { name: 'Wheat', emoji: '🌾', growthDays: 3, sellValue: 50, color: '#DAA520' },
@@ -38,12 +49,43 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     house: { name: 'House', emoji: '🏡', cost: 300, color: '#DEB887' },
   };
 
-  // Initialize isometric renderer
+  const FERTILIZER_TYPES = {
+    speed: { name: 'Speed-Grow', emoji: '⚡', description: '50% faster growth' },
+    quality: { name: 'Quality', emoji: '⭐', description: 'Better crops' },
+    water: { name: 'Retaining Soil', emoji: '💧', description: '50% less water' },
+  };
+
+  // Initialize isometric renderer and load assets
   useEffect(() => {
-    if (canvasRef.current && !rendererRef.current) {
-      const renderer = new IsometricRenderer(canvasRef.current);
-      rendererRef.current = renderer;
-    }
+    const initializeGame = async () => {
+      if (canvasRef.current && !rendererRef.current) {
+        // Initialize renderer
+        const renderer = new IsometricRenderer(canvasRef.current);
+        rendererRef.current = renderer;
+
+        // Initialize AssetManager to get all registered assets
+        const assetManager = new AssetManager();
+        const allAssets = assetManager.getAllAssets();
+
+        // Filter for assets we want to preload
+        const assetsToLoad = allAssets.filter(a =>
+          ['tile', 'building', 'crop', 'decoration', 'vehicle'].includes(a.category)
+        );
+
+        const tm = TextureManager.getInstance();
+
+        // Map to texture configs
+        const textureConfigs = assetsToLoad.map(a => ({
+          id: a.id,
+          path: a.path as string,
+        }));
+
+        await tm.preloadTextures(textureConfigs);
+        console.log(`Assets loaded! (${assetsToLoad.length} assets)`);
+      }
+    };
+
+    initializeGame();
   }, []);
 
   // Render game world
@@ -66,15 +108,48 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     if (!voxel) return;
 
     // Find if there's a farm plot at this position
-    const plot = world.farmPlots.find(p => 
+    const plot = world.farmPlots.find(p =>
       Math.floor(p.position.x) === voxel.x && Math.floor(p.position.y) === voxel.y
     );
+
+    // Find vehicle
+    const vehicle = world.vehicles.find(v =>
+      Math.floor(v.position.x) === voxel.x && Math.floor(v.position.y) === voxel.y
+    );
+
+    if (vehicle) {
+      if (world.player.mountedVehicleId === vehicle.id) {
+        dismountVehicle();
+        setNotification('🚶 Dismounted');
+      } else {
+        mountVehicle(vehicle.id);
+        setNotification(`🚜 Mounted ${vehicle.type}!`);
+      }
+      return;
+    }
 
     if (plot) {
       handlePlotInteraction(plot);
     } else {
       handleEmptyVoxel(voxel);
     }
+  };
+
+  // Check tool availability
+  const checkTool = (type: ToolType): boolean => {
+    if (!world) return false;
+    const tool = world.player.tools[type];
+    if (!tool) {
+      setNotification(`❌ No ${type} equipped!`);
+      setTimeout(() => setNotification(''), 2000);
+      return false;
+    }
+    if (tool.durability <= 0) {
+      setNotification(`❌ ${tool.name} is broken!`);
+      setTimeout(() => setNotification(''), 2000);
+      return false;
+    }
+    return true;
   };
 
   const handlePlotInteraction = (plot: any) => {
@@ -86,6 +161,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       setSelectedAction(null);
       setTimeout(() => setNotification(''), 2000);
     } else if (selectedAction === 'water' && plot.crop) {
+      if (!checkTool(ToolType.WATERING_CAN)) return;
       waterCrop(plot.id);
       setNotification('💧 Watered crop!');
       addExperience(5);
@@ -99,6 +175,29 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       setNotification(`🌾 Harvested ${plot.crop.type}! +${cropInfo.sellValue} coins!`);
       setSelectedAction(null);
       setTimeout(() => setNotification(''), 2000);
+    } else if (selectedAction === 'fertilize' && plot.tilled) {
+      if (plot.fertilizerType) {
+        setNotification('❌ Fertilizer already applied!');
+        setTimeout(() => setNotification(''), 2000);
+        return;
+      }
+
+      // Find fertilizer in inventory
+      const fertilizerItem = world?.player.inventory.find(i =>
+        i.name.toLowerCase().includes(selectedFertilizerType) ||
+        i.id.includes(selectedFertilizerType)
+      );
+
+      if (!fertilizerItem) {
+        setNotification(`❌ No ${selectedFertilizerType} fertilizer!`);
+        setTimeout(() => setNotification(''), 2000);
+        return;
+      }
+
+      applyFertilizer(plot.id, fertilizerItem.id);
+      setNotification(`🩹 Applied ${selectedFertilizerType} fertilizer!`);
+      setSelectedAction(null);
+      setTimeout(() => setNotification(''), 2000);
     } else if (plot.crop) {
       // Show crop info
       Alert.alert(
@@ -110,7 +209,33 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   };
 
   const handleEmptyVoxel = (voxel: { x: number; y: number }) => {
-    if (selectedAction === 'build') {
+    if (selectedAction === 'build_road' && world) {
+      const existingRoad = world.roads.find(r =>
+        Math.floor(r.position.x) === voxel.x && Math.floor(r.position.y) === voxel.y
+      );
+
+      if (existingRoad) {
+        upgradeRoad({ x: voxel.x, y: voxel.y });
+        setNotification('✨ Road Upgraded!');
+      } else {
+        buildRoad({ x: voxel.x, y: voxel.y }, selectedRoadType, 1);
+        setNotification(`🛣️ Built ${selectedRoadType} road!`);
+        addExperience(5);
+      }
+      setTimeout(() => setNotification(''), 2000);
+      // Don't clear selectedAction so user can build multiple roads
+    }
+    else if (selectedAction === 'spawn_vehicle') {
+      const cost = selectedVehicleType === 'tractor' ? 500 : 800;
+      if (world && world.player.coins >= cost) {
+        spawnVehicle(selectedVehicleType, { x: voxel.x, y: voxel.y, z: 0 });
+        addCoins(-cost);
+        setNotification(`🚜 Purchased ${selectedVehicleType}!`);
+        setSelectedAction(null);
+      } else {
+        setNotification(`❌ Need ${cost} coins!`);
+      }
+    } else if (selectedAction === 'build') {
       const buildingInfo = BUILDING_TYPES[selectedBuildingType];
       if (world && world.player.coins < buildingInfo.cost) {
         setNotification(`❌ Not enough coins! Need ${buildingInfo.cost}`);
@@ -139,10 +264,11 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       setNotification('🌍 Created ore deposit!');
       setSelectedAction(null);
       setTimeout(() => setNotification(''), 2000);
-    } else {
-      // Create new farm plot
+    } else if (selectedAction === 'plant') {
+      // Plant action on empty soil -> Till
+      if (!checkTool(ToolType.HOE)) return;
       createFarmPlot({ x: voxel.x, y: voxel.y });
-      setNotification('📍 Created new farm plot!');
+      setNotification('📍 Tilled soil!');
       setTimeout(() => setNotification(''), 2000);
     }
   };
@@ -153,6 +279,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       setTimeout(() => setNotification(''), 2000);
       return;
     }
+
+    if (!checkTool(ToolType.PICKAXE)) return;
 
     const deposit = world.oreDeposits[Math.floor(Math.random() * world.oreDeposits.length)];
     if (deposit) {
@@ -183,6 +311,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
   return (
     <View style={styles.gameContainer}>
+      {showCrafting && <CraftingMenu onClose={() => setShowCrafting(false)} />}
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>🌾 Cozy Haven</Text>
@@ -212,7 +341,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           }}
           onClick={handleCanvasClick}
         />
-        
+
         {/* Camera Controls */}
         <View style={styles.cameraControls}>
           <TouchableOpacity style={styles.cameraButton} onPress={() => moveCamera(0, -20)}>
@@ -232,7 +361,26 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         </View>
       </View>
 
-      {/* Action Buttons */}
+      {/* Action Buttons Row 1 */}
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={[styles.actionButton, selectedAction === 'build_road' && styles.actionButtonActive]}
+          onPress={() => setSelectedAction(selectedAction === 'build_road' ? null : 'build_road')}
+        >
+          <Text style={styles.actionEmoji}>🛣️</Text>
+          <Text style={styles.actionText}>Road</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, selectedAction === 'spawn_vehicle' && styles.actionButtonActive]}
+          onPress={() => setSelectedAction(selectedAction === 'spawn_vehicle' ? null : 'spawn_vehicle')}
+        >
+          <Text style={styles.actionEmoji}>🚜</Text>
+          <Text style={styles.actionText}>Vehicles</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Action Buttons Row 2 */}
       <View style={styles.actionButtons}>
         <TouchableOpacity
           style={[styles.actionButton, selectedAction === 'plant' && styles.actionButtonActive]}
@@ -240,6 +388,16 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         >
           <Text style={styles.actionEmoji}>🌱</Text>
           <Text style={styles.actionText}>Plant</Text>
+          {world && world.player.tools[ToolType.HOE] && (
+            <View style={styles.durabilityBar}>
+              <View
+                style={[
+                  styles.durabilityFill,
+                  { width: `${(world.player.tools[ToolType.HOE]!.durability / world.player.tools[ToolType.HOE]!.maxDurability) * 100}%` }
+                ]}
+              />
+            </View>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -248,6 +406,16 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         >
           <Text style={styles.actionEmoji}>💧</Text>
           <Text style={styles.actionText}>Water</Text>
+          {world && world.player.tools[ToolType.WATERING_CAN] && (
+            <View style={styles.durabilityBar}>
+              <View
+                style={[
+                  styles.durabilityFill,
+                  { width: `${(world.player.tools[ToolType.WATERING_CAN]!.durability / world.player.tools[ToolType.WATERING_CAN]!.maxDurability) * 100}%` }
+                ]}
+              />
+            </View>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -256,6 +424,15 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         >
           <Text style={styles.actionEmoji}>🌾</Text>
           <Text style={styles.actionText}>Harvest</Text>
+          {/* Scythe check if needed, but simple harvest often just hand */}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionButton, selectedAction === 'fertilize' && styles.actionButtonActive]}
+          onPress={() => setSelectedAction(selectedAction === 'fertilize' ? null : 'fertilize')}
+        >
+          <Text style={styles.actionEmoji}>🩹</Text>
+          <Text style={styles.actionText}>Fertilize</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -272,6 +449,16 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         >
           <Text style={styles.actionEmoji}>⛏️</Text>
           <Text style={styles.actionText}>Mine</Text>
+          {world && world.player.tools[ToolType.PICKAXE] && (
+            <View style={styles.durabilityBar}>
+              <View
+                style={[
+                  styles.durabilityFill,
+                  { width: `${(world.player.tools[ToolType.PICKAXE]!.durability / world.player.tools[ToolType.PICKAXE]!.maxDurability) * 100}%` }
+                ]}
+              />
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -294,6 +481,99 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
                 <Text style={styles.selectionDetails}>{cropInfo.growthDays}d • ${cropInfo.sellValue}</Text>
               </TouchableOpacity>
             ))}
+          </View>
+        </View>
+      )}
+
+      {selectedAction === 'fertilize' && (
+        <View style={styles.selectionPanel}>
+          <Text style={styles.selectionTitle}>Choose Fertilizer:</Text>
+          <View style={styles.selectionGrid}>
+            {(Object.entries(FERTILIZER_TYPES) as Array<[keyof typeof FERTILIZER_TYPES, typeof FERTILIZER_TYPES.speed]>).map(([fertType, fertInfo]) => {
+              const count = world?.player.inventory.filter(i =>
+                i.name.toLowerCase().includes(fertType) || i.id.includes(fertType)
+              ).reduce((sum, i) => sum + i.quantity, 0) || 0;
+
+              return (
+                <TouchableOpacity
+                  key={fertType}
+                  style={[
+                    styles.selectionOption,
+                    selectedFertilizerType === fertType && styles.selectionOptionSelected,
+                    count === 0 && styles.selectionOptionDisabled
+                  ]}
+                  onPress={() => setSelectedFertilizerType(fertType)}
+                >
+                  <Text style={styles.selectionEmoji}>{fertInfo.emoji}</Text>
+                  <Text style={styles.selectionName}>{fertInfo.name}</Text>
+                  <Text style={styles.selectionDetails}>{count > 0 ? `Have: ${count}` : 'Out of stock'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {selectedAction === 'build_road' && (
+        <View style={styles.selectionPanel}>
+          <Text style={styles.selectionTitle}>Choose Road Type:</Text>
+          <View style={styles.selectionGrid}>
+            <TouchableOpacity
+              style={[
+                styles.selectionOption,
+                selectedRoadType === 'gravel' && styles.selectionOptionSelected,
+              ]}
+              onPress={() => setSelectedRoadType('gravel')}
+            >
+              <Text style={styles.selectionEmoji}>🟤</Text>
+              <Text style={styles.selectionName}>Gravel Road</Text>
+              <Text style={styles.selectionDetails}>Cheap</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.selectionOption,
+                selectedRoadType === 'paved' && styles.selectionOptionSelected,
+              ]}
+              onPress={() => setSelectedRoadType('paved')}
+            >
+              <Text style={styles.selectionEmoji}>⬛</Text>
+              <Text style={styles.selectionName}>Paved Road</Text>
+              <Text style={styles.selectionDetails}>High Performance</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.selectionDetails, { textAlign: 'center', marginTop: 10, fontStyle: 'italic' }]}>
+            Tip: Click an existing road to upgrade it!
+          </Text>
+        </View>
+      )}
+
+      {selectedAction === 'spawn_vehicle' && (
+        <View style={styles.selectionPanel}>
+          <Text style={styles.selectionTitle}>Vehicle Shop (Click Map to Place):</Text>
+          <View style={styles.selectionGrid}>
+            <TouchableOpacity
+              style={[
+                styles.selectionOption,
+                selectedVehicleType === 'tractor' && styles.selectionOptionSelected
+              ]}
+              onPress={() => setSelectedVehicleType('tractor')}
+            >
+              <Text style={styles.selectionEmoji}>🚜</Text>
+              <Text style={styles.selectionName}>Tractor</Text>
+              <Text style={styles.selectionDetails}>$500</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.selectionOption,
+                selectedVehicleType === 'truck' && styles.selectionOptionSelected
+              ]}
+              onPress={() => setSelectedVehicleType('truck')}
+            >
+              <Text style={styles.selectionEmoji}>🚚</Text>
+              <Text style={styles.selectionName}>Truck</Text>
+              <Text style={styles.selectionDetails}>$800</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -325,6 +605,11 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         </View>
       )}
 
+      {/* Crafting Button */}
+      <TouchableOpacity style={[styles.saveButton, { backgroundColor: '#8FBC8F', marginBottom: 10 }]} onPress={() => setShowCrafting(true)}>
+        <Text style={styles.saveText}>🔨 Craft & Upgrade</Text>
+      </TouchableOpacity>
+
       {/* Save Button */}
       <TouchableOpacity style={styles.saveButton} onPress={onSave}>
         <Text style={styles.saveText}>💾 Save Game</Text>
@@ -338,7 +623,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         <Text style={styles.instructionText}>• Select actions then click to place/build</Text>
         <Text style={styles.instructionText}>• Watch your crops grow in beautiful 3D!</Text>
       </View>
-    </View>
+    </View >
   );
 };
 
@@ -559,6 +844,19 @@ const styles = StyleSheet.create({
     color: '#2C5F7C',
     marginBottom: 8,
   },
+  durabilityBar: {
+    width: '80%',
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 2,
+    marginTop: 4,
+  },
+  durabilityFill: {
+    height: '100%',
+    backgroundColor: '#00FF00', // Green
+    borderRadius: 2,
+  },
+
   instructionText: {
     fontSize: 13,
     color: '#5A9FD4',

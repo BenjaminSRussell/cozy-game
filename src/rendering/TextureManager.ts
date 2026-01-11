@@ -31,7 +31,7 @@ export class TextureManager {
   private svgCache: Map<string, string> = new Map();
   private defaultSize = { width: 128, height: 128 };
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): TextureManager {
     if (!TextureManager.instance) {
@@ -53,7 +53,7 @@ export class TextureManager {
    */
   public async loadTexture(config: TextureConfig): Promise<LoadedTexture> {
     const cacheKey = config.cacheKey || config.id;
-    
+
     // Return from cache if already loaded
     if (this.textureCache.has(cacheKey)) {
       return this.textureCache.get(cacheKey)!;
@@ -81,16 +81,33 @@ export class TextureManager {
     const startTime = performance.now();
 
     try {
+      const parts = config.path.split('#');
+      const filePath = parts[0];
+      const partId = parts[1];
+
       // Load SVG content
-      const svgContent = await this.fetchSVGContent(config.path);
-      
-      // Rasterize SVG to canvas
-      const { image, width, height } = await this.rasterizeSVG(
-        svgContent,
-        config.width || this.defaultSize.width,
-        config.height || this.defaultSize.height,
-        config.scale || 1
-      );
+      const svgContent = await this.fetchSVGContent(filePath);
+
+      let image, width, height;
+
+      if (partId) {
+        // Rasterize specific part
+        ({ image, width, height } = await this.rasterizeSVGPart(
+          svgContent,
+          partId,
+          config.width || this.defaultSize.width,
+          config.height || this.defaultSize.height,
+          config.scale || 1
+        ));
+      } else {
+        // Rasterize full SVG
+        ({ image, width, height } = await this.rasterizeSVG(
+          svgContent,
+          config.width || this.defaultSize.width,
+          config.height || this.defaultSize.height,
+          config.scale || 1
+        ));
+      }
 
       const texture: LoadedTexture = {
         id: config.id,
@@ -163,6 +180,56 @@ export class TextureManager {
     canvas.height = finalHeight;
     const ctx = canvas.getContext('2d')!;
 
+    return this.renderSVGToCanvas(svgContent, canvas, ctx, finalWidth, finalHeight);
+  }
+
+  private async rasterizeSVGPart(
+    svgContent: string,
+    partId: string,
+    targetWidth: number,
+    targetHeight: number,
+    scale: number
+  ): Promise<{ image: HTMLImageElement; width: number; height: number }> {
+    // Parse SVG to find the part
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgContent, 'image/svg+xml');
+
+    const partElement = doc.getElementById(partId);
+    if (!partElement) {
+      throw new Error(`SVG part #${partId} not found`);
+    }
+
+    // Extract defs to keep gradients/filters
+    let defsContent = '';
+    const defs = doc.querySelector('defs');
+    if (defs) {
+      defsContent = defs.outerHTML;
+    }
+
+    // Create new SVG wrapping the part
+    // We try to maintain the original viewBox if possible, or assume similar coordinate space
+    const originalSvg = doc.querySelector('svg');
+    const viewBox = originalSvg?.getAttribute('viewBox') || `0 0 ${targetWidth} ${targetHeight}`;
+    const widthAttr = originalSvg?.getAttribute('width') || targetWidth.toString();
+    const heightAttr = originalSvg?.getAttribute('height') || targetHeight.toString();
+
+    const newSvgContent = `
+      <svg width="${widthAttr}" height="${heightAttr}" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg">
+        ${defsContent}
+        ${partElement.outerHTML}
+      </svg>
+    `;
+
+    return this.rasterizeSVG(newSvgContent, targetWidth, targetHeight, scale);
+  }
+
+  private async renderSVGToCanvas(
+    svgContent: string,
+    canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number
+  ): Promise<{ image: HTMLImageElement; width: number; height: number }> {
     // Create blob from SVG content
     const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
     const svgUrl = URL.createObjectURL(svgBlob);
@@ -171,8 +238,9 @@ export class TextureManager {
       const img = new Image();
       img.onload = () => {
         // Draw SVG to canvas
-        ctx.drawImage(img, 0, 0, finalWidth, finalHeight);
-        
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
         // Clean up blob URL
         URL.revokeObjectURL(svgUrl);
 
@@ -181,8 +249,8 @@ export class TextureManager {
         rasterizedImg.onload = () => {
           resolve({
             image: rasterizedImg,
-            width: finalWidth,
-            height: finalHeight
+            width,
+            height
           });
         };
         rasterizedImg.onerror = reject;
@@ -249,7 +317,7 @@ export class TextureManager {
     estimatedMemoryUsage: number;
   } {
     let estimatedMemoryUsage = 0;
-    
+
     for (const texture of this.textureCache.values()) {
       // Rough estimation: width * height * 4 bytes (RGBA)
       estimatedMemoryUsage += texture.width * texture.height * 4;

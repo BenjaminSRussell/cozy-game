@@ -7,7 +7,7 @@ if (!fs.existsSync(deathDir)) {
     fs.mkdirSync(deathDir, { recursive: true });
 }
 
-// All crop types that need death phases
+// All crop types
 const crops = [
     'wheat', 'carrot', 'tomato', 'corn', 'potato', 'lettuce', 'pumpkin',
     'strawberry', 'blueberry', 'apple', 'pear', 'peach', 'cherry', 'grape',
@@ -15,316 +15,97 @@ const crops = [
     'cucumber', 'radish', 'spinach', 'asparagus', 'mushroom'
 ];
 
-// Death phase characteristics for different crop types
+// Sad-Cute Characteristics (Desaturated versions of main colors)
 const deathCharacteristics = {
-    // Grains - drooping, brown, brittle
-    wheat: { 
-        primaryColor: '#8B7355', 
-        secondaryColor: '#6B5D54', 
-        pattern: 'wilted',
-        structure: 'drooping'
-    },
-    
-    // Root vegetables - shriveled, rot spots, cracked
-    carrot: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'rot',
-        structure: 'shriveled'
-    },
-    potato: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'rot',
-        structure: 'collapsed'
-    },
-    radish: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'rot',
-        structure: 'shriveled'
-    },
-    
-    // Fruits - moldy, collapsed, discolored
-    tomato: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'collapsed'
-    },
-    apple: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'wrinkled'
-    },
-    pear: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'wrinkled'
-    },
-    peach: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'collapsed'
-    },
-    cherry: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'wrinkled'
-    },
-    strawberry: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'collapsed'
-    },
-    blueberry: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'wrinkled'
-    },
-    grape: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'wrinkled'
-    },
-    watermelon: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'collapsed'
-    },
-    
-    // Vegetables - wilted, brown, blight
-    lettuce: { 
-        primaryColor: '#8B7355', 
-        secondaryColor: '#6B5D54', 
-        pattern: 'wilted',
-        structure: 'drooping'
-    },
-    cabbage: { 
-        primaryColor: '#8B7355', 
-        secondaryColor: '#6B5D54', 
-        pattern: 'wilted',
-        structure: 'collapsed'
-    },
-    broccoli: { 
-        primaryColor: '#8B7355', 
-        secondaryColor: '#6B5D54', 
-        pattern: 'blight',
-        structure: 'drooping'
-    },
-    spinach: { 
-        primaryColor: '#8B7355', 
-        secondaryColor: '#6B5D54', 
-        pattern: 'wilted',
-        structure: 'drooping'
-    },
-    asparagus: { 
-        primaryColor: '#8B7355', 
-        secondaryColor: '#6B5D54', 
-        pattern: 'wilted',
-        structure: 'drooping'
-    },
-    
-    // Alliums - wilted tops, discolored bulbs
-    onion: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'rot',
-        structure: 'shriveled'
-    },
-    garlic: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'rot',
-        structure: 'shriveled'
-    },
-    
-    // Fruiting vegetables - mold, collapse
-    pepper: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'wrinkled'
-    },
-    cucumber: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'wrinkled'
-    },
-    pumpkin: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'mold',
-        structure: 'collapsed'
-    },
-    
-    // Fungi - decay, discoloration
-    mushroom: { 
-        primaryColor: '#8B4513', 
-        secondaryColor: '#654321', 
-        pattern: 'decay',
-        structure: 'collapsed'
-    },
-    
-    // Corn - blight, drooping
-    corn: { 
-        primaryColor: '#8B7355', 
-        secondaryColor: '#6B5D54', 
-        pattern: 'blight',
-        structure: 'drooping'
-    }
+    wheat: { color: '#C0B283', stroke: '#8D805B', shape: 'droop' },
+    carrot: { color: '#D68910', stroke: '#935116', shape: 'wilt' },
+    corn: { color: '#F0E68C', stroke: '#BDB76B', shape: 'droop' },
+    tomato: { color: '#CD6155', stroke: '#922B21', shape: 'wilt' },
+    potato: { color: '#A1887F', stroke: '#5D4037', shape: 'wilt' },
+    onion: { color: '#D7CCC8', stroke: '#8D6E63', shape: 'wilt' },
+    lettuce: { color: '#A9DFBF', stroke: '#7DCEA0', shape: 'flat' },
+    spinach: { color: '#7DCEA0', stroke: '#27AE60', shape: 'flat' },
+    // Default fallback
+    default: { color: '#95A5A6', stroke: '#7F8C8D', shape: 'wilt' }
 };
 
-// Generate death SVG for each crop
-crops.forEach(crop => {
-    const characteristics = deathCharacteristics[crop] || {
-        primaryColor: '#8B4513',
-        secondaryColor: '#654321',
-        pattern: 'wilted',
-        structure: 'drooping'
-    };
-    
-    const svg = generateDeathSVG(crop, characteristics);
-    const filePath = path.join(deathDir, `${crop}.svg`);
-    fs.writeFileSync(filePath, svg);
-    console.log(`Generated death phase for ${crop}`);
-});
-
-function generateDeathSVG(crop, chars) {
-    const patterns = {
-        wilted: `
-    <pattern id="wiltedPattern" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
-      <line x1="0" y1="4" x2="8" y2="4" stroke="#4A4A4A" stroke-width="0.5" opacity="0.6"/>
-      <line x1="4" y1="0" x2="4" y2="8" stroke="#6B5D54" stroke-width="0.5" opacity="0.4"/>
-    </pattern>`,
-        rot: `
-    <pattern id="rotPattern" x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1" fill="#2F4F4F" opacity="0.6"/>
-      <circle cx="4" cy="4" r="0.8" fill="#4A4A4A" opacity="0.5"/>
-    </pattern>`,
-        mold: `
-    <pattern id="moldPattern" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1.5" fill="#2F4F4F" opacity="0.7"/>
-      <circle cx="6" cy="6" r="1" fill="#4A4A4A" opacity="0.6"/>
-      <circle cx="4" cy="4" r="0.8" fill="#696969" opacity="0.5"/>
-    </pattern>`,
-        blight: `
-    <pattern id="blightPattern" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-      <ellipse cx="3" cy="3" rx="2" ry="1" fill="#2F4F4F" opacity="0.6"/>
-      <ellipse cx="7" cy="7" rx="1.5" ry="0.8" fill="#4A4A4A" opacity="0.5"/>
-    </pattern>`,
-        decay: `
-    <pattern id="decayPattern" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
-      <circle cx="2" cy="2" r="1.2" fill="#2F4F4F" opacity="0.7"/>
-      <circle cx="6" cy="6" r="0.8" fill="#4A4A4A" opacity="0.6"/>
-      <circle cx="4" cy="4" r="1" fill="#696969" opacity="0.5"/>
-    </pattern>`
-    };
-    
-    const structures = {
-        drooping: generateDroopingStructure(chars),
-        shriveled: generateShriveledStructure(chars),
-        collapsed: generateCollapsedStructure(chars),
-        wrinkled: generateWrinkledStructure(chars)
-    };
-    
-    return `<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+function getCommonDefs(color) {
+    return `
   <defs>
-    <!-- Death gradient -->
-    <linearGradient id="deathGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="${chars.primaryColor}"/>
-      <stop offset="50%" stop-color="${chars.secondaryColor}"/>
-      <stop offset="100%" stop-color="#4A4A4A"/>
-    </linearGradient>
-    ${patterns[chars.pattern] || patterns.wilted}
-  </defs>
-  
-  ${structures[chars.structure] || structures.drooping}
-  
-  <!-- Cracked soil indicator -->
-  <line x1="10" y1="38" x2="15" y2="38" stroke="#2F4F4F" stroke-width="0.5"/>
-  <line x1="25" y1="38" x2="30" y2="38" stroke="#2F4F4F" stroke-width="0.5"/>
-  <line x1="17" y1="39" x2="23" y2="39" stroke="#2F4F4F" stroke-width="0.5"/>
+    <filter id="shadowDeath" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.2"/>
+    </filter>
+  </defs>`;
+}
+
+function getSadFace() {
+    return `
+  <g fill="#424949" transform="translate(0, 4)">
+    <circle cx="26" cy="34" r="1.5" /> 
+    <circle cx="38" cy="34" r="1.5" /> 
+    <!-- Inverted curve for sad mouth -->
+    <path d="M29 42 Q32 39 35 42" fill="none" stroke="#424949" stroke-width="1.2" stroke-linecap="round" />
+    <!-- Tear drop -->
+    <path d="M39 36 Q40 40 39 42 L38 38 Z" fill="#3498DB" opacity="0.6" />
+  </g>`;
+}
+
+function generateDeathSVG(name, chars) {
+    const color = chars.color || '#95A5A6';
+    const stroke = chars.stroke || '#7F8C8D';
+    const common = getCommonDefs(color);
+
+    let content = '';
+
+    // "Sad-Cute" logic: Retain rounded shapes but squish/rotate them to look tired
+
+    if (chars.shape === 'droop') {
+        // Drooping stalk
+        content = `
+    <g filter="url(#shadowDeath)">
+      <!-- Bent stalk -->
+      <path d="M32 58 C32 40 28 30 16 20" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round" />
+      <!-- Drooping head -->
+      <ellipse cx="16" cy="20" rx="6" ry="8" fill="${color}" stroke="${stroke}" stroke-width="2" transform="rotate(-30 16 20)" />
+      <!-- Fallen leaf -->
+      <ellipse cx="40" cy="54" rx="6" ry="3" fill="${color}" stroke="${stroke}" stroke-width="1.5" />
+    </g>
+    ${getSadFace()}`;
+    } else if (chars.shape === 'flat') {
+        // Flattened pile (lettuce/spinach)
+        content = `
+    <g filter="url(#shadowDeath)">
+      <ellipse cx="32" cy="50" rx="16" ry="6" fill="${color}" stroke="${stroke}" stroke-width="2" />
+      <ellipse cx="32" cy="46" rx="12" ry="5" fill="${color}" stroke="${stroke}" stroke-width="2" opacity="0.8" />
+    </g>
+    <g fill="#424949" transform="translate(0, 14)">
+       <circle cx="28" cy="34" r="1.5" /> <circle cx="36" cy="34" r="1.5" />
+       <path d="M30 40 Q32 38 34 40" fill="none" stroke="#424949" stroke-width="1.2" stroke-linecap="round" />
+    </g>`;
+    } else {
+        // Generic wilt - squashed round
+        content = `
+    <g filter="url(#shadowDeath)">
+      <ellipse cx="32" cy="44" rx="14" ry="10" fill="${color}" stroke="${stroke}" stroke-width="2" />
+      <!-- Wrinkle lines -->
+      <path d="M24 44 Q32 48 40 44" fill="none" stroke="${stroke}" stroke-width="1.5" opacity="0.5" />
+      <path d="M32 34 L32 38" stroke="${stroke}" stroke-width="2" />
+    </g>
+    ${getSadFace()}`;
+    }
+
+    return `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  ${common}
+  ${content}
 </svg>`;
 }
 
-function generateDroopingStructure(chars) {
-    return `
-  <!-- Dead stem -->
-  <rect x="19" y="15" width="2" height="20" fill="url(#deathGrad)"/>
-  
-  <!-- Drooping elements -->
-  <ellipse cx="20" cy="25" rx="4" ry="2" fill="${chars.primaryColor}" transform="rotate(-45 20 25)"/>
-  <ellipse cx="20" cy="28" rx="3" ry="1.5" fill="${chars.secondaryColor}" transform="rotate(-60 20 28)"/>
-  <ellipse cx="20" cy="30" rx="2" ry="1" fill="#4A4A4A" transform="rotate(-75 20 30)"/>
-  
-  <!-- Dead leaves -->
-  <ellipse cx="18" cy="20" rx="2" ry="1" fill="${chars.primaryColor}" transform="rotate(-30 18 20)"/>
-  <ellipse cx="22" cy="22" rx="2" ry="1" fill="${chars.secondaryColor}" transform="rotate(-45 22 22)"/>
-  
-  <!-- Pattern overlay -->
-  <rect x="16" y="15" width="8" height="20" fill="url(#${chars.pattern}Pattern)" opacity="0.5"/>`;
-}
+crops.forEach(crop => {
+    const chars = deathCharacteristics[crop] || deathCharacteristics.default;
+    const svg = generateDeathSVG(crop, chars);
+    const filePath = path.join(deathDir, `${crop}.svg`);
+    fs.writeFileSync(filePath, svg);
+    // console.log(\`Generated death phase for \${crop}\`);
+});
 
-function generateShriveledStructure(chars) {
-    return `
-  <!-- Shriveled main body -->
-  <polygon points="20,8 22,20 20,32 18,20" fill="url(#deathGrad)"/>
-  
-  <!-- Rot patches -->
-  <rect x="18" y="15" width="4" height="8" fill="url(#${chars.pattern}Pattern)" opacity="0.7"/>
-  
-  <!-- Dead tops -->
-  <rect x="19" y="6" width="2" height="4" fill="#4A4A4A" transform="rotate(-15 20 8)"/>
-  
-  <!-- Cracks -->
-  <line x1="20" y1="12" x2="20" y2="18" stroke="#2F4F4F" stroke-width="0.5"/>
-  <line x1="18" y1="20" x2="22" y2="20" stroke="#2F4F4F" stroke-width="0.5"/>`;
-}
-
-function generateCollapsedStructure(chars) {
-    return `
-  <!-- Collapsed base -->
-  <ellipse cx="20" cy="22" rx="6" ry="4" fill="#4A4A4A" opacity="0.8"/>
-  
-  <!-- Main body -->
-  <circle cx="20" cy="20" r="8" fill="url(#deathGrad)"/>
-  
-  <!-- Pattern overlay -->
-  <rect x="16" y="16" width="8" height="8" fill="url(#${chars.pattern}Pattern)" opacity="0.7"/>
-  
-  <!-- Dead stem -->
-  <rect x="19" y="10" width="2" height="8" fill="#4A4A4A"/>
-  
-  <!-- Wilted leaves -->
-  <ellipse cx="17" cy="11" rx="2" ry="0.8" fill="#4A4A4A" transform="rotate(-45 17 11)"/>
-  <ellipse cx="23" cy="12" rx="2" ry="0.8" fill="#4A4A4A" transform="rotate(-60 23 12)"/>`;
-}
-
-function generateWrinkledStructure(chars) {
-    return `
-  <!-- Wrinkled main body -->
-  <ellipse cx="20" cy="20" rx="7" ry="6" fill="url(#deathGrad)"/>
-  
-  <!-- Wrinkle lines -->
-  <line x1="16" y1="18" x2="24" y2="18" stroke="#2F4F4F" stroke-width="0.5"/>
-  <line x1="16" y1="22" x2="24" y2="22" stroke="#2F4F4F" stroke-width="0.5"/>
-  <line x1="20" y1="16" x2="20" y2="24" stroke="#2F4F4F" stroke-width="0.5"/>
-  
-  <!-- Pattern overlay -->
-  <rect x="16" y="16" width="8" height="8" fill="url(#${chars.pattern}Pattern)" opacity="0.7"/>
-  
-  <!-- Dead stem -->
-  <rect x="19" y="12" width="2" height="6" fill="#4A4A4A"/>`;
-}
-
-console.log('Death phase SVGs generated successfully!');
+console.log('All death phase SVGs generated successfully with Sad-Cute style!');

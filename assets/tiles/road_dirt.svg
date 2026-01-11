@@ -1,0 +1,15 @@
+<svg width="64" height="32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dirt Road - Brown/tan isometric tile -->
+  <defs>
+    <linearGradient id="dirtGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8D6E63;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6D4C41;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Diamond shape for isometric tile -->
+  <polygon points="32,2 62,16 32,30 2,16" fill="url(#dirtGrad)" stroke="#5D4037" stroke-width="1"/>
+  <!-- Texture details -->
+  <circle cx="20" cy="14" r="1.5" fill="#6D4C41" opacity="0.6"/>
+  <circle cx="44" cy="18" r="1.5" fill="#6D4C41" opacity="0.6"/>
+  <circle cx="32" cy="20" r="1" fill="#5D4037" opacity="0.4"/>
+</svg>

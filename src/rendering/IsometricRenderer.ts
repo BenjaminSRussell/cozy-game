@@ -1,17 +1,23 @@
 /**
  * 2.5D Isometric Voxel Renderer for Cozy Haven
  * 
- * Creates beautiful isometric 3D view using voxel-based rendering
+ * Creates beautiful isometric 3D view using textured assets
  * Perfect for cozy farming games with depth and dimension
  */
 
 import { GameWorld, CropStage } from '../types/game';
+import { TextureManager } from './TextureManager';
+import { WindSystem, WindVector } from '../systems/WindSystem';
+import { DemoAssets } from '../assets/DemoAssets';
+
+// Master vehicle source for premium component animation
+const TRACTOR_SOURCE = require('../../assets/vehicles/tractor.svg');
 
 interface Voxel {
   x: number;
   y: number;
   z: number;
-  type: 'grass' | 'dirt' | 'water' | 'crop' | 'building' | 'ore';
+  type: 'grass' | 'dirt' | 'water' | 'crop' | 'building' | 'ore' | 'wood' | 'player' | 'road' | 'vehicle' | 'animal';
   color?: string;
   texture?: string;
   height?: number;
@@ -19,6 +25,17 @@ interface Voxel {
   cropStage?: CropStage;
   buildingType?: string;
   oreType?: string;
+  treeType?: string;
+  roadType?: 'dirt' | 'paved';
+  roadGrade?: 'gravel' | 'paved';
+  roadLanes?: 1 | 2;
+  roadConnections?: number;
+  vehicleType?: 'tractor' | 'truck';
+  rotation?: number;
+  playerState?: any; // Avoiding circular import issues, just treat as any for rendering
+  machineState?: any;
+  animalType?: 'chicken' | 'cow' | 'sheep';
+  animalState?: any;
 }
 
 interface IsometricPoint {
@@ -32,14 +49,21 @@ export class IsometricRenderer {
   private ctx: CanvasRenderingContext2D;
   private voxels: Voxel[] = [];
   private camera = { x: 0, y: 0, z: 0 };
-  private tileSize = 32;
+  private tileSize = 64; // Increased for better detail
   private voxelHeight = 16;
-  
+  private textureManager: TextureManager;
+  private windSystem: WindSystem;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas context failed');
     this.ctx = ctx;
+    this.textureManager = TextureManager.getInstance();
+    this.windSystem = WindSystem.getInstance();
+
+    // Set closer default zoom/tile size
+    this.tileSize = 64;
   }
 
   /**
@@ -48,11 +72,11 @@ export class IsometricRenderer {
   private worldToIsometric(x: number, y: number, z: number): IsometricPoint {
     const isoX = (x - y) * (this.tileSize / 2);
     const isoY = (x + y) * (this.tileSize / 4) - (z * this.voxelHeight);
-    
+
     return {
       screenX: isoX + this.canvas.width / 2 + this.camera.x,
       screenY: isoY + this.canvas.height / 3 + this.camera.y,
-      depth: x + y + z
+      depth: x + y + z // Simple depth sorting key
     };
   }
 
@@ -61,44 +85,77 @@ export class IsometricRenderer {
    */
   private buildVoxelWorld(world: GameWorld): void {
     this.voxels = [];
-    
+
     // Build terrain base layer
     this.buildTerrain(world);
-    
+
     // Add crops on top
     this.buildCrops(world);
-    
+
     // Add buildings
     this.buildBuildings(world);
-    
+
     // Add ore deposits
     this.buildOreDeposits(world);
-    
+
+    // Add wood sources (trees)
+    this.buildWoodSources(world);
+
+    // Add animals
+    this.buildAnimals(world);
+
+    // Add Player
+    const player = world.player;
+    if (player && player.position && !player.mountedVehicleId) {
+      this.voxels.push({
+        x: player.position.x,
+        y: player.position.y,
+        z: player.position.z || 1,
+        type: 'player',
+        playerState: player,
+        height: 1.5
+      });
+    }
+
+    // Add Roads
+    this.buildRoads(world);
+
+    // Add Vehicles
+    this.buildVehicles(world);
+
     // Sort voxels by depth for proper rendering order
+    // Order: lower Z first, then by X+Y
     this.voxels.sort((a, b) => {
-      const depthA = a.x + a.y + a.z;
-      const depthB = b.x + b.y + b.z;
+      // First compare Z levels
+      if (a.z !== b.z) return a.z - b.z;
+
+      // Then compare isometric depth (back to front)
+      const depthA = a.x + a.y;
+      const depthB = b.x + b.y;
       return depthA - depthB;
     });
   }
 
   private buildTerrain(world: GameWorld): void {
     // Create base terrain layer
-    const worldSize = 20;
-    
-    for (let x = 0; x < worldSize; x++) {
-      for (let y = 0; y < worldSize; y++) {
+    const worldSize = 40; // Increased render distance
+
+    const centerX = Math.floor(world.mapSize.x / 2); // Assuming map is centered on 10,10 in demo
+    // But store.gameStore creates plots at 10,10... let's just render 0-30 for now to match demo area
+
+    for (let x = 0; x < 30; x++) {
+      for (let y = 0; y < 30; y++) {
         // Check if there's a farm plot here
-        const hasPlot = world.farmPlots.some(plot => 
+        const hasPlot = world.farmPlots.some(plot =>
           Math.floor(plot.position.x) === x && Math.floor(plot.position.y) === y
         );
-        
+
         this.voxels.push({
           x,
           y,
           z: 0,
           type: hasPlot ? 'dirt' : 'grass',
-          color: hasPlot ? '#8B4513' : '#228B22'
+          height: 1
         });
       }
     }
@@ -109,46 +166,14 @@ export class IsometricRenderer {
       if (plot.crop) {
         const x = Math.floor(plot.position.x);
         const y = Math.floor(plot.position.y);
-        
-        // Calculate crop height based on growth stage
-        let cropHeight = 1;
-        let cropColor = '#90EE90';
-        
-        switch (plot.crop.stage) {
-          case CropStage.SEED:
-            cropHeight = 1;
-            cropColor = '#FFD700';
-            break;
-          case CropStage.SPROUTING:
-            cropHeight = 2;
-            cropColor = '#90EE90';
-            break;
-          case CropStage.GROWING:
-            cropHeight = 3;
-            cropColor = '#7CB342';
-            break;
-          case CropStage.MATURE:
-          case CropStage.HARVESTABLE:
-            cropHeight = 4;
-            cropColor = plot.crop.type === 'wheat' ? '#DAA520' : 
-                       plot.crop.type === 'carrot' ? '#FF8C00' : '#DC143C';
-            break;
-          case CropStage.DEAD:
-            cropHeight = 2;
-            cropColor = '#8B4513';
-            break;
-        }
-        
-        // Add crop voxel
+
         this.voxels.push({
           x,
           y,
-          z: 1,
+          z: 1, // On top of terrain
           type: 'crop',
-          height: cropHeight,
           cropType: plot.crop.type,
-          cropStage: plot.crop.stage,
-          color: cropColor
+          cropStage: plot.crop.stage
         });
       }
     });
@@ -158,30 +183,15 @@ export class IsometricRenderer {
     world.buildings.forEach((building) => {
       const x = Math.floor(building.position.x);
       const y = Math.floor(building.position.y);
-      
-      // Building base
+
       this.voxels.push({
         x,
         y,
-        z: 0,
+        z: 1, // Base sits on ground
         type: 'building',
         buildingType: building.type,
-        height: 3,
-        color: this.getBuildingColor(building.type)
+        machineState: building.machineState
       });
-      
-      // Building walls (create 3D effect)
-      for (let h = 1; h <= 3; h++) {
-        this.voxels.push({
-          x,
-          y,
-          z: h,
-          type: 'building',
-          buildingType: building.type,
-          height: 1,
-          color: this.getBuildingColor(building.type, h)
-        });
-      }
     });
   }
 
@@ -189,36 +199,81 @@ export class IsometricRenderer {
     world.oreDeposits.forEach((deposit) => {
       const x = Math.floor(deposit.position.x);
       const y = Math.floor(deposit.position.y);
-      
+
       this.voxels.push({
         x,
         y,
-        z: 0,
+        z: 1,
         type: 'ore',
-        oreType: deposit.oreType,
-        height: 2,
-        color: this.getOreColor(deposit.oreType)
+        oreType: deposit.oreType
       });
     });
   }
 
-  private getBuildingColor(buildingType: string, height: number = 0): string {
-    const colors = {
-      barn: height === 0 ? '#8B4513' : '#A0522D',
-      house: height === 0 ? '#DEB887' : '#F5DEB3',
-      shed: height === 0 ? '#8B6914' : '#A0826D'
-    };
-    return colors[buildingType as keyof typeof colors] || '#8B4513';
+  private buildWoodSources(world: GameWorld): void {
+    if (!world.woodSources) return;
+
+    world.woodSources.forEach((source) => {
+      // Only render if alive (health > 0)
+      if (source.health > 0) {
+        const x = Math.floor(source.position.x);
+        const y = Math.floor(source.position.y);
+
+        this.voxels.push({
+          x,
+          y,
+          z: 1,
+          type: 'wood',
+          treeType: source.treeType // 'oak', 'pine', etc.
+        });
+      }
+    });
   }
 
-  private getOreColor(oreType: string): string {
-    const colors = {
-      copper: '#B87333',
-      silver: '#C0C0C0',
-      gold: '#FFD700',
-      diamond: '#B9F2FF'
-    };
-    return colors[oreType as keyof typeof colors] || '#808080';
+  private buildAnimals(world: GameWorld): void {
+    if (!world.animals) return;
+
+    world.animals.forEach((animal) => {
+      this.voxels.push({
+        x: animal.position.x,
+        y: animal.position.y,
+        z: 1, // Grounded
+        type: 'animal',
+        animalType: animal.type,
+        animalState: animal,
+        rotation: animal.rotation
+      });
+    });
+  }
+
+  private buildRoads(world: GameWorld): void {
+    if (!world.roads) return;
+    world.roads.forEach(road => {
+      this.voxels.push({
+        x: road.position.x,
+        y: road.position.y,
+        z: 0.1, // Slightly above ground
+        type: 'road',
+        roadGrade: road.grade,
+        roadLanes: road.lanes,
+        roadConnections: road.connections
+      });
+    });
+  }
+
+  private buildVehicles(world: GameWorld): void {
+    if (!world.vehicles) return;
+    world.vehicles.forEach(vehicle => {
+      this.voxels.push({
+        x: vehicle.position.x,
+        y: vehicle.position.y,
+        z: vehicle.position.z,
+        type: 'vehicle',
+        vehicleType: vehicle.type,
+        rotation: vehicle.rotation,
+        playerState: world.player.mountedVehicleId === vehicle.id ? world.player : undefined
+      });
+    });
   }
 
   /**
@@ -226,167 +281,783 @@ export class IsometricRenderer {
    */
   private drawVoxel(voxel: Voxel): void {
     const iso = this.worldToIsometric(voxel.x, voxel.y, voxel.z);
-    const height = voxel.height || 1;
-    
+
     this.ctx.save();
-    
-    // Draw voxel sides for 3D effect
-    if (height > 1 || voxel.type === 'building') {
-      // Draw front face
-      this.drawIsometricFace(
-        iso.screenX,
-        iso.screenY - this.voxelHeight * (height - 1),
-        this.tileSize,
-        this.voxelHeight * height,
-        voxel.color || '#808080',
-        'front'
-      );
-      
-      // Draw side face (darker)
-      const sideColor = this.darkenColor(voxel.color || '#808080', 0.3);
-      this.drawIsometricFace(
-        iso.screenX,
-        iso.screenY - this.voxelHeight * (height - 1),
-        this.tileSize,
-        this.voxelHeight * height,
-        sideColor,
-        'side'
-      );
+
+    if (voxel.type === 'grass' || voxel.type === 'dirt') {
+      this.drawTerrainTile(iso, voxel);
+    } else if (voxel.type === 'crop' && voxel.cropType) {
+      this.drawCrop(iso, voxel.cropType, voxel.cropStage || CropStage.SEED);
+    } else if (voxel.type === 'building' && voxel.buildingType) {
+      this.drawBuilding(iso, voxel.buildingType, voxel.machineState);
+    } else if (voxel.type === 'animal' && voxel.animalType) {
+      this.drawAnimal(iso, voxel.animalType, voxel.animalState);
+    } else if (voxel.type === 'ore' && voxel.oreType) {
+      this.drawOre(iso, voxel.oreType);
+    } else if (voxel.type === 'wood' && voxel.treeType) {
+      this.drawTree(iso, voxel.treeType);
+    } else if (voxel.type === 'player') {
+      this.drawPlayer(iso, voxel);
+    } else if (voxel.type === 'road' && (voxel.roadGrade || voxel.roadType)) {
+      this.drawRoad(iso, voxel.roadGrade || (voxel.roadType === 'paved' ? 'paved' : 'gravel'), voxel.roadLanes || 1, voxel.roadConnections || 0);
+    } else if (voxel.type === 'vehicle' && voxel.vehicleType) {
+      this.drawVehicle(iso, voxel);
     }
-    
-    // Draw top face
-    this.drawIsometricFace(
-      iso.screenX,
-      iso.screenY - this.voxelHeight * height,
-      this.tileSize,
-      this.voxelHeight,
-      voxel.color || '#808080',
-      'top'
-    );
-    
-    // Draw crop details if this is a crop voxel
-    if (voxel.type === 'crop' && voxel.cropType) {
-      this.drawCropDetails(iso, voxel);
-    }
-    
-    // Draw building details
-    if (voxel.type === 'building' && voxel.buildingType) {
-      this.drawBuildingDetails(iso, voxel);
-    }
-    
-    // Draw ore details
-    if (voxel.type === 'ore' && voxel.oreType) {
-      this.drawOreDetails(iso, voxel);
-    }
-    
+
     this.ctx.restore();
   }
 
-  private drawIsometricFace(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    color: string,
-    face: 'top' | 'front' | 'side'
-  ): void {
-    this.ctx.fillStyle = color;
-    this.ctx.strokeStyle = this.darkenColor(color, 0.5);
-    this.ctx.lineWidth = 1;
-    
-    this.ctx.beginPath();
-    
-    if (face === 'top') {
-      // Top face (diamond shape)
-      this.ctx.moveTo(x, y);
-      this.ctx.lineTo(x + width / 2, y + height / 2);
-      this.ctx.lineTo(x, y + height);
-      this.ctx.lineTo(x - width / 2, y + height / 2);
-      this.ctx.closePath();
-    } else if (face === 'front') {
-      // Front face
-      this.ctx.moveTo(x - width / 2, y + height / 2);
-      this.ctx.lineTo(x + width / 2, y + height / 2);
-      this.ctx.lineTo(x + width / 2, y + height * 1.5);
-      this.ctx.lineTo(x - width / 2, y + height * 1.5);
-      this.ctx.closePath();
-    } else if (face === 'side') {
-      // Side face
-      this.ctx.moveTo(x, y);
-      this.ctx.lineTo(x + width / 2, y + height / 2);
-      this.ctx.lineTo(x + width / 2, y + height * 1.5);
-      this.ctx.lineTo(x, y + height);
-      this.ctx.closePath();
+  private drawTerrainTile(iso: IsometricPoint, voxel: Voxel): void {
+    const type = voxel.type as 'grass' | 'dirt';
+    // Try to get texture
+    const textureId = `tile_${type}`;
+    const texture = this.textureManager.getTexture(textureId);
+
+    if (texture) {
+      // Draw textured tile
+      // We need to transform the flat square texture into a diamond
+      // Or if the texture is already a diamond (iso tile), draw it directly
+
+      // Assuming texture is a flat square for now, we project it
+      // Simple approach: Draw image w/ transform
+
+      // Calculate dimensions
+      const width = this.tileSize;
+      const height = this.tileSize / 2;
+
+      this.ctx.drawImage(
+        texture.image,
+        iso.screenX - width / 2,
+        iso.screenY - height / 2,
+        width,
+        height
+      );
+
+    } else {
+      // Fallback to colors with Premium Variation Logic
+      const variation = this.getTileVariation(voxel.x, voxel.y);
+
+      let color: string;
+      let sideColor: string;
+
+      if (type === 'grass') {
+        // Base: #4CAF50
+        // Variation: Shift hue/brightness slightly
+        const greens = ['#4CAF50', '#4BB543', '#56AE57', '#62B665', '#45A049'];
+        color = greens[Math.floor(variation * greens.length)];
+        // Darker side
+        sideColor = '#388E3C';
+      } else {
+        // Base: #795548
+        const browns = ['#795548', '#6D4C41', '#8D6E63', '#5D4037', '#543D36'];
+        color = browns[Math.floor(variation * browns.length)];
+        sideColor = '#5D4037';
+      }
+
+      this.drawDiamond(iso.screenX, iso.screenY, this.tileSize, this.tileSize / 2, color, sideColor);
+
+      // --- DETAIL OVERLAY PASS ---
+      if (type === 'grass') {
+        this.drawGrassDetails(iso, variation);
+      } else {
+        this.drawDirtDetails(iso, variation);
+      }
     }
-    
+  }
+
+  private getTileVariation(x: number, y: number): number {
+    const val = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return val - Math.floor(val);
+  }
+
+  private drawGrassDetails(iso: IsometricPoint, variation: number): void {
+    const { screenX, screenY } = iso;
+    const size = this.tileSize;
+
+    // Draw 2-3 small clumps of grass
+    const numClumps = Math.floor(variation * 3) + 1;
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Highlight blades
+    this.ctx.lineWidth = 1;
+
+    for (let i = 0; i < numClumps; i++) {
+      const ox = (this.getTileVariation(variation, i) - 0.5) * (size * 0.4);
+      const oy = (this.getTileVariation(i, variation) - 0.5) * (size * 0.2);
+
+      this.ctx.beginPath();
+      this.ctx.moveTo(screenX + ox, screenY + oy);
+      this.ctx.lineTo(screenX + ox - 2, screenY + oy - 4);
+      this.ctx.moveTo(screenX + ox, screenY + oy);
+      this.ctx.lineTo(screenX + ox + 2, screenY + oy - 5);
+      this.ctx.stroke();
+    }
+
+    // Rare Wildflower
+    if (variation > 0.95) {
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.beginPath();
+      this.ctx.arc(screenX + 5, screenY - 5, 1.5, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = '#FFEB3B'; // Yellow center
+      this.ctx.beginPath();
+      this.ctx.arc(screenX + 5, screenY - 5, 0.6, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+  }
+
+  private drawDirtDetails(iso: IsometricPoint, variation: number): void {
+    const { screenX, screenY } = iso;
+    const size = this.tileSize;
+
+    // Draw 1-2 small "pebbles"
+    const numPebbles = Math.floor(variation * 2) + 1;
+    for (let i = 0; i < numPebbles; i++) {
+      const ox = (this.getTileVariation(variation * 2, i) - 0.5) * (size * 0.6);
+      const oy = (this.getTileVariation(i * 3, variation) - 0.5) * (size * 0.3);
+
+      this.ctx.fillStyle = i % 2 === 0 ? '#9E9E9E' : '#BDBDBD';
+      this.ctx.beginPath();
+      this.ctx.ellipse(screenX + ox, screenY + oy, 2, 1, Math.PI / 4, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+
+    // Subtle crack/line
+    if (variation < 0.1) {
+      this.ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+      this.ctx.lineWidth = 1;
+      this.ctx.beginPath();
+      this.ctx.moveTo(screenX - 10, screenY - 5);
+      this.ctx.quadraticCurveTo(screenX, screenY, screenX + 12, screenY - 8);
+      this.ctx.stroke();
+    }
+  }
+
+
+  private drawDiamond(x: number, y: number, width: number, height: number, color: string, sideColor: string): void {
+    // Draw side (thickness)
+    const thickness = 10;
+    this.ctx.fillStyle = sideColor;
+    this.ctx.beginPath();
+    this.ctx.moveTo(x - width / 2, y);
+    this.ctx.lineTo(x, y + height / 2);
+    this.ctx.lineTo(x + width / 2, y);
+    this.ctx.lineTo(x + width / 2, y + thickness);
+    this.ctx.lineTo(x, y + height / 2 + thickness);
+    this.ctx.lineTo(x - width / 2, y + thickness);
+    this.ctx.closePath();
     this.ctx.fill();
+
+    // Draw top
+    this.ctx.fillStyle = color;
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y - height / 2);
+    this.ctx.lineTo(x + width / 2, y);
+    this.ctx.lineTo(x, y + height / 2);
+    this.ctx.lineTo(x - width / 2, y);
+    this.ctx.closePath();
+    this.ctx.fill();
+
+    // Subtle Grain Texture (Stable)
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.04;
+    this.ctx.fillStyle = '#000000';
+    // Use x,y to seed the random grain so it doesn't flicker
+    for (let i = 0; i < 15; i++) {
+      const seed1 = Math.sin(x * 12.9898 + y * 78.233 + i) * 43758.5453;
+      const v1 = seed1 - Math.floor(seed1);
+      const seed2 = Math.cos(x * 34.1234 + y * 56.789 + i) * 12345.6789;
+      const v2 = seed2 - Math.floor(seed2);
+
+      const gx = (v1 - 0.5) * width;
+      const gy = (v2 - 0.5) * height;
+      this.ctx.fillRect(x + gx, y + gy, 1, 1);
+    }
+    this.ctx.restore();
+
+    // Highlight
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeStyle = 'rgba(255,255,255,0.1)';
     this.ctx.stroke();
   }
 
-  private drawCropDetails(iso: IsometricPoint, voxel: Voxel): void {
-    if (!voxel.cropType) return;
-    
-    const cropEmojis = {
-      wheat: '🌾',
-      carrot: '🥕',
-      tomato: '🍅'
-    };
-    
-    const emoji = cropEmojis[voxel.cropType as keyof typeof cropEmojis] || '🌱';
-    
-    this.ctx.font = 'bold 16px Arial';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(emoji, iso.screenX, iso.screenY - this.voxelHeight);
+  private drawCrop(iso: IsometricPoint, type: string, stage: CropStage): void {
+    // Map stage enum (0-4) to phase folder (1-5)
+    // crop.stage is 0..4 (SEED..HARVESTABLE)
+    // phases are phase1..phase5
+    // However, we need to handle stage 5 (DEAD)
+
+    let phase = 1;
+    if (stage === CropStage.DEAD) {
+      phase = 5; // Use mature as base? Or need death asset?
+      // For now fallback to 5 (mature) but maybe filtered grayscale
+    } else {
+      phase = Math.min(5, Math.floor(stage) + 1);
+    }
+
+    const textureId = `crop_${type}_phase${phase}`;
+    const texture = this.textureManager.getTexture(textureId);
+
+    if (texture) {
+      // Scale crop relative to tile
+      // New 64x64 assets should be slightly larger than the tile base for "pop"
+      const scale = 1.0;
+      const width = this.tileSize * scale;
+      const height = width * (texture.height / texture.width);
+
+      // Get Wind Force at this tile (iso coords -> roughly grid coords)
+      // We use the voxel grid coordinates passed implicitly or we'd need them passed in
+      // IsoPoint doesn't have grid coords. We need to pass grid X/Y to drawCrop.
+      // OR we calculate wind based on iso screen coords (works for screen-space waves)
+      // BETTER: Wind is world-space. We should pass gridX, gridY to drawCrop.
+
+      // Let's modify drawVoxel to pass x/y to drawCrop, or calculate wind here crudely from Iso
+      // Since iso.screenX/Y correlates to world, we can use it for the noise offset
+
+      // Approximate world X/Y from screen for wind noise (good enough for visual wave)
+      const noiseX = iso.screenX / 100;
+      const noiseY = iso.screenY / 100;
+      const wind = this.windSystem.getWindAt(noiseX, noiseY);
+
+      const swayAmount = wind.strength * 0.10;
+      const skewX = wind.x * swayAmount;
+
+      // Squash & Stretch Logic:
+      const squashFactor = 1.0 - (Math.abs(skewX) * 0.2);
+      const stretchFactor = 1.0 + (Math.abs(skewX) * 0.1);
+
+      // --- Segmented Rendering: Only the parts the wind touches react ---
+      // We divide the crop into "Base" (bottom 30%) and "Tops" (top 70%)
+      const baseHeightRatio = 0.3;
+      const topHeightRatio = 1.0 - baseHeightRatio;
+
+      const drawX = iso.screenX - width / 2;
+      const drawY = iso.screenY - height; // Grounded at iso.screenY
+
+      // 1. Draw Stationary Base (Roots/Grounded part)
+      (this.ctx as any).drawImage(
+        texture.image,
+        0, texture.height * (1.0 - baseHeightRatio), texture.width, texture.height * baseHeightRatio, // Source
+        drawX, drawY + height * (1.0 - baseHeightRatio), width, height * baseHeightRatio // Destination
+      );
+
+      // 2. Draw Wind-Affected Tops
+      this.ctx.save();
+
+      // Pivot at the boundary between base and top for smooth stitching
+      const pivotX = iso.screenX;
+      const pivotY = drawY + height * (1.0 - baseHeightRatio);
+
+      this.ctx.translate(pivotX, pivotY);
+      this.ctx.scale(stretchFactor, squashFactor);
+      this.ctx.transform(1, 0, skewX, 1, 0, 0);
+      this.ctx.translate(-pivotX, -pivotY);
+
+      (this.ctx as any).drawImage(
+        texture.image,
+        0, 0, texture.width, texture.height * (1.0 - baseHeightRatio), // Source Top
+        drawX, drawY, width, height * (1.0 - baseHeightRatio) // Destination Top
+      );
+
+      // --- Happy Reaction (Localized to top) ---
+      if (wind.strength > 0.6 && stage >= CropStage.MATURE) {
+        // We pass the pivot-relative Y for the face so it stays with the tops
+        this.drawHappyReaction(iso, wind.strength, pivotY);
+      }
+
+      this.ctx.restore();
+
+    } else {
+      // Fallback
+      this.ctx.fillStyle = stage === CropStage.HARVESTABLE ? 'gold' : 'green';
+      this.ctx.beginPath();
+      this.ctx.arc(iso.screenX, iso.screenY - 10, 10, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
   }
 
-  private drawBuildingDetails(iso: IsometricPoint, voxel: Voxel): void {
-    if (!voxel.buildingType || voxel.z !== 3) return; // Only draw on top
-    
-    const buildingEmojis = {
-      barn: '🪜',
-      house: '🏡',
-      shed: '🏠'
-    };
-    
-    const emoji = buildingEmojis[voxel.buildingType as keyof typeof buildingEmojis] || '🏠';
-    
-    this.ctx.font = 'bold 20px Arial';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(emoji, iso.screenX, iso.screenY - this.voxelHeight * 2);
+  private drawBuilding(iso: IsometricPoint, type: string, machineState?: any): void {
+    const textureId = `building_${type}`;
+    const texture = this.textureManager.getTexture(textureId);
+
+    if (texture) {
+      // Buildings are larger, maybe 2x2 scale usually, but for now 1x1 base
+      const scale = 2.0;
+      const width = this.tileSize * scale;
+      const height = width * (texture.height / texture.width);
+
+      this.ctx.drawImage(
+        texture.image,
+        iso.screenX - width / 2,
+        iso.screenY - height, // Grounded at iso.screenY
+        width,
+        height
+      );
+    } else if (type.startsWith('sprinkler')) {
+      // Procedural fallback for sprinklers
+      const size = 16;
+      const height = 24;
+
+      this.ctx.fillStyle = type === 'sprinkler_quality' ? '#FFD700' : '#8D6E63'; // Gold or Copper
+      // Draw cylinder-ish shape
+      this.ctx.fillRect(iso.screenX - size / 2, iso.screenY - height, size, height);
+
+      // Top cap
+      this.ctx.fillStyle = type === 'sprinkler_quality' ? '#FFF59D' : '#D7CCC8';
+      this.ctx.beginPath();
+      this.ctx.ellipse(iso.screenX, iso.screenY - height, size / 2, size / 4, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      // Nozzles
+      this.ctx.beginPath();
+      this.ctx.arc(iso.screenX, iso.screenY - height + 5, 3, 0, Math.PI * 2);
+      this.ctx.fill();
+    } else if (type === 'preserves_jar' || type === 'keg') {
+      // Draw Machine procedural art
+      const size = 30;
+      const height = 40;
+
+      this.ctx.fillStyle = type === 'keg' ? '#5D4037' : '#90A4AE'; // Brown Keg, Grey Jar
+      this.ctx.fillRect(iso.screenX - size / 2, iso.screenY - height, size, height);
+
+      // Detail lines
+      this.ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeRect(iso.screenX - size / 2, iso.screenY - height, size, height);
+
+      // Bubble if processing
+      if (machineState) {
+        this.drawProcessingBubble(iso, machineState);
+      }
+    } else {
+      // Fallback
+      this.ctx.fillStyle = 'brown';
+      this.ctx.fillRect(iso.screenX - 10, iso.screenY - 20, 20, 20);
+    }
   }
 
-  private drawOreDetails(iso: IsometricPoint, voxel: Voxel): void {
-    if (!voxel.oreType || voxel.z !== 1) return; // Only draw on top
-    
-    const oreEmojis = {
-      copper: '🟠',
-      silver: '⚪',
-      gold: '🟡',
-      diamond: '💎'
-    };
-    
-    const emoji = oreEmojis[voxel.oreType as keyof typeof oreEmojis] || '🪨';
-    
-    this.ctx.font = 'bold 14px Arial';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(emoji, iso.screenX, iso.screenY - this.voxelHeight);
+  private drawAnimal(iso: IsometricPoint, type: string, state: any): void {
+    const time = Date.now();
+    const bob = Math.abs(Math.sin(time / 200)) * 5;
+    const x = iso.screenX;
+    const y = iso.screenY - bob;
+
+    // Draw animal body (procedural)
+    this.ctx.fillStyle = type === 'chicken' ? '#FFFFFF' : type === 'cow' ? '#795548' : '#ECEFF1';
+    this.ctx.strokeStyle = '#333';
+    this.ctx.lineWidth = 1;
+
+    const size = type === 'chicken' ? 12 : 24;
+
+    this.ctx.beginPath();
+    if (type === 'chicken') {
+      this.ctx.arc(x, y - size / 2, size / 2, 0, Math.PI * 2);
+    } else {
+      this.ctx.roundRect(x - size / 2, y - size, size, size, 4);
+    }
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    // Eyes
+    this.ctx.fillStyle = 'black';
+    const eyeOffset = type === 'chicken' ? 3 : 6;
+    this.ctx.beginPath();
+    this.ctx.arc(x - eyeOffset, y - size + eyeOffset, 2, 0, Math.PI * 2);
+    this.ctx.arc(x + eyeOffset, y - size + eyeOffset, 2, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Product Bubble
+    if (state.hasProduct) {
+      this.drawProcessingBubble(iso, { isFinished: true });
+    }
+
+    // Hunger/Affection bar (small, discrete)
+    if (state.hunger < 30) {
+      this.ctx.fillStyle = '#f44336';
+      this.ctx.fillRect(x - 10, y - size - 15, 20 * (state.hunger / 100), 3);
+    }
   }
 
-  private darkenColor(color: string, factor: number): string {
-    // Simple color darkening
-    const hex = color.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16);
-    const g = parseInt(hex.substr(2, 2), 16);
-    const b = parseInt(hex.substr(4, 2), 16);
-    
-    const newR = Math.floor(r * (1 - factor));
-    const newG = Math.floor(g * (1 - factor));
-    const newB = Math.floor(b * (1 - factor));
-    
-    return `rgb(${newR}, ${newG}, ${newB})`;
+  private drawOre(iso: IsometricPoint, type: string): void {
+    // Assuming ores might map to rock decorations or specific ore assets
+    // For now, let's look for `ore_{type}` or just use a generic rock
+    const textureId = `ore_${type}`;
+    // Or maybe check if we have it?
+    // If not, use fallback
+
+    // We don't have ore assets yet, so let's fallback to simplified drawing
+    this.ctx.fillStyle = type === 'gold' ? '#FFD700' : '#A9A9A9';
+    this.ctx.beginPath();
+    this.ctx.ellipse(iso.screenX, iso.screenY - 5, 15, 10, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    this.ctx.ellipse(iso.screenX + 5, iso.screenY - 8, 5, 3, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+  }
+
+  private drawTree(iso: IsometricPoint, type: string): void {
+    const textureId = `tree_${type}`;
+    const texture = this.textureManager.getTexture(textureId);
+
+    // Calculate wind at this position
+    const noiseX = iso.screenX / 100;
+    const noiseY = iso.screenY / 100;
+    const wind = this.windSystem.getWindAt(noiseX, noiseY);
+
+    // Sway factor
+    const skewX = wind.x * 0.1;
+
+    this.ctx.save();
+    this.ctx.translate(iso.screenX, iso.screenY);
+
+    // Apply sway pivot at base
+    this.ctx.transform(1, 0, skewX, 1, 0, 0);
+
+    if (texture) {
+      // Trees are usually taller
+      const scale = 1.2;
+      const width = this.tileSize * scale;
+      const height = width * (texture.height / texture.width);
+
+      this.ctx.drawImage(
+        texture.image,
+        -width / 2,
+        -height,
+        width,
+        height
+      );
+    } else {
+      // Fallback drawing adjusted for local coords (0,0 is base)
+
+      // Trunk (Static base slightly affected?)
+      this.ctx.fillStyle = '#8B4513';
+      this.ctx.fillRect(-5, -30, 10, 30);
+
+      // Leaves
+      this.ctx.fillStyle = type === 'tree_pine' || type === 'pine' ? '#2E7D32' : '#4CAF50';
+
+      if (type.includes('pine')) {
+        // Triangle shape for pine
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, -90);
+        this.ctx.lineTo(20, -30);
+        this.ctx.lineTo(-20, -30);
+        this.ctx.closePath();
+        this.ctx.fill();
+      } else {
+        // Circle for oak
+        this.ctx.beginPath();
+        this.ctx.arc(0, -50, 25, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+    this.ctx.restore();
+  }
+
+  private drawPlayer(iso: IsometricPoint, voxel: Voxel): void {
+    const player = voxel.playerState;
+    if (!player) return;
+
+    const action = player.animation?.action || 'idle';
+    const isWorking = player.animation?.isPlaying;
+
+    // Shadow
+    this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    this.ctx.beginPath();
+    this.ctx.ellipse(iso.screenX, iso.screenY, 12, 6, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Bobbing animation for idle
+    const bob = action === 'idle' ? Math.sin(Date.now() / 200) * 2 : 0;
+    const anchorY = iso.screenY;
+
+    // Body Color based on action? Or typical clothes
+    this.ctx.fillStyle = '#1E88E5'; // Blue shirt
+
+    // Draw Body (Capsule)
+    this.ctx.beginPath();
+    this.ctx.ellipse(iso.screenX, anchorY - 15 + bob, 8, 12, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+    // Head
+    this.ctx.fillStyle = '#FFCC80'; // Skin tone
+    this.ctx.beginPath();
+    this.ctx.arc(iso.screenX, anchorY - 30 + bob, 8, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Hat (Straw hat!)
+    this.ctx.fillStyle = '#E6C348';
+    this.ctx.beginPath();
+    this.ctx.ellipse(iso.screenX, anchorY - 34 + bob, 12, 4, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.beginPath();
+    this.ctx.arc(iso.screenX, anchorY - 34 + bob, 6, Math.PI, 0);
+    this.ctx.fill();
+
+    // Arms / Tools
+    if (isWorking && action !== 'idle' && action !== 'walk') {
+      const toolColor = '#A1887F'; // Generic tool handle
+
+      // Simple swing animation
+      const swing = Math.sin(Date.now() / 100) * 20;
+
+      this.ctx.save();
+      this.ctx.translate(iso.screenX + 5, anchorY - 20 + bob);
+      this.ctx.rotate(swing * Math.PI / 180);
+
+      // Tool handle
+      this.ctx.fillStyle = toolColor;
+      this.ctx.fillRect(-2, -15, 4, 30);
+
+      // Tool Head (generic)
+      this.ctx.fillStyle = '#757575'; // Metal
+      if (action === 'hoe' || action === 'axe') {
+        this.ctx.fillRect(-8, -15, 16, 5);
+      } else if (action === 'pickaxe') {
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, -10);
+        this.ctx.lineTo(-10, -5);
+        this.ctx.lineTo(10, -5);
+        this.ctx.fill();
+      } else if (action === 'water') {
+        this.ctx.fillStyle = '#4FC3F7';
+        this.ctx.fillRect(-5, -10, 10, 10);
+      }
+
+      this.ctx.restore();
+    }
+  }
+
+  private drawRoad(iso: IsometricPoint, grade: 'gravel' | 'paved', lanes: 1 | 2, connections: number): void {
+    const textureId = `road_${grade}_${lanes}_mask${connections}`;
+    const texture = this.textureManager.getTexture(textureId);
+
+    if (texture) {
+      const width = this.tileSize;
+      const height = this.tileSize / 2;
+
+      this.ctx.drawImage(
+        texture.image,
+        iso.screenX - width / 2,
+        iso.screenY - height / 2,
+        width,
+        height
+      );
+    } else {
+      // Trigger lazy load
+      const svgData = DemoAssets.getRoadAsset(textureId);
+      this.textureManager.loadTexture({
+        id: textureId,
+        path: svgData
+      });
+
+      // Fallback drawing while loading
+      const color = grade === 'gravel' ? '#8D6E63' : '#333333';
+      this.ctx.fillStyle = color;
+      this.ctx.beginPath();
+      this.ctx.moveTo(iso.screenX, iso.screenY - this.tileSize / 4);
+      this.ctx.lineTo(iso.screenX + this.tileSize / 2, iso.screenY);
+      this.ctx.lineTo(iso.screenX, iso.screenY + this.tileSize / 4);
+      this.ctx.lineTo(iso.screenX - this.tileSize / 2, iso.screenY);
+      this.ctx.fill();
+    }
+  }
+
+  private drawVehicle(iso: IsometricPoint, voxel: Voxel): void {
+    const type = voxel.vehicleType;
+    const rotation = voxel.rotation || 0;
+    const isMoving = voxel.playerState?.animation?.action === 'walk'; // Approximation if player is inside
+
+    // Map rotation (0-360) to 4 iso directions (0: SE, 1: SW, 2: NW, 3: NE)
+    const directions = ['se', 'sw', 'nw', 'ne'];
+    const dirIndex = Math.floor(((rotation + 45) % 360) / 90);
+    const dirSuffix = directions[dirIndex] || 'se';
+
+    // Premium Component Animation for Tractor
+    if (type === 'tractor') {
+      // Check if we can use component rendering
+      this.drawTractorComponents(iso, voxel);
+      // If drawTractorComponents returns (e.g. not ready), we fall through?
+      // Actually, let's make drawTractorComponents void and handle fallback internally inside it?
+      // Better: check if loaded inside drawTractorComponents. 
+      // If it renders, we are good. But we need to know IF it rendered.
+      // Let's rely on checking if the textures are loaded.
+      if (this.textureManager.isTextureLoaded('vehicle_tractor_chassis')) {
+        return;
+      }
+    }
+
+    const textureId = `vehicle_${type}_${dirSuffix}`;
+    const texture = this.textureManager.getTexture(textureId);
+
+    if (texture) {
+      const time = Date.now();
+
+      // 1. DIESEL BOUNCE (Idle animation)
+      const bounce = Math.sin(time / 150) * 0.02;
+      const idleScale = 1.0 + (isMoving ? 0 : bounce);
+
+      // 2. MOVEMENT TILT
+      const tilt = isMoving ? Math.sin(time / 100) * 0.05 : 0;
+
+      const baseScale = 1.3;
+      const width = this.tileSize * baseScale * idleScale;
+      const height = width * (texture.height / texture.width);
+
+      // Higher-fidelity SVG pivot. 
+      const pivotY = 0.65;
+
+      this.ctx.save();
+      this.ctx.translate(iso.screenX, iso.screenY);
+
+      // Apply movement tilt
+      if (isMoving) {
+        this.ctx.rotate(tilt);
+      }
+
+      this.ctx.drawImage(
+        texture.image,
+        -width / 2,
+        -height * pivotY,
+        width,
+        height
+      );
+
+      // 3. EXHAUST PUFFS (if tractor)
+      if (type === 'tractor' && time % 500 < 50) {
+        // Emit particle logic could be added here or in world update
+      }
+
+      // Draw driver head if mounted
+      if (voxel.playerState) {
+        this.ctx.fillStyle = '#FFCC80';
+        this.ctx.beginPath();
+        this.ctx.arc(0, -height * 0.45, 6, 0, Math.PI * 2);
+        this.ctx.fill();
+        // Hat
+        this.ctx.fillStyle = '#E6C348';
+        this.ctx.beginPath();
+        this.ctx.ellipse(0, -height * 0.45 - 5, 8, 3, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+
+      this.ctx.restore();
+    } else {
+      // Fallback: draw placeholder box
+      const color = type === 'tractor' ? '#D32F2F' : '#1976D2'; // Red tractor, Blue truck
+
+      // Draw vehicle body
+      this.ctx.fillStyle = color;
+      // Boxy shape
+      const width = 40;
+      const height = 30;
+
+      const x = iso.screenX - width / 2;
+      const y = iso.screenY - height;
+
+      this.ctx.fillRect(x, y, width, height);
+
+      this.ctx.fillStyle = '#111';
+      this.ctx.fillRect(x + 5, y + 5, 10, 20); // Window?
+    }
+  }
+
+  private drawTractorComponents(iso: IsometricPoint, voxel: Voxel): void {
+    const time = Date.now();
+    const isMoving = voxel.playerState?.animation?.action === 'walk';
+
+    const parts = [
+      { id: 'vehicle_tractor_shadow', part: 'shadow', z: 0 },
+      { id: 'vehicle_tractor_wheels_rear', part: 'wheels_rear', z: 1 },
+      { id: 'vehicle_tractor_wheels_front', part: 'wheels_front', z: 2 },
+      { id: 'vehicle_tractor_chassis', part: 'chassis', z: 3, animated: true },
+    ];
+
+    // Check availability and load if needed
+    let allLoaded = true;
+    for (const p of parts) {
+      if (!this.textureManager.isTextureLoaded(p.id)) {
+        allLoaded = false;
+        // Lazy load using local constant source path
+        this.textureManager.loadTexture({
+          id: p.id,
+          path: `${TRACTOR_SOURCE}#${p.part}`,
+          scale: 1.5,
+          cacheKey: `vehicle_tractor_${p.part}`
+        }).catch(err => {
+          // Silently ignore loading errors to avoid spam, or log once
+        });
+      }
+    }
+
+    if (!allLoaded) {
+      return;
+    }
+
+    // Render Components
+    const scale = 1.3;
+    const chassisBounce = Math.sin(time / 150) * 2; // Pixel bounce
+    const tilt = isMoving ? Math.sin(time / 100) * 0.05 : 0;
+
+    this.ctx.save();
+    this.ctx.translate(iso.screenX, iso.screenY);
+    if (isMoving) this.ctx.rotate(tilt);
+
+    parts.sort((a, b) => a.z - b.z).forEach(p => {
+      const tex = this.textureManager.getTexture(p.id);
+      if (tex) {
+        const width = this.tileSize * scale;
+        const height = width * (tex.height / tex.width);
+        const pivotY = 0.65;
+
+        let offsetY = 0;
+        if (p.animated) {
+          offsetY = isMoving ? 0 : chassisBounce; // Bounce when IDLE
+        }
+
+        this.ctx.drawImage(tex.image, -width / 2, -height * pivotY + offsetY, width, height);
+      }
+    });
+
+    // Draw driver attached to chassis layer
+    if (voxel.playerState) {
+      const driverBounce = isMoving ? 0 : chassisBounce;
+      const height = (this.tileSize * scale) * (256 / 256); // approx
+
+      this.ctx.fillStyle = '#FFCC80';
+      this.ctx.beginPath();
+      this.ctx.arc(0, -height * 0.45 + driverBounce, 6, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      this.ctx.fillStyle = '#E6C348';
+      this.ctx.beginPath();
+      this.ctx.ellipse(0, -height * 0.45 - 5 + driverBounce, 8, 3, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+
+    // Particle Emitter for Exhaust
+    if (isMoving && time % 200 < 20) {
+      // Offset relative to center (approx where exhaust stack is)
+      // Rotation is in degrees.
+      const rotRad = (voxel.rotation || 0) * (Math.PI / 180);
+      // Exhaust is slightly behind and to left of center in model space
+      const offsetX = Math.cos(rotRad) * -0.3 - Math.sin(rotRad) * -0.2;
+      const offsetY = Math.sin(rotRad) * -0.3 + Math.cos(rotRad) * -0.2;
+
+      this.windSystem.addParticle({
+        x: voxel.x + 0.5 + offsetX,
+        y: voxel.y + 0.5 + offsetY,
+        z: (voxel.z || 0) + 1.2, // High up
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+        vz: 1.0 + Math.random(), // Upwards
+        life: 1.5,
+        maxLife: 1.5,
+        type: 'exhaust',
+        scale: 0.3 + Math.random() * 0.2, // Small puff
+        rotation: Math.random() * 6.28,
+        rotationSpeed: Math.random() - 0.5
+      });
+    }
+
+    this.ctx.restore();
   }
 
   /**
@@ -394,22 +1065,30 @@ export class IsometricRenderer {
    */
   render(world: GameWorld): void {
     const { width, height } = this.canvas;
-    
-    // Clear canvas with sky gradient
+
+    // Update wind
+    this.windSystem.update(0.016); // Approx 60fps dt
+
+    // Clear canvas
+    this.ctx.clearRect(0, 0, width, height);
+
+    // Draw background/sky
     const gradient = this.ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, '#87CEEB');
-    gradient.addColorStop(1, '#E0F6FF');
+    gradient.addColorStop(0, '#87CEEB'); // Sky blue
+    gradient.addColorStop(1, '#E0F7FA');
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, width, height);
-    
-    // Build voxel world
+
+    // Build and render voxels
     this.buildVoxelWorld(world);
-    
-    // Draw all voxels (already sorted by depth)
+
     this.voxels.forEach(voxel => {
       this.drawVoxel(voxel);
     });
-    
+
+    // Draw Wind Particles
+    this.drawWindParticles(world);
+
     // Draw UI overlay
     this.drawUI(world);
   }
@@ -417,26 +1096,46 @@ export class IsometricRenderer {
   private drawUI(world: GameWorld): void {
     // Draw info panel
     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    this.ctx.fillRect(0, this.canvas.height - 60, this.canvas.width, 60);
-    
+    this.ctx.roundRect(10, this.canvas.height - 70, 400, 60, 10);
+    this.ctx.fill();
+
     this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.font = '16px Arial';
+    this.ctx.font = 'bold 16px "Segoe UI", system-ui, sans-serif';
     this.ctx.textAlign = 'left';
     this.ctx.fillText(
-      `💰 ${world.player.coins} | ⭐ Level ${world.player.level} | 🏢 ${world.buildings.length} | ⛏️ ${world.oreDeposits.length}`,
-      20,
-      this.canvas.height - 25
+      `Coins: ${world.player.coins}`,
+      30,
+      this.canvas.height - 45
     );
-    
-    // Draw time
+    this.ctx.fillText(
+      `Level: ${world.player.level}`,
+      30,
+      this.canvas.height - 20
+    );
+
+    // Right side stats
+    this.ctx.fillText(
+      `Crops: ${world.farmPlots.filter(p => p.crop).length}`,
+      200,
+      this.canvas.height - 45
+    );
+    this.ctx.fillText(
+      `Day: ${world.totalDaysPlayed + 1}`,
+      200,
+      this.canvas.height - 20
+    );
+
+    // Clock
     const hour = Math.floor(world.dayTime / 60) % 24;
     const minute = Math.floor(world.dayTime % 60);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour % 12 || 12;
     const timeString = `${displayHour}:${minute.toString().padStart(2, '0')} ${ampm}`;
-    
+
+    this.ctx.fillStyle = '#FFD700';
+    this.ctx.font = 'bold 24px monospace';
     this.ctx.textAlign = 'right';
-    this.ctx.fillText(`🕐 ${timeString}`, this.canvas.width - 20, this.canvas.height - 25);
+    this.ctx.fillText(timeString, this.canvas.width - 30, 40);
   }
 
   /**
@@ -456,28 +1155,200 @@ export class IsometricRenderer {
    * Handle screen click to convert to world coordinates
    */
   screenToVoxel(screenX: number, screenY: number): { x: number; y: number } | null {
-    // This is complex for isometric - simplified version
-    const adjustedX = screenX - this.canvas.width / 2 - this.camera.x;
-    const adjustedY = screenY - this.canvas.height / 3 - this.camera.y;
-    
-    // Approximate conversion (would need proper math for accuracy)
-    const worldX = Math.round((adjustedX / (this.tileSize / 2) + adjustedY / (this.tileSize / 4)) / 2);
-    const worldY = Math.round((adjustedY / (this.tileSize / 4) - adjustedX / (this.tileSize / 2)) / 2);
-    
-    return { x: worldX, y: worldY };
+    // Inverse isometric projection
+    // This is an approximation/raycast logic equivalent
+
+    // Translation relative to camera center
+    const adjX = screenX - this.canvas.width / 2 - this.camera.x;
+    const adjY = screenY - this.canvas.height / 3 - this.camera.y;
+
+    // Solve the system of linear equations from worldToIsometric:
+    // isoX = (x - y) * (tileSize / 2)
+    // isoY = (x + y) * (tileSize / 4)
+
+    // We ignore Z for picking ground plane (z=0)
+
+    const tileWidth = this.tileSize;
+    const tileHeight = this.tileSize / 2;
+
+    // x = (isoY / (tileHeight/2) + isoX / (tileWidth/2)) / 2
+    // y = (isoY / (tileHeight/2) - isoX / (tileWidth/2)) / 2
+
+    // More precise math
+    const colRaw = (adjX / (tileWidth / 2) + adjY / (tileHeight / 2)) / 2;
+    const rowRaw = (adjY / (tileHeight / 2) - adjX / (tileWidth / 2)) / 2;
+
+    const x = Math.round(colRaw);
+    const y = Math.round(rowRaw);
+
+    return { x, y };
   }
 
-  /**
-   * Resize canvas
-   */
   resize(width: number, height: number): void {
     this.canvas.width = width;
     this.canvas.height = height;
   }
 
-  /**
-   * Clean up
-   */
+  private drawWindParticles(world: GameWorld): void {
+    const particles = this.windSystem.getParticles();
+
+    particles.forEach(p => {
+      const iso = this.worldToIsometric(p.x, p.y, p.z);
+
+      // Don't draw if off screen
+      if (iso.screenX < -50 || iso.screenX > this.canvas.width + 50 ||
+        iso.screenY < -50 || iso.screenY > this.canvas.height + 50) return;
+
+      this.ctx.save();
+      this.ctx.translate(iso.screenX, iso.screenY);
+      this.ctx.rotate(p.rotation);
+
+      this.ctx.globalAlpha = Math.min(1.0, p.life / 2); // Fade out
+
+      if (p.type === 'dandelion') {
+        // White fluffy dot
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 2 * p.scale, 0, Math.PI * 2);
+        this.ctx.fill();
+        // Little fluff halo
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 4 * p.scale, 0, Math.PI * 2);
+        this.ctx.fill();
+      } else if (p.type === 'pollen') {
+        // Tiny gold speck
+        this.ctx.fillStyle = '#FFD700';
+        this.ctx.fillRect(-1, -1, 2, 2);
+      } else if (p.type === 'leaf') {
+        // Spinning green leaf
+        this.ctx.fillStyle = '#4CAF50';
+        this.ctx.beginPath();
+        this.ctx.ellipse(0, 0, 4 * p.scale, 2 * p.scale, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+      } else if (p.type === 'exhaust') {
+        // Dark gray puff
+        this.ctx.fillStyle = `rgba(80, 80, 80, ${Math.max(0, p.life / p.maxLife * 0.5)})`;
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 5 * p.scale * (1 + (p.maxLife - p.life)), 0, Math.PI * 2); // Expands as it dies
+        this.ctx.fill();
+      }
+
+      this.ctx.restore();
+    });
+  }
+
+  private drawHappyReaction(iso: IsometricPoint, windStrength: number, topPivotY: number): void {
+    const intensity = (windStrength - 0.5) / 0.5;
+    const opacity = Math.min(1.0, intensity * 1.2);
+    const breath = Math.sin(Date.now() / 300) * 1.5;
+
+    this.ctx.save();
+
+    // Wind-specific offset: blush/sparkles shift slightly in direction of wind
+    const wind = this.windSystem.getWindAt(iso.screenX / 100, iso.screenY / 100);
+    const windShift = wind.x * 4;
+
+    const centerX = iso.screenX + windShift;
+    const centerY = topPivotY - 18 + breath; // Offset from the segment boundary
+
+    this.ctx.globalAlpha = opacity;
+
+    // 1. BLUSH (Shifted slightly with the breeze)
+    const blushColor = 'rgba(255, 182, 193, 0.6)';
+    this.ctx.fillStyle = blushColor;
+    this.ctx.beginPath(); this.ctx.arc(centerX - 10, centerY + 6, 5, 0, Math.PI * 2); this.ctx.fill();
+    this.ctx.beginPath(); this.ctx.arc(centerX + 10, centerY + 6, 5, 0, Math.PI * 2); this.ctx.fill();
+
+    // 2. EYES
+    this.ctx.strokeStyle = '#2D0B0B';
+    this.ctx.lineWidth = 2.5;
+    this.ctx.lineCap = 'round';
+
+    // Left Eye
+    this.ctx.beginPath(); this.ctx.arc(centerX - 8, centerY, 4, Math.PI * 1.1, Math.PI * 1.9); this.ctx.stroke();
+    // Right Eye
+    this.ctx.beginPath(); this.ctx.arc(centerX + 8, centerY, 4, Math.PI * 1.1, Math.PI * 1.9); this.ctx.stroke();
+
+    // 3. MOUTH
+    this.ctx.lineWidth = 2;
+    this.ctx.beginPath(); this.ctx.arc(centerX, centerY + 4, 3, 0.2, Math.PI - 0.2); this.ctx.stroke();
+
+    // 4. EMOTION SPARKLES
+    if (intensity > 0.8) {
+      this.drawCozySparkles(centerX, centerY, intensity);
+    }
+
+    this.ctx.restore();
+  }
+
+  private drawCozySparkles(x: number, y: number, intensity: number): void {
+    const time = Date.now();
+
+    // Sparkle 1 (Top Right)
+    const s1Scale = (Math.sin(time / 200) + 1) / 2 * 0.8;
+    this.drawSparkle(x + 12, y - 12, s1Scale, '#FFD700'); // Gold
+
+    // Sparkle 2 (Top Left)
+    const s2Scale = (Math.cos(time / 250) + 1) / 2 * 0.6;
+    this.drawSparkle(x - 14, y - 10, s2Scale, '#FFFFFF'); // White
+
+    // Sparkle 3 (Bottom Right - tiny)
+    const s3Scale = (Math.sin(time / 150 + 1) + 1) / 2 * 0.5;
+    this.drawSparkle(x + 16, y + 2, s3Scale, '#FFFACD'); // LemonChiffon
+  }
+
+  private drawSparkle(x: number, y: number, scale: number, color: string): void {
+    if (scale <= 0.1) return;
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.scale(scale, scale);
+    this.ctx.fillStyle = color;
+
+    // Draw 4-point star
+    this.ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      this.ctx.rotate(Math.PI / 2);
+      this.ctx.moveTo(0, 0);
+      this.ctx.quadraticCurveTo(2, 2, 0, 5); // Curve out
+      this.ctx.quadraticCurveTo(-2, 2, 0, 0); // Curve back
+    }
+    this.ctx.fill();
+    this.ctx.restore();
+  }
+
+  private drawProcessingBubble(iso: IsometricPoint, state: any): void {
+    const time = Date.now();
+    const float = Math.sin(time / 400) * 5;
+    const x = iso.screenX;
+    const y = iso.screenY - 60 + float;
+
+    // Draw bubble
+    this.ctx.fillStyle = 'white';
+    this.ctx.strokeStyle = '#333';
+    this.ctx.lineWidth = 2;
+
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, 15, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    if (state.isFinished) {
+      // Completed icon (e.g., Output Item id)
+      this.ctx.fillStyle = '#4CAF50';
+      this.ctx.textAlign = 'center';
+      this.ctx.font = 'bold 16px Arial';
+      this.ctx.fillText('!', x, y + 6);
+    } else {
+      // Progress bar
+      const progress = 1 - (state.duration / 300); // Placeholder max duration
+      this.ctx.fillStyle = '#E0E0E0';
+      this.ctx.fillRect(x - 10, y - 2, 20, 4);
+      this.ctx.fillStyle = '#2196F3';
+      this.ctx.fillRect(x - 10, y - 2, 20 * Math.max(0, progress), 4);
+    }
+  }
+
   dispose(): void {
     this.voxels = [];
   }

@@ -20,7 +20,7 @@ export interface AssetSource {
 export interface AssetRequirement {
   category: string;
   type: string;
-  style: 'realistic' | 'stylized' | 'cartoon' | 'low_poly';
+  style: 'realistic' | 'stylized' | 'cartoon' | 'low_poly' | 'functional' | 'particle' | 'colorful' | 'atmospheric' | 'glowing';
   polyCount: { min: number; max: number };
   textureResolution: number;
   lodRequired: boolean;
@@ -138,7 +138,7 @@ export class AssetFinder {
         license: 'TurboSquid License Agreement',
         apiAvailable: true
       },
-      
+
       // Free Sources
       {
         id: 'opengameart',
@@ -173,7 +173,7 @@ export class AssetFinder {
         license: 'CC0',
         apiAvailable: true
       },
-      
+
       // Commission Platforms
       {
         id: 'fiverr',
@@ -254,7 +254,7 @@ export class AssetFinder {
         priority: 'medium',
         budget: 250
       },
-      
+
       // Crops
       {
         category: 'crops',
@@ -278,7 +278,7 @@ export class AssetFinder {
         priority: 'medium',
         budget: 50
       },
-      
+
       // Nature
       {
         category: 'nature',
@@ -302,7 +302,7 @@ export class AssetFinder {
         priority: 'medium',
         budget: 50
       },
-      
+
       // Mining
       {
         category: 'mining',
@@ -389,8 +389,8 @@ export class AssetFinder {
     }
 
     // Check budget compatibility
-    if (requirements.budget < source.priceRange.min || 
-        (requirements.budget > 0 && requirements.budget < source.priceRange.max)) {
+    if (requirements.budget < source.priceRange.min ||
+      (requirements.budget > 0 && requirements.budget < source.priceRange.max)) {
       return false;
     }
 
@@ -468,7 +468,7 @@ export class AssetFinder {
   ): Promise<AssetCandidate[]> {
     // Simulated Unity Asset Store API search
     const candidates: AssetCandidate[] = [];
-    
+
     // In production, this would use actual Unity Asset Store API
     const mockResults = [
       {
@@ -548,7 +548,7 @@ export class AssetFinder {
   ): Promise<AssetCandidate[]> {
     // Simulated Unreal Marketplace API search
     const candidates: AssetCandidate[] = [];
-    
+
     // Mock results for Unreal Marketplace
     const mockResults = [
       {
@@ -615,7 +615,7 @@ export class AssetFinder {
   ): Promise<AssetCandidate[]> {
     // Simulated Sketchfab API search
     const candidates: AssetCandidate[] = [];
-    
+
     // Mock results for Sketchfab
     const mockResults = [
       {
@@ -682,7 +682,7 @@ export class AssetFinder {
   ): Promise<AssetCandidate[]> {
     // Simulated TurboSquid API search
     const candidates: AssetCandidate[] = [];
-    
+
     // Mock results for TurboSquid
     const mockResults = [
       {
@@ -749,7 +749,7 @@ export class AssetFinder {
   ): Promise<AssetCandidate[]> {
     // Simulated Poly Haven API search
     const candidates: AssetCandidate[] = [];
-    
+
     // Mock results for Poly Haven
     const mockResults = [
       {
@@ -833,7 +833,7 @@ export class AssetFinder {
     };
 
     // Calculate weighted overall score
-    evaluation.overallScore = 
+    evaluation.overallScore =
       evaluation.technicalScore * this.evaluationWeights.technical +
       evaluation.artisticScore * this.evaluationWeights.artistic +
       evaluation.performanceScore * this.evaluationWeights.performance +
@@ -851,7 +851,7 @@ export class AssetFinder {
 
     // Poly count compatibility
     if (candidate.metadata.polyCount < requirements.polyCount.min ||
-        candidate.metadata.polyCount > requirements.polyCount.max) {
+      candidate.metadata.polyCount > requirements.polyCount.max) {
       score -= 20;
     }
 
@@ -872,7 +872,7 @@ export class AssetFinder {
 
     // File format compatibility
     const requiredFormats = ['fbx', 'obj', 'glb'];
-    const hasRequiredFormat = requiredFormats.some(format => 
+    const hasRequiredFormat = requiredFormats.some(format =>
       candidate.metadata.fileFormats.includes(format)
     );
     if (!hasRequiredFormat) {
@@ -1046,7 +1046,7 @@ export class AssetFinder {
     for (const requirement of requirements) {
       const bestCandidates = this.searchHistory
         .flatMap(search => search.candidates)
-        .filter(candidate => 
+        .filter(candidate =>
           candidate.requirements.category === requirement.category &&
           candidate.requirements.type === requirement.type
         )

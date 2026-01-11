@@ -74,9 +74,10 @@ export class TerrainSystem {
   /**
    * Generate complete terrain world
    */
-  private generateTerrain(): void {
+  public generateTerrain(width: number = 0, height: number = 0): void {
+    if (width > 0) this.config.worldSize = width;
     this.voxels = [];
-    
+
     for (let x = 0; x < this.config.worldSize; x++) {
       for (let y = 0; y < this.config.worldSize; y++) {
         const terrainType = this.determineTerrainType(x, y);
@@ -105,7 +106,7 @@ export class TerrainSystem {
    */
   private determineTerrainType(x: number, y: number): TerrainVoxel['terrainType'] {
     const noise = this.perlinNoise(x * 0.1, y * 0.1);
-    
+
     // Create terrain patches
     if (noise < -0.3) return 'water';
     if (noise < -0.1) return 'sand';
@@ -144,7 +145,7 @@ export class TerrainSystem {
    */
   private calculateTerrainHeight(x: number, y: number, terrainType: TerrainVoxel['terrainType']): number {
     const baseHeight = 0;
-    
+
     switch (terrainType) {
       case 'water':
         return -2; // Water is lower
@@ -163,7 +164,7 @@ export class TerrainSystem {
   public getTerrainColor(voxel: TerrainVoxel): string {
     const { terrainType, moisture, fertility, season, variation } = voxel;
     const colors = this.terrainColors[terrainType];
-    
+
     switch (terrainType) {
       case 'grass':
         if (season === 'winter') return this.terrainColors.snow.fresh;
@@ -172,28 +173,28 @@ export class TerrainSystem {
         if (moisture < 30) return colors.dry;
         if (variation > 7) return colors.flowers;
         return colors.base;
-        
+
       case 'dirt':
         if (fertility > 70) return colors.fertilized;
         if (moisture > 60) return colors.tilled;
         if (moisture < 20) return colors.dry;
         return colors.path;
-        
+
       case 'water':
         if (season === 'winter') return this.terrainColors.snow.packed;
         if (voxel.height < -1) return colors.deep;
         return colors.still;
-        
+
       case 'stone':
         if (moisture > 80) return colors.mossy;
         return variation > 5 ? colors.dark : colors.gray;
-        
+
       case 'sand':
         return season === 'winter' ? this.terrainColors.snow.fresh : colors.beach;
-        
+
       case 'snow':
         return colors.fresh;
-        
+
       default:
         return '#808080';
     }
@@ -204,11 +205,11 @@ export class TerrainSystem {
    */
   public updateSeason(newSeason: Season): void {
     this.config.season = newSeason;
-    
+
     // Update all terrain voxels
     this.voxels.forEach(voxel => {
       voxel.season = newSeason;
-      
+
       // Seasonal effects
       if (newSeason === 'winter' && voxel.terrainType === 'grass') {
         voxel.height += 1; // Snow accumulation
@@ -253,7 +254,7 @@ export class TerrainSystem {
   public isFarmable(x: number, y: number): boolean {
     const voxel = this.getTerrainVoxel(x, y);
     if (!voxel) return false;
-    
+
     return voxel.terrainType === 'grass' || voxel.terrainType === 'dirt';
   }
 
@@ -263,7 +264,7 @@ export class TerrainSystem {
   public tillSoil(x: number, y: number): boolean {
     const voxel = this.getTerrainVoxel(x, y);
     if (!voxel || !this.isFarmable(x, y)) return false;
-    
+
     voxel.terrainType = 'dirt';
     voxel.moisture = Math.min(100, voxel.moisture + 20);
     voxel.fertility = Math.min(100, voxel.fertility + 10);
@@ -276,7 +277,7 @@ export class TerrainSystem {
   public waterTerrain(x: number, y: number, amount: number): boolean {
     const voxel = this.getTerrainVoxel(x, y);
     if (!voxel) return false;
-    
+
     voxel.moisture = Math.min(100, voxel.moisture + amount);
     return true;
   }
@@ -300,13 +301,13 @@ export class TerrainSystem {
     const distribution: Record<string, number> = {};
     let totalMoisture = 0;
     let totalFertility = 0;
-    
+
     this.voxels.forEach(voxel => {
       distribution[voxel.terrainType] = (distribution[voxel.terrainType] || 0) + 1;
       totalMoisture += voxel.moisture;
       totalFertility += voxel.fertility;
     });
-    
+
     return {
       totalVoxels: this.voxels.length,
       terrainDistribution: distribution,

@@ -524,4 +524,65 @@ export class PersistenceManager {
       console.error('Failed to clear data:', error);
     }
   }
+
+  // ============================================================================
+  // GENERIC SETTINGS
+  // ============================================================================
+
+  /**
+   * Save a generic setting value
+   */
+  public async saveSetting(key: string, value: string): Promise<void> {
+    if (!this.db) return;
+    try {
+      await this.db.runAsync(
+        `INSERT OR REPLACE INTO device_settings (key, value) VALUES (?, ?)`,
+        [key, value]
+      );
+    } catch (error) {
+      console.error(`Failed to save setting ${key}:`, error);
+    }
+  }
+
+  /**
+   * Get a generic setting value
+   */
+  public async getSetting(key: string): Promise<string | null> {
+    if (!this.db) return null;
+    try {
+      const result = await this.db.getFirstAsync<{ value: string }>(
+        'SELECT value FROM device_settings WHERE key = ?',
+        [key]
+      );
+      return result?.value || null;
+    } catch (error) {
+      console.error(`Failed to get setting ${key}:`, error);
+      return null;
+    }
+  }
+  /**
+   * Save economy state
+   */
+  public async saveEconomyState(state: any): Promise<void> {
+    if (!this.db) return;
+    try {
+      await this.saveSetting('economy_data', JSON.stringify(state));
+    } catch (error) {
+      console.error('Failed to save economy state:', error);
+    }
+  }
+
+  /**
+   * Load economy state
+   */
+  public async loadEconomyState(): Promise<any | null> {
+    if (!this.db) return null;
+    try {
+      const data = await this.getSetting('economy_data');
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error('Failed to load economy state:', error);
+      return null;
+    }
+  }
 }

@@ -204,7 +204,7 @@ export class CropSystem {
    */
   public plantCrop(x: number, y: number, cropType: string): boolean {
     const id = `${cropType}_${x}_${y}`;
-    
+
     if (this.crops.has(id)) {
       return false; // Crop already exists
     }
@@ -342,8 +342,9 @@ export class CropSystem {
    * Update crop quality based on health
    */
   private updateCropQuality(crop: CropVoxel): void {
-    const healthPercent = crop.health / this.cropConfigs.get(crop.cropType)?.maxHealth || 100;
-    
+    const config = this.cropConfigs.get(crop.cropType);
+    const healthPercent = config ? (crop.health / config.maxHealth) * 100 : 100;
+
     if (healthPercent >= 90) {
       crop.quality = 'excellent';
     } else if (healthPercent >= 70) {
@@ -511,7 +512,7 @@ export class CropSystem {
       // Stage distribution
       const cropConfig = this.cropConfigs.get(crop.cropType);
       if (!cropConfig) return;
-      
+
       const stageKey = this.getStageKey(crop.stage) as keyof typeof cropConfig.voxelHeight;
       stageDistribution[stageKey] = (stageDistribution[stageKey] || 0) + 1;
 

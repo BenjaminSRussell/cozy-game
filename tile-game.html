@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tile-Based 2.5D Game Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            overflow: hidden;
+        }
+        
+        .game-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .game-wrapper {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .title {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .title h1 {
+            margin: 0;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .title p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        canvas {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            display: block;
+            cursor: crosshair;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+            color: white;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .controls h3 {
+            margin: 0 0 10px 0;
+            color: #FFD700;
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            text-align: left;
+        }
+        
+        .control-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .key {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            padding: 40px;
+        }
+        
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-wrapper">
+            <div class="title">
+                <h1>🎮 Tile-Based 2.5D Game</h1>
+                <p>Isometric Farming World with Advanced Rendering</p>
+            </div>
+            
+            <div id="loading" class="loading">
+                Initializing tile system...
+            </div>
+            
+            <canvas id="gameCanvas" width="800" height="600" style="display: none;"></canvas>
+            
+            <div class="controls">
+                <h3>🎯 Controls</h3>
+                <div class="controls-grid">
+                    <div class="control-item">
+                        <span class="key">Click</span>
+                        <span>Move camera to position</span>
+                    </div>
+                    <div class="control-item">
+                        <span class="key">Scroll</span>
+                        <span>Zoom in/out</span>
+                    </div>
+                    <div class="control-item">
+                        <span class="key">WASD</span>
+                        <span>Pan camera</span>
+                    </div>
+                    <div class="control-item">
+                        <span class="key">Arrows</span>
+                        <span>Pan camera</span>
+                    </div>
+                </div>
+                
+                <div class="status" id="status">
+                    Camera: X=400, Y=300, Zoom=1.50x | FPS: 60
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Simple tile-based game implementation
+        class TileGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.camera = { x: 400, y: 300, z: 0, scale: 1.5, rotation: 0 };
+                this.tiles = [];
+                this.animationTime = 0;
+                this.lastTime = 0;
+                this.fps = 60;
+                this.frameCount = 0;
+                this.fpsTime = 0;
+                
+                this.init();
+            }
+            
+            init() {
+                // Generate simple tile map
+                this.generateTileMap();
+                
+                // Setup event listeners
+                this.setupEvents();
+                
+                // Hide loading, show canvas
+                document.getElementById('loading').style.display = 'none';
+                this.canvas.style.display = 'block';
+                
+                // Start game loop
+                this.gameLoop(0);
+            }
+            
+            generateTileMap() {
+                const tileSize = 32;
+                const mapWidth = 50;
+                const mapHeight = 50;
+                
+                for (let x = 0; x < mapWidth; x++) {
+                    for (let y = 0; y < mapHeight; y++) {
+                        // Generate elevation
+                        const centerX = mapWidth / 2;
+                        const centerY = mapHeight / 2;
+                        const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+                        const maxDistance = Math.sqrt(Math.pow(centerX, 2) + Math.pow(centerY, 2));
+                        const elevation = Math.max(0, 1 - (distance / maxDistance)) * 3;
+                        
+                        // Determine tile type
+                        let type = 'grass';
+                        if (elevation < 0.2) type = 'water';
+                        else if (elevation < 0.4) type = 'sand';
+                        else if (elevation < 0.8) type = 'grass';
+                        else if (elevation < 1.2) type = 'dirt';
+                        else type = 'stone';
+                        
+                        // Add some buildings and crops
+                        let building = null;
+                        let crop = null;
+                        
+                        if (Math.random() < 0.02 && type === 'grass') {
+                            building = ['house', 'barn', 'silo'][Math.floor(Math.random() * 3)];
+                        } else if (Math.random() < 0.1 && type === 'grass') {
+                            crop = ['wheat', 'carrot', 'tomato', 'corn'][Math.floor(Math.random() * 4)];
+                        }
+                        
+                        this.tiles.push({
+                            x, y,
+                            worldX: x * tileSize,
+                            worldY: y * tileSize,
+                            type,
+                            elevation,
+                            building,
+                            crop,
+                            variant: Math.floor(Math.random() * 4)
+                        });
+                    }
+                }
+            }
+            
+            setupEvents() {
+                // Mouse click to move camera
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    // Simple screen to world conversion (approximate)
+                    this.camera.x = x;
+                    this.camera.y = y;
+                });
+                
+                // Mouse wheel to zoom
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
+                    this.camera.scale = Math.max(0.5, Math.min(3, this.camera.scale * zoomDelta));
+                });
+                
+                // Keyboard controls
+                document.addEventListener('keydown', (e) => {
+                    const moveSpeed = 10;
+                    switch(e.key) {
+                        case 'ArrowUp':
+                        case 'w':
+                            this.camera.y -= moveSpeed;
+                            break;
+                        case 'ArrowDown':
+                        case 's':
+                            this.camera.y += moveSpeed;
+                            break;
+                        case 'ArrowLeft':
+                        case 'a':
+                            this.camera.x -= moveSpeed;
+                            break;
+                        case 'ArrowRight':
+                        case 'd':
+                            this.camera.x += moveSpeed;
+                            break;
+                    }
+                });
+            }
+            
+            gameLoop(currentTime) {
+                const deltaTime = (currentTime - this.lastTime) / 1000;
+                this.lastTime = currentTime;
+                
+                // Update FPS
+                this.frameCount++;
+                this.fpsTime += deltaTime;
+                if (this.fpsTime >= 1) {
+                    this.fps = this.frameCount;
+                    this.frameCount = 0;
+                    this.fpsTime = 0;
+                }
+                
+                // Update animation
+                this.animationTime += deltaTime;
+                
+                // Render
+                this.render();
+                
+                // Update status
+                this.updateStatus();
+                
+                // Continue loop
+                requestAnimationFrame((time) => this.gameLoop(time));
+            }
+            
+            render() {
+                const ctx = this.ctx;
+                const width = this.canvas.width;
+                const height = this.canvas.height;
+                
+                // Clear with gradient background
+                const gradient = ctx.createLinearGradient(0, 0, 0, height);
+                gradient.addColorStop(0, '#E6F3FF');
+                gradient.addColorStop(0.3, '#F0E6D2');
+                gradient.addColorStop(1, '#E8D5C4');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+                
+                // Sort tiles by depth (y + elevation)
+                const sortedTiles = [...this.tiles].sort((a, b) => {
+                    const depthA = a.y + a.elevation;
+                    const depthB = b.y + b.elevation;
+                    return depthA - depthB;
+                });
+                
+                // Render tiles
+                const tileSize = 32;
+                const scale = this.camera.scale;
+                
+                for (const tile of sortedTiles) {
+                    // Calculate screen position (simple isometric)
+                    const screenX = (tile.worldX - this.camera.x + width/2) * scale + (tile.worldY - this.camera.y + height/2) * scale * 0.5;
+                    const screenY = (tile.worldY - this.camera.y + height/2) * scale * 0.5 - tile.elevation * 8 * scale;
+                    
+                    // Skip if outside viewport
+                    if (screenX < -tileSize || screenX > width + tileSize || 
+                        screenY < -tileSize || screenY > height + tileSize) {
+                        continue;
+                    }
+                    
+                    // Draw tile shadow
+                    if (tile.elevation > 0.1) {
+                        ctx.save();
+                        ctx.globalAlpha = 0.2;
+                        ctx.fillStyle = '#000000';
+                        ctx.fillRect(screenX - 2, screenY + 2, tileSize * scale, tileSize * scale * 0.3);
+                        ctx.restore();
+                    }
+                    
+                    // Draw tile
+                    const colors = {
+                        grass: `hsl(120, 60%, ${50 + tile.variant * 5}%)`,
+                        dirt: `hsl(30, 40%, ${40 + tile.variant * 5}%)`,
+                        water: `hsl(200, 70%, ${50 + tile.variant * 3}%)`,
+                        sand: `hsl(45, 60%, ${70 + tile.variant * 3}%)`,
+                        stone: `hsl(0, 0%, ${60 + tile.variant * 5}%)`
+                    };
+                    
+                    ctx.fillStyle = colors[tile.type] || '#888';
+                    ctx.fillRect(screenX, screenY, tileSize * scale, tileSize * scale);
+                    
+                    // Draw building
+                    if (tile.building) {
+                        ctx.save();
+                        ctx.fillStyle = '#8B4513';
+                        ctx.fillRect(screenX + 4*scale, screenY - 10*scale, (tileSize-8)*scale, 12*scale);
+                        
+                        // Roof
+                        ctx.fillStyle = '#654321';
+                        ctx.beginPath();
+                        ctx.moveTo(screenX + 2*scale, screenY - 10*scale);
+                        ctx.lineTo(screenX + tileSize/2*scale, screenY - 20*scale);
+                        ctx.lineTo(screenX + (tileSize-2)*scale, screenY - 10*scale);
+                        ctx.closePath();
+                        ctx.fill();
+                        
+                        // Animated smoke
+                        if (tile.building === 'house') {
+                            const smokeY = screenY - 20*scale - Math.sin(this.animationTime * 2 + tile.x) * 5;
+                            ctx.fillStyle = 'rgba(128, 128, 128, 0.6)';
+                            ctx.beginPath();
+                            ctx.arc(screenX + tileSize/2*scale, smokeY, 3*scale, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                        
+                        ctx.restore();
+                    }
+                    
+                    // Draw crop
+                    if (tile.crop) {
+                        ctx.save();
+                        const swayX = Math.sin(this.animationTime * 2 + tile.x * 0.5) * 2;
+                        
+                        const cropColors = {
+                            wheat: '#DAA520',
+                            carrot: '#FF6347',
+                            tomato: '#FF6347',
+                            corn: '#FFD700'
+                        };
+                        
+                        ctx.fillStyle = cropColors[tile.crop] || '#00FF00';
+                        ctx.fillRect(screenX + tileSize/2*scale + swayX - 2*scale, screenY + 8*scale, 4*scale, 8*scale);
+                        ctx.restore();
+                    }
+                }
+            }
+            
+            updateStatus() {
+                const status = document.getElementById('status');
+                status.textContent = `Camera: X=${Math.round(this.camera.x)}, Y=${Math.round(this.camera.y)}, Zoom=${this.camera.scale.toFixed(2)}x | FPS: ${this.fps}`;
+            }
+        }
+        
+        // Start game when page loads
+        window.addEventListener('load', () => {
+            new TileGame();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Foundation -->
+  <rect x="15" y="110" width="98" height="10" fill="#666666" stroke="#444444" stroke-width="1"/>
+  
+  <!-- Main Structure -->
+  <rect x="20" y="50" width="88" height="60" fill="#8B4513" stroke="#5D2E0C" stroke-width="2"/>
+  
+  <!-- Wood Planks -->
+  <path d="M20 60 H108 M20 70 H108 M20 80 H108 M20 90 H108 M20 100 H108" stroke="#5D2E0C" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Wide Garage Door -->
+  <rect x="30" y="70" width="68" height="40" fill="#CD853F" stroke="#8B4513" stroke-width="2"/>
+  <!-- Door Panels -->
+  <rect x="34" y="74" width="28" height="32" fill="#DEB887" stroke="#8B4513" stroke-width="1"/>
+  <rect x="66" y="74" width="28" height="32" fill="#DEB887" stroke="#8B4513" stroke-width="1"/>
+  <!-- Door Cross-beams -->
+  <line x1="34" y1="74" x2="62" y2="106" stroke="#8B4513" stroke-width="1.5"/>
+  <line x1="62" y1="74" x2="34" y2="106" stroke="#8B4513" stroke-width="1.5"/>
+  <line x1="66" y1="74" x2="94" y2="106" stroke="#8B4513" stroke-width="1.5"/>
+  <line x1="94" y1="74" x2="66" y2="106" stroke="#8B4513" stroke-width="1.5"/>
+  
+  <!-- Roof -->
+  <polygon points="10,50 64,15 118,50" fill="#4682B4" stroke="#2B4F69" stroke-width="2"/>
+  
+  <!-- Side Windows -->
+  <rect x="22" y="60" width="6" height="8" fill="#B0E0E6" stroke="#4682B4" stroke-width="1"/>
+  <rect x="100" y="60" width="6" height="8" fill="#B0E0E6" stroke="#4682B4" stroke-width="1"/>
+
+  <!-- Details -->
+  <circle cx="62" cy="100" r="1.5" fill="#5D2E0C"/>
+  <circle cx="66" cy="100" r="1.5" fill="#5D2E0C"/>
+</svg>

@@ -12,6 +12,7 @@ import { BuildingSystem } from '../rendering/BuildingSystem';
 import { MiningSystem } from '../rendering/MiningSystem';
 import { DecorationSystem } from '../rendering/DecorationSystem';
 import { FreeAssetDownloader } from '../tools/FreeAssetDownloader';
+import { ShellManager } from '../rendering/ShellManager';
 
 export interface GameConfig {
   renderer: 'webgl2' | 'webgl1' | 'canvas2d';
@@ -51,24 +52,25 @@ export interface LaunchProgress {
 export class GameLauncher {
   private canvas: HTMLCanvasElement;
   private config: GameConfig;
-  private assetLoader: AssetLoader;
-  private renderer: Renderer3D;
-  private terrainSystem: TerrainSystem;
-  private cropSystem: CropSystem;
-  private buildingSystem: BuildingSystem;
-  private miningSystem: MiningSystem;
-  private decorationSystem: DecorationSystem;
-  private assetDownloader: FreeAssetDownloader;
-  
-  private gameState: GameState;
-  private launchProgress: LaunchProgress;
+  private assetLoader!: AssetLoader;
+  private renderer!: Renderer3D;
+  private terrainSystem!: TerrainSystem;
+  private cropSystem!: CropSystem;
+  private buildingSystem!: BuildingSystem;
+  private miningSystem!: MiningSystem;
+  private decorationSystem!: DecorationSystem;
+  private assetDownloader!: FreeAssetDownloader;
+  private shellManager!: ShellManager;
+
+  private gameState!: GameState;
+  private launchProgress!: LaunchProgress;
   private progressCallback?: (progress: LaunchProgress) => void;
   private animationFrame?: number;
 
   constructor(canvas: HTMLCanvasElement, config: GameConfig) {
     this.canvas = canvas;
     this.config = config;
-    
+
     this.initializeGameState();
     this.initializeSystems();
   }
@@ -106,17 +108,24 @@ export class GameLauncher {
   private initializeSystems(): void {
     // Initialize asset loader
     this.assetLoader = new AssetLoader(this.config.performance.textureResolution * 1024 * 1024);
-    
+
     // Initialize renderer
     this.renderer = new Renderer3D(this.canvas, this.assetLoader);
-    
+
     // Initialize game systems
-    this.terrainSystem = new TerrainSystem();
+    this.terrainSystem = new TerrainSystem({
+      tileSize: 1,
+      voxelHeight: 1,
+      worldSize: 50,
+      season: 'summer',
+      moistureMap: [],
+      fertilityMap: []
+    });
     this.cropSystem = new CropSystem();
     this.buildingSystem = new BuildingSystem();
     this.miningSystem = new MiningSystem();
     this.decorationSystem = new DecorationSystem();
-    
+
     // Initialize asset downloader
     this.assetDownloader = new FreeAssetDownloader();
   }
@@ -133,26 +142,26 @@ export class GameLauncher {
     try {
       // Phase 1: Download and load assets
       await this.downloadAssets();
-      
+
       // Phase 2: Initialize renderer
       await this.initializeRenderer();
-      
+
       // Phase 3: Initialize game systems
       await this.initializeGameSystems();
-      
+
       // Phase 4: Generate world
       await this.generateWorld();
-      
+
       // Phase 5: Initialize player
       await this.initializePlayer();
-      
+
       // Phase 6: Start game loop
       await this.startGameLoop();
-      
+
       // Game successfully launched!
       this.gameState.launchTime = performance.now() - startTime;
       this.gameState.initialized = true;
-      
+
       this.updateProgress({
         stage: 'Launched',
         progress: 1.0,
@@ -165,7 +174,7 @@ export class GameLauncher {
 
     } catch (error) {
       console.error('Game launch failed:', error);
-      this.launchProgress.errors.push(error.toString());
+      this.launchProgress.errors.push(String(error));
       throw error;
     }
   }
@@ -216,7 +225,7 @@ export class GameLauncher {
 
     // Configure renderer based on quality settings
     this.updateRendererSettings();
-    
+
     // Preload critical assets
     await this.assetLoader.preloadCriticalAssets((progress) => {
       this.updateProgress({
@@ -229,6 +238,10 @@ export class GameLauncher {
         errors: []
       });
     });
+
+    // Initialize shell mapping for pseudo-3D grass
+    this.shellManager = new ShellManager(this.renderer);
+    this.renderer.setShellManager(this.shellManager);
 
     this.gameState.rendererReady = true;
   }
@@ -293,20 +306,20 @@ export class GameLauncher {
 
     // Initialize terrain
     this.terrainSystem.generateTerrain(50, 50);
-    
-    // Initialize crops
-    this.cropSystem.initializeCrops();
-    
+
+    // Initialize crops (already initialized in constructor)
+    // this.cropSystem.initializeCrops();
+
     // Initialize buildings
     this.buildingSystem.placeBuilding(5, 5, 'house', 1);
     this.buildingSystem.placeBuilding(10, 10, 'barn', 1);
     this.buildingSystem.placeBuilding(15, 5, 'shed', 1);
-    
+
     // Initialize mining
     this.miningSystem.createMineEntrance(20, 20, 5);
     this.miningSystem.createOreDeposit(25, 25, 1, 'copper');
     this.miningSystem.createOreDeposit(30, 30, 2, 'iron');
-    
+
     // Initialize decorations
     this.decorationSystem.placeTree(8, 8, 'oak');
     this.decorationSystem.placeTree(12, 12, 'pine');
@@ -332,8 +345,8 @@ export class GameLauncher {
     });
 
     // Generate terrain voxels
-    const terrainVoxels = this.terrainSystem.getAllVoxels();
-    
+    const terrainVoxels = this.terrainSystem.getAllTerrainVoxels();
+
     // Add terrain to renderer
     for (const voxel of terrainVoxels) {
       this.renderer.addObject({
@@ -390,8 +403,8 @@ export class GameLauncher {
         lodLevel: 0,
         distance: 0,
         boundingBox: {
-          min: [building.x - building.footprint.width/2, building.z - building.height/2, building.y - building.footprint.depth/2],
-          max: [building.x + building.footprint.width/2, building.z + building.height/2, building.y + building.footprint.depth/2]
+          min: [building.x - building.footprint.width / 2, building.z - building.height / 2, building.y - building.footprint.depth / 2],
+          max: [building.x + building.footprint.width / 2, building.z + building.height / 2, building.y + building.footprint.depth / 2]
         }
       });
     }
@@ -491,7 +504,7 @@ export class GameLauncher {
       const rect = this.canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
-      
+
       this.handleWorldClick(x, y);
     });
 
@@ -506,7 +519,7 @@ export class GameLauncher {
       const rect = this.canvas.getBoundingClientRect();
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
-      
+
       this.handleWorldClick(x, y);
     });
   }
@@ -517,7 +530,7 @@ export class GameLauncher {
   private handleWorldClick(x: number, y: number): void {
     // Convert screen coordinates to world coordinates
     const worldPos = this.screenToWorld(x, y);
-    
+
     // Check what was clicked
     const building = this.buildingSystem.getBuildingAt(worldPos.x, worldPos.z);
     if (building) {
@@ -531,7 +544,7 @@ export class GameLauncher {
       return;
     }
 
-    const ore = this.miningSystem.getOreAt(worldPos.x, worldPos.z);
+    const ore = this.miningSystem.getOreAt(worldPos.x, worldPos.z, 0);
     if (ore) {
       this.handleOreClick(ore);
       return;
@@ -580,10 +593,10 @@ export class GameLauncher {
   private screenToWorld(screenX: number, screenY: number): { x: number; y: number; z: number } {
     // Simplified screen to world conversion
     // In production, use proper raycasting
-    
+
     const worldX = (screenX / this.canvas.width) * 50 - 25;
     const worldZ = (screenY / this.canvas.height) * 50 - 25;
-    
+
     return { x: worldX, y: 0, z: worldZ };
   }
 
@@ -592,7 +605,7 @@ export class GameLauncher {
    */
   private handleBuildingClick(building: any): void {
     console.log(`Clicked building: ${building.buildingType} at (${building.x}, ${building.y})`);
-    
+
     // Show building UI
     this.showBuildingUI(building);
   }
@@ -602,7 +615,7 @@ export class GameLauncher {
    */
   private handleCropClick(crop: any): void {
     console.log(`Clicked crop: ${crop.cropType} at (${crop.x}, ${crop.y})`);
-    
+
     // Harvest if ready
     if (crop.stage === 'harvestable') {
       this.cropSystem.harvestCrop(crop.x, crop.y);
@@ -614,7 +627,7 @@ export class GameLauncher {
    */
   private handleOreClick(ore: any): void {
     console.log(`Clicked ore: ${ore.oreType} at (${ore.x}, ${ore.y})`);
-    
+
     // Mine ore
     const result = this.miningSystem.mineOre(ore.x, ore.y, ore.depth, 1);
     if (result.success) {
@@ -627,11 +640,11 @@ export class GameLauncher {
    */
   private handleDecorationClick(decoration: any): void {
     console.log(`Clicked decoration: ${decoration.decorationType} at (${decoration.x}, ${decoration.y})`);
-    
+
     // Collect if harvestable
     if (decoration.harvestable) {
       const result = this.decorationSystem.collectFromDecoration(decoration.x, decoration.y);
-      if (result.success) {
+      if (result.success && result.item) {
         console.log(`Collected ${result.item.type} x${result.item.quantity}`);
       }
     }
@@ -642,7 +655,7 @@ export class GameLauncher {
    */
   private handleTerrainClick(x: number, z: number): void {
     console.log(`Clicked terrain at (${x}, ${z})`);
-    
+
     // Plant crop or place building based on current tool
     // For now, plant wheat
     this.cropSystem.plantCrop(x, z, 'wheat');
@@ -715,7 +728,7 @@ export class GameLauncher {
    */
   private updateGameSystems(deltaTime: number): void {
     // Update crop growth
-    this.cropSystem.updateCrops(deltaTime);
+    this.cropSystem.updateCrops(deltaTime, this.renderer.getEnvironment().season);
 
     // Update animations
     const allObjects = this.renderer.getRenderObjects();
@@ -771,7 +784,7 @@ export class GameLauncher {
     launchTime: number;
   } {
     const stats = this.renderer.getStats();
-    
+
     return {
       fps: this.gameState.currentFPS,
       memoryUsage: this.gameState.memoryUsage,
@@ -809,13 +822,13 @@ export class GameLauncher {
     const saveData = localStorage.getItem('cozyGameSave');
     if (saveData) {
       const data = JSON.parse(saveData);
-      
+
       this.terrainSystem.importTerrain(data.terrain);
       this.cropSystem.importCrops(data.crops);
       this.buildingSystem.importBuildings(data.buildings);
       this.miningSystem.importMiningData(data.mining);
       this.decorationSystem.importDecorations(data.decorations);
-      
+
       console.log('Game loaded!');
     }
   }
@@ -827,10 +840,10 @@ export class GameLauncher {
     if (this.animationFrame) {
       cancelAnimationFrame(this.animationFrame);
     }
-    
+
     this.renderer.dispose();
     this.assetLoader.dispose();
-    
+
     console.log('Game stopped');
   }
 

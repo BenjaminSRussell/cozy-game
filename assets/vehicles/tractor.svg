@@ -1,0 +1,136 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- PREMIUM ISOMETRIC TRACTOR | 2:1 Projection | High Fidelity -->
+  <defs>
+    <!-- Deep Red Metallic Body Gradient -->
+    <linearGradient id="premiumRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5252"/>
+      <stop offset="40%" stop-color="#D32F2F"/>
+      <stop offset="100%" stop-color="#8B0000"/>
+    </linearGradient>
+
+    <!-- Chrome Gradient -->
+    <linearGradient id="chromeFinish" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#90A4AE"/>
+      <stop offset="51%" stop-color="#546E7A"/>
+      <stop offset="100%" stop-color="#CFD8DC"/>
+    </linearGradient>
+
+    <!-- Glass Reflection -->
+    <linearGradient id="glassGlance" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E1F5FE" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#81D4FA" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#0288D1" stop-opacity="0.5"/>
+    </linearGradient>
+
+    <!-- Tire Rubber -->
+    <radialGradient id="tireRubber" cx="50%" cy="50%" r="50%">
+      <stop offset="80%" stop-color="#212121"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+    
+    <!-- Filter: Soft Drop Shadow -->
+    <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+      <feOffset dx="0" dy="8" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.4"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(128, 160)">
+    
+    <!-- GROUND SHADOW -->
+    <path id="shadow" d="M-60,10 L0,40 L60,10 L0,-20 Z" fill="#000000" opacity="0.3" filter="url(#softShadow)" transform="translate(0, 10) scale(1, 0.5)"/>
+
+    <!-- === REAR WHEELS GROUP === -->
+    <g id="wheels_rear">
+      <!-- === REAR WHEEL ASSEMBLY (Left) === -->
+    <g transform="translate(-45, 0)">
+       <!-- Inner Tire Wall -->
+       <path d="M-15,-25 L15,-10 L15,25 L-15,10 Z" fill="#111" /> 
+       <!-- Tread Surface -->
+       <path d="M-15,-25 L-25,-30 L5,-15 L15,-10 Z" fill="#333"/>
+       <!-- Outer Face (Isometric Circle Approx) -->
+       <ellipse cx="-20" cy="-5" rx="15" ry="25" fill="url(#tireRubber)" transform="rotate(-15)"/>
+       <!-- Rim -->
+       <ellipse cx="-20" cy="-5" rx="8" ry="12" fill="#FFC107" transform="rotate(-15)"/>
+       <ellipse cx="-20" cy="-5" rx="3" ry="5" fill="#333" transform="rotate(-15)"/>
+    </g>
+
+    <!-- === REAR WHEEL ASSEMBLY (Right) === -->
+    <g transform="translate(45, 0)">
+       <path d="M-15,-25 L15,-10 L15,25 L-15,10 Z" fill="#111" />
+       <path d="M-15,-25 L-25,-30 L5,-15 L15,-10 Z" fill="#333"/>
+       <ellipse cx="-20" cy="-5" rx="15" ry="25" fill="url(#tireRubber)" transform="rotate(-15)"/>
+       <ellipse cx="-20" cy="-5" rx="8" ry="12" fill="#FFC107" transform="rotate(-15)"/>
+       <ellipse cx="-20" cy="-5" rx="3" ry="5" fill="#333" transform="rotate(-15)"/>
+    </g>
+    </g>
+
+    <!-- === CHASSIS GROUP === -->
+    <g id="chassis">
+      <!-- === CHASSIS === -->
+    <!-- Main Engine Block -->
+    <g transform="translate(0, -10)">
+       <path d="M-20,0 L20,20 L20,-30 L-20,-50 Z" fill="#B71C1C"/> <!-- Side Dark -->
+       <path d="M-20,-50 L20,-30 L0,-40 L-40,-60 Z" fill="#FF5252"/> <!-- Top Bright -->
+       <path d="M-40,-60 L0,-40 L0,10 L-40,-10 Z" fill="url(#premiumRed)"/> <!-- Left Face -->
+       
+       <!-- Grille Details -->
+       <path d="M-38,-15 L-2,-5 L-2,-35 L-38,-45 Z" fill="#263238" opacity="0.8"/>
+       <line x1="-38" y1="-40" x2="-2" y2="-10" stroke="#CFD8DC" stroke-width="1"/>
+       <line x1="-38" y1="-35" x2="-2" y2="-5" stroke="#CFD8DC" stroke-width="1"/>
+    </g>
+
+    <!-- === CABIN === -->
+    <g transform="translate(10, -40)">
+       <!-- Floor -->
+       <path d="M-30,0 L10,20 L50,0 L10,-20 Z" fill="#455A64"/>
+       
+       <!-- Pillars -->
+       <path d="M-25,-5 L-25,-55" stroke="#37474F" stroke-width="4"/>
+       <path d="M5,-15 L5,-65" stroke="#37474F" stroke-width="4"/>
+       <path d="M45,-5 L45,-55" stroke="#37474F" stroke-width="4"/>
+       
+       <!-- Roof -->
+       <path d="M-30,-60 L10,-40 L50,-60 L10,-80 Z" fill="#E53935"/> <!-- Top -->
+       <path d="M-30,-60 L10,-40 L10,-35 L-30,-55 Z" fill="#B71C1C"/> <!-- Thickness Left -->
+       <path d="M10,-40 L50,-60 L50,-55 L10,-35 Z" fill="#C62828"/> <!-- Thickness Right -->
+       
+       <!-- Glass (Front) -->
+       <path d="M-25,-55 L5,-65 L5,-15 L-25,-5 Z" fill="url(#glassGlance)"/>
+       <!-- Glass (Side) -->
+       <path d="M5,-65 L45,-55 L45,-5 L5,-15 Z" fill="url(#glassGlance)" opacity="0.8"/>
+       <path d="M5,-65 L45,-55 L45,-5 L5,-15 Z" fill="url(#glassGlance)" opacity="0.8"/>
+    </g>
+    
+    <!-- === EXHAUST STACK === -->
+    <rect x="-10" y="-80" width="6" height="40" fill="url(#chromeFinish)" transform="translate(-10, 0)"/>
+    <ellipse cx="-17" cy="-80" rx="3" ry="1.5" fill="#546E7A"/>
+    
+    <!-- Particle Emitter Point for Renderer -->
+    <circle cx="-17" cy="-85" r="0" id="exhaustPoint"/>
+    </g>
+
+    <!-- === FRONT WHEELS === -->
+    <g id="wheels_front" transform="translate(0,0)">
+    <g transform="translate(-30, 25)">
+       <ellipse cx="0" cy="0" rx="10" ry="16" fill="url(#tireRubber)" transform="rotate(-15)"/>
+       <ellipse cx="0" cy="0" rx="5" ry="8" fill="#FFC107" transform="rotate(-15)"/>
+    </g>
+    <g transform="translate(10, 45)">
+       <ellipse cx="0" cy="0" rx="10" ry="16" fill="url(#tireRubber)" transform="rotate(-15)"/>
+       <ellipse cx="0" cy="0" rx="5" ry="8" fill="#FFC107" transform="rotate(-15)"/>
+    </g>
+    </g>
+
+
+
+  </g>
+</svg>

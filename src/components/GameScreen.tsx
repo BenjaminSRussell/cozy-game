@@ -4,6 +4,9 @@ import { useGameStore } from '../store/gameStore';
 import { CropStage, DamBuilding } from '../types/game';
 import { DrawingScreen } from './DrawingScreen';
 import { MarketplaceScreen } from './MarketplaceScreen';
+import { LoadingScreen } from './LoadingScreen';
+import { AdvancedParticleSystem } from '../engine/ParticleSystem';
+import { DemoAssets } from '../assets/DemoAssets';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -21,63 +24,111 @@ interface GameScreenProps {
  */
 const SVG_ASSETS = {
   // Crops
-  wheat: '/assets/crops/wheat.svg',
-  carrot: '/assets/crops/carrot.svg',
-  tomato: '/assets/crops/tomato.svg',
-  corn: '/assets/crops/wheat.svg', // Using wheat as fallback
-  
+  wheat: './assets/crops/wheat.svg',
+  carrot: './assets/crops/carrot.svg',
+  tomato: './assets/crops/tomato.svg',
+  corn: './assets/crops/corn.svg',
+  apple: './assets/crops/apple.svg',
+  asparagus: './assets/crops/asparagus.svg',
+  blueberry: './assets/crops/blueberry.svg',
+  broccoli: './assets/crops/broccoli.svg',
+  cabbage: './assets/crops/cabbage.svg',
+  cherry: './assets/crops/cherry.svg',
+  cucumber: './assets/crops/cucumber.svg',
+  garlic: './assets/crops/garlic.svg',
+  grape: './assets/crops/grape.svg',
+  lettuce: './assets/crops/lettuce.svg',
+  mushroom: './assets/crops/mushroom.svg',
+  onion: './assets/crops/onion.svg',
+  peach: './assets/crops/peach.svg',
+  pear: './assets/crops/pear.svg',
+  pepper: './assets/crops/pepper.svg',
+  potato: './assets/crops/potato.svg',
+  pumpkin: './assets/crops/pumpkin.svg',
+  radish: './assets/crops/radish.svg',
+  spinach: './assets/crops/spinach.svg',
+  strawberry: './assets/crops/strawberry.svg',
+  watermelon: './assets/crops/watermelon.svg',
+
+  // Phase-specific crop assets
+  'apple_seed': './assets/crops/phase1/apple.svg',
+  'carrot_seed': './assets/crops/phase1/carrot.svg',
+  'tomato_seed': './assets/crops/phase1/tomato.svg',
+  'corn_seed': './assets/crops/phase1/corn.svg',
+  'asparagus_seed': './assets/crops/phase1/asparagus.svg',
+  'blueberry_seed': './assets/crops/phase1/blueberry.svg',
+  'broccoli_seed': './assets/crops/phase1/broccoli.svg',
+  'cabbage_seed': './assets/crops/phase1/cabbage.svg',
+  'cherry_seed': './assets/crops/phase1/cherry.svg',
+  'cucumber_seed': './assets/crops/phase1/cucumber.svg',
+  'garlic_seed': './assets/crops/phase1/garlic.svg',
+  'grape_seed': './assets/crops/phase1/grape.svg',
+  'lettuce_seed': './assets/crops/phase1/lettuce.svg',
+  'mushroom_seed': './assets/crops/phase1/mushroom.svg',
+  'onion_seed': './assets/crops/phase1/onion.svg',
+  'peach_seed': './assets/crops/phase1/peach.svg',
+  'pear_seed': './assets/crops/phase1/pear.svg',
+  'pepper_seed': './assets/crops/phase1/pepper.svg',
+  'potato_seed': './assets/crops/phase1/potato.svg',
+  'pumpkin_seed': './assets/crops/phase1/pumpkin.svg',
+  'radish_seed': './assets/crops/phase1/radish.svg',
+  'spinach_seed': './assets/crops/phase1/spinach.svg',
+  'strawberry_seed': './assets/crops/phase1/strawberry.svg',
+  'watermelon_seed': './assets/crops/phase1/watermelon.svg',
+  'wheat_seed': './assets/crops/phase1/wheat.svg',
+
   // Buildings
-  barn: '/assets/buildings/barn.svg',
-  shed: '/assets/buildings/shed.svg',
-  house: '/assets/buildings/house.svg',
-  fence: '/assets/buildings/fence.svg',
-  small_dam: '/assets/buildings/well.svg', // Using well as dam placeholder
-  medium_dam: '/assets/buildings/bridge.svg', // Using bridge as dam placeholder
-  large_dam: '/assets/buildings/tower.svg', // Using tower as dam placeholder
-  
+  barn: './assets/buildings/barn.svg',
+  shed: './assets/buildings/shed.svg',
+  house: './assets/buildings/house.svg',
+  fence: './assets/buildings/fence.svg',
+  small_dam: './assets/buildings/well.svg',
+  medium_dam: './assets/buildings/bridge.svg',
+  large_dam: './assets/buildings/tower.svg',
+
   // Decorations
-  tree_oak: '/assets/decorations/tree_oak.svg',
-  bench: '/assets/decorations/bench.svg',
-  lamp: '/assets/decorations/lamp.svg',
-  
+  tree_oak: './assets/decorations/tree_oak.svg',
+  bench: './assets/decorations/bench.svg',
+  lamp: './assets/decorations/lamp.svg',
+
   // Land types
-  grassland: '/assets/tiles/grass.svg',
-  forest: '/assets/decorations/tree_oak.svg',
-  riverfront: '/assets/tiles/water.svg',
-  hillside: '/assets/tiles/dirt.svg',
-  
+  grassland: './assets/tiles/grass.svg',
+  forest: './assets/decorations/tree_oak.svg',
+  riverfront: './assets/tiles/water.svg',
+  hillside: './assets/tiles/dirt.svg',
+
   // Tiles
-  grass: '/assets/tiles/grass.svg',
-  dirt: '/assets/tiles/dirt.svg',
-  water: '/assets/tiles/water.svg',
-  
+  grass: './assets/tiles/grass.svg',
+  dirt: './assets/tiles/dirt.svg',
+  water: './assets/tiles/water.svg',
+
   // Grass variations for overgrowth phases
-  grass_fresh: '/assets/tiles/grass.svg',
-  grass_growing: '/assets/decorations/tree_oak.svg',
-  grass_overgrown: '/assets/decorations/tree_oak.svg',
-  
+  grass_fresh: './assets/tiles/grass.svg',
+  grass_growing: './assets/decorations/tree_oak.svg',
+  grass_overgrown: './assets/decorations/tree_oak.svg',
+
   // Seasonal flowers
-  flower_pink: '/assets/seasons/spring/flower_pink.svg',
-  flower_red: '/assets/seasons/spring/flower_red.svg',
-  flower_white: '/assets/seasons/spring/flower_white.svg',
-  flower_yellow: '/assets/seasons/spring/flower_yellow.svg',
-  
-  // Seasonal effects
-  heat_shimmer: '/assets/seasons/summer/heat_shimmer.svg',
-  sun_glare: '/assets/seasons/summer/sun_glare.svg',
-  leaf_orange: '/assets/seasons/fall/leaf_orange.svg',
-  leaf_red: '/assets/seasons/fall/leaf_red.svg',
-  leaf_gold: '/assets/seasons/fall/leaf_gold.svg',
-  leaf_brown: '/assets/seasons/fall/leaf_brown.svg',
-  snow_flake: '/assets/seasons/winter/snow_flake.svg',
-  snow_coverage: '/assets/seasons/winter/snow_coverage.svg',
-  
-  // Tools
-  rake: '/assets/tools/rake.svg',
-  snow_shovel: '/assets/tools/snow_shovel.svg',
-  lawn_mower_basic: '/assets/tools/lawn_mower_basic.svg',
-  lawn_mower_pro: '/assets/tools/lawn_mower_pro.svg',
-  lawn_mower_riding: '/assets/tools/lawn_mower_riding.svg',
+  flower_pink: './assets/seasons/spring/flower_pink.svg',
+  flower_red: './assets/seasons/spring/flower_red.svg',
+  flower_white: './assets/seasons/spring/flower_white.svg',
+  flower_yellow: './assets/seasons/spring/flower_yellow.svg',
+
+  // Seasonal effects - create these if they don't exist
+  heat_shimmer: './assets/tiles/water.svg', // temporary fallback
+  sun_glare: './assets/tiles/grass.svg', // temporary fallback
+  leaf_orange: './assets/crops/carrot.svg', // temporary fallback
+  leaf_red: './assets/crops/tomato.svg', // temporary fallback
+  leaf_gold: './assets/crops/corn.svg', // temporary fallback
+  leaf_brown: './assets/tiles/dirt.svg', // temporary fallback
+  snow_flake: './assets/tiles/grass.svg', // temporary fallback
+  snow_coverage: './assets/tiles/water.svg', // temporary fallback
+
+  // Tools - create these if they don't exist
+  rake: './assets/tiles/dirt.svg', // temporary fallback
+  snow_shovel: './assets/tiles/water.svg', // temporary fallback
+  lawn_mower_basic: './assets/buildings/shed.svg', // temporary fallback
+  lawn_mower_pro: './assets/buildings/barn.svg', // temporary fallback
+  lawn_mower_riding: './assets/buildings/house.svg', // temporary fallback
 };
 
 /**
@@ -89,6 +140,27 @@ const CROP_TYPES = {
   carrot: { name: 'Carrot', svg: SVG_ASSETS.carrot, growthDays: 2, sellValue: 40, color: '#FF8C00' },
   tomato: { name: 'Tomato', svg: SVG_ASSETS.tomato, growthDays: 4, sellValue: 60, color: '#DC143C' },
   corn: { name: 'Corn', svg: SVG_ASSETS.corn, growthDays: 5, sellValue: 75, color: '#FFD700' },
+  apple: { name: 'Apple', svg: SVG_ASSETS.apple, growthDays: 6, sellValue: 80, color: '#FF6347' },
+  asparagus: { name: 'Asparagus', svg: SVG_ASSETS.asparagus, growthDays: 3, sellValue: 45, color: '#32CD32' },
+  blueberry: { name: 'Blueberry', svg: SVG_ASSETS.blueberry, growthDays: 4, sellValue: 55, color: '#4169E1' },
+  broccoli: { name: 'Broccoli', svg: SVG_ASSETS.broccoli, growthDays: 4, sellValue: 50, color: '#228B22' },
+  cabbage: { name: 'Cabbage', svg: SVG_ASSETS.cabbage, growthDays: 5, sellValue: 45, color: '#90EE90' },
+  cherry: { name: 'Cherry', svg: SVG_ASSETS.cherry, growthDays: 6, sellValue: 90, color: '#DC143C' },
+  cucumber: { name: 'Cucumber', svg: SVG_ASSETS.cucumber, growthDays: 3, sellValue: 35, color: '#32CD32' },
+  garlic: { name: 'Garlic', svg: SVG_ASSETS.garlic, growthDays: 2, sellValue: 30, color: '#F0E68C' },
+  grape: { name: 'Grape', svg: SVG_ASSETS.grape, growthDays: 5, sellValue: 70, color: '#6A0DAD' },
+  lettuce: { name: 'Lettuce', svg: SVG_ASSETS.lettuce, growthDays: 2, sellValue: 25, color: '#90EE90' },
+  mushroom: { name: 'Mushroom', svg: SVG_ASSETS.mushroom, growthDays: 3, sellValue: 40, color: '#8B4513' },
+  onion: { name: 'Onion', svg: SVG_ASSETS.onion, growthDays: 4, sellValue: 35, color: '#DDA0DD' },
+  peach: { name: 'Peach', svg: SVG_ASSETS.peach, growthDays: 5, sellValue: 75, color: '#FFDAB9' },
+  pear: { name: 'Pear', svg: SVG_ASSETS.pear, growthDays: 5, sellValue: 70, color: '#DAA520' },
+  pepper: { name: 'Pepper', svg: SVG_ASSETS.pepper, growthDays: 3, sellValue: 45, color: '#FF6347' },
+  potato: { name: 'Potato', svg: SVG_ASSETS.potato, growthDays: 4, sellValue: 40, color: '#D2691E' },
+  pumpkin: { name: 'Pumpkin', svg: SVG_ASSETS.pumpkin, growthDays: 7, sellValue: 100, color: '#FF8C00' },
+  radish: { name: 'Radish', svg: SVG_ASSETS.radish, growthDays: 2, sellValue: 30, color: '#FF6347' },
+  spinach: { name: 'Spinach', svg: SVG_ASSETS.spinach, growthDays: 2, sellValue: 35, color: '#228B22' },
+  strawberry: { name: 'Strawberry', svg: SVG_ASSETS.strawberry, growthDays: 4, sellValue: 65, color: '#DC143C' },
+  watermelon: { name: 'Watermelon', svg: SVG_ASSETS.watermelon, growthDays: 8, sellValue: 120, color: '#228B22' },
 };
 
 /**
@@ -114,6 +186,19 @@ const BUILDING_TYPES = {
   small_dam: { name: 'Small Dam', svg: SVG_ASSETS.small_dam, cost: 400, description: 'Basic flood protection (2x2 blocks)' },
   medium_dam: { name: 'Medium Dam', svg: SVG_ASSETS.medium_dam, cost: 800, description: 'Better flood protection (3x3 blocks)' },
   large_dam: { name: 'Large Dam', svg: SVG_ASSETS.large_dam, cost: 1500, description: 'Maximum flood protection (4x4 blocks)' },
+  // New home types with unique benefits
+  cottage: { name: 'Cottage', svg: DemoAssets.getBuildingAsset('cottage'), cost: 200, description: 'Boosts crop growth speed by 10%' },
+  ranch_house: { name: 'Ranch House', svg: DemoAssets.getBuildingAsset('ranch_house'), cost: 250, description: 'Increases animal product value by 15%' },
+  forest_cabin: { name: 'Forest Cabin', svg: DemoAssets.getBuildingAsset('forest_cabin'), cost: 300, description: 'Reduces tree regrowth time by 20%' },
+  victorian_house: { name: 'Victorian House', svg: DemoAssets.getBuildingAsset('victorian_house'), cost: 800, description: 'Generates 50 coins per day' },
+  farmhouse: { name: 'Farmhouse', svg: DemoAssets.getBuildingAsset('farmhouse'), cost: 1000, description: 'Increases storage capacity by 50%' },
+  lake_house: { name: 'Lake House', svg: DemoAssets.getBuildingAsset('lake_house'), cost: 1200, description: 'Reduces crop water needs by 25%' },
+  mansion: { name: 'Mansion', svg: DemoAssets.getBuildingAsset('mansion'), cost: 3000, description: 'Generates 200 coins per day' },
+  treehouse_estate: { name: 'Treehouse Estate', svg: DemoAssets.getBuildingAsset('treehouse_estate'), cost: 4000, description: 'Boosts all nearby building efficiency by 30%' },
+  beach_villa: { name: 'Beach Villa', svg: DemoAssets.getBuildingAsset('beach_villa'), cost: 5000, description: 'Attracts tourists for special events and bonuses' },
+  greenhouse_home: { name: 'Greenhouse Home', svg: DemoAssets.getBuildingAsset('greenhouse_home'), cost: 6000, description: 'Year-round growing regardless of season' },
+  windmill_residence: { name: 'Windmill Residence', svg: DemoAssets.getBuildingAsset('windmill_residence'), cost: 7000, description: 'Provides free energy for tools and equipment' },
+  wizard_tower: { name: 'Wizard Tower', svg: DemoAssets.getBuildingAsset('wizard_tower'), cost: 10000, description: 'Magical crop bonuses and weather protection' },
 };
 
 /**
@@ -158,7 +243,7 @@ const getSVGImage = async (svgPath: string): Promise<HTMLImageElement | null> =>
   if (svgCache[svgPath]) {
     return svgCache[svgPath];
   }
-  
+
   try {
     const img = await loadSVG(svgPath);
     svgCache[svgPath] = img;
@@ -174,7 +259,7 @@ const getSVGImage = async (svgPath: string): Promise<HTMLImageElement | null> =>
  */
 const preloadCropSVGs = async () => {
   const allSvgPaths = Object.values(SVG_ASSETS);
-  
+
   const loadPromises = allSvgPaths.map(async (path) => {
     try {
       await getSVGImage(path);
@@ -182,7 +267,7 @@ const preloadCropSVGs = async () => {
       console.warn(`Failed to preload SVG: ${path}`);
     }
   });
-  
+
   await Promise.allSettled(loadPromises);
 };
 
@@ -203,21 +288,29 @@ const preloadCropSVGs = async () => {
  * @returns React component displaying the game interface
  */
 export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
-  const { 
-    world, 
-    plantCrop, 
-    harvestCrop, 
-    waterCrop, 
-    createFarmPlot, 
-    addCoins, 
-    addExperience, 
-    placeBuilding, 
-    createOreDeposit, 
+  const {
+    world,
+    plantCrop,
+    harvestCrop,
+    waterCrop,
+    createFarmPlot,
+    addCoins,
+    addExperience,
+    placeBuilding,
+    createOreDeposit,
     mineOre,
     buildDam,
     purchaseLandExpansion,
     getAvailableLandExpansions,
-    getPurchasedLandExpansions
+    getPurchasedLandExpansions,
+    // Home system functions
+    purchaseHome,
+    upgradeHome,
+    claimHomeBenefits,
+    getAvailableHomes,
+    getOwnedHomes,
+    getTotalHomeBenefits,
+    removeHome
   } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selectedAction, setSelectedAction] = useState<'plant' | 'water' | 'harvest' | 'build' | 'mine' | null>(null);
@@ -266,7 +359,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
   // Seasonal visual effects system
   const getSeasonalEffects = (season: string, dayInSeason: number) => {
     const progress = dayInSeason / 30; // 0 to 1 throughout the season
-    
+
     switch (season) {
       case 'spring':
         return {
@@ -277,7 +370,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
           skyGradient: ['#87CEEB', '#E0F6FF'], // Light blue sky
           groundTint: { r: 139, g: 195, b: 139 }, // Fresh soil
         };
-      
+
       case 'summer':
         return {
           // Heat waves gradually increase (much slower)
@@ -287,7 +380,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
           groundTint: { r: 160, g: 120, b: 80 }, // Dry, sun-baked soil
           heatWave: true,
         };
-      
+
       case 'fall':
         return {
           // Falling leaves gradually increase (much slower)
@@ -297,7 +390,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
           skyGradient: ['#FFA500', '#FFE4B5'], // Orange sunset sky
           groundTint: { r: 139, g: 90, b: 43 }, // Rich autumn soil
         };
-      
+
       case 'winter':
         return {
           // Snow gradually increases from light dusting to moderate coverage
@@ -308,7 +401,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
           groundTint: { r: 245, g: 245, b: 245 }, // Snow-covered ground
           snow: true,
         };
-      
+
       default:
         return {
           flowerDensity: 0,
@@ -357,327 +450,342 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-    // Clear canvas with gradient background
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#E8F4F8');
-    gradient.addColorStop(1, '#F0E6D2');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Clear canvas with gradient background
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#E8F4F8');
+      gradient.addColorStop(1, '#F0E6D2');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Calculate current season and day in season
-    const currentSeason = world?.season || 'spring';
-    const dayInSeason = world ? Math.floor(world.totalDaysPlayed % 30) : 0;
-    const seasonalEffects = getSeasonalEffects(currentSeason, dayInSeason);
+      // Calculate current season and day in season
+      const currentSeason = world?.season || 'spring';
+      const dayInSeason = world ? Math.floor(world.totalDaysPlayed % 30) : 0;
+      const seasonalEffects = getSeasonalEffects(currentSeason, dayInSeason);
 
-    // Draw seasonal sky
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.4);
-    skyGradient.addColorStop(0, seasonalEffects.skyGradient[0]);
-    skyGradient.addColorStop(1, seasonalEffects.skyGradient[1]);
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.4);
+      // Draw seasonal sky
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.4);
+      skyGradient.addColorStop(0, seasonalEffects.skyGradient[0]);
+      skyGradient.addColorStop(1, seasonalEffects.skyGradient[1]);
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height * 0.4);
 
-    // Draw ground with SVG grass system
-    const groundY = canvas.height * 0.4;
-    const groundHeight = canvas.height * 0.6;
-    const grassTileSize = 40; // Size for grass SVG tiles
-    
-    // Base ground layer with seasonal tint
-    const groundColor = `rgb(${seasonalEffects.groundTint.r}, ${seasonalEffects.groundTint.g}, ${seasonalEffects.groundTint.b})`;
-    ctx.fillStyle = groundColor;
-    ctx.fillRect(0, groundY, canvas.width, groundHeight);
-    
-    // Draw grass tiles with SVG files and overgrowth phases
-    const tilesX = Math.ceil(canvas.width / grassTileSize);
-    const tilesY = Math.ceil(groundHeight / grassTileSize);
-    
-    for (let x = 0; x < tilesX; x++) {
-      for (let y = 0; y < tilesY; y++) {
-        const pixelX = x * grassTileSize;
-        const pixelY = groundY + y * grassTileSize;
-        
-        // Calculate overgrowth phase based on game days and position
-        const daysSinceStart = world ? Math.floor(world.totalDaysPlayed) : 0;
-        const localDays = daysSinceStart + Math.floor((x + y) / 10); // Regional variation
-        const overgrowthPhase = getOvergrowthPhase(localDays);
-        
-        // Skip some tiles for variety (create bare patches)
-        const seed = x * 1000 + y;
-        const shouldGrow = random(0, 1, seed) > 0.1;
-        
-        if (shouldGrow) {
-          // Select appropriate SVG based on overgrowth phase
-          let grassSvg = SVG_ASSETS.grass_fresh; // Default fresh grass
-          
-          if (overgrowthPhase === 'growing') {
-            grassSvg = SVG_ASSETS.grass_growing; // Use tree as taller grass placeholder
-          } else if (overgrowthPhase === 'overgrown') {
-            grassSvg = SVG_ASSETS.grass_overgrown; // Use tree for overgrown effect
-          }
-          
-          // Draw grass SVG if loaded, otherwise fallback
-          if (svgsLoaded && grassSvg && svgCache[grassSvg]) {
-            const grassImage = svgCache[grassSvg];
-            if (grassImage) {
-              ctx.save();
-              
-              // Apply scaling based on overgrowth phase
-              let scale = 1;
-              if (overgrowthPhase === 'fresh') scale = 0.8;
-              if (overgrowthPhase === 'growing') scale = 1.0;
-              if (overgrowthPhase === 'overgrown') scale = 1.2;
-              
-              // Apply random rotation for variety
-              const rotation = random(0, Math.PI * 2, seed + 100) * 0.1; // Small rotation
-              ctx.translate(pixelX + grassTileSize / 2, pixelY + grassTileSize / 2);
-              ctx.rotate(rotation);
-              
-              // Apply seasonal grass tinting
-              const grassTint = `rgb(${seasonalEffects.grassTint.r}, ${seasonalEffects.grassTint.g}, ${seasonalEffects.grassTint.b})`;
-              ctx.globalAlpha = 0.6;
-              ctx.fillStyle = grassTint;
-              ctx.fillRect(-grassTileSize / 2, -grassTileSize / 2, grassTileSize, grassTileSize);
-              
-              // Apply overgrowth phase tinting
-              if (overgrowthPhase === 'growing') {
-                ctx.globalAlpha = 0.3;
-                ctx.fillStyle = '#7CB342';
-                ctx.fillRect(-grassTileSize / 2, -grassTileSize / 2, grassTileSize, grassTileSize);
-              } else if (overgrowthPhase === 'overgrown') {
-                ctx.globalAlpha = 0.4;
-                ctx.fillStyle = '#558B2F';
-                ctx.fillRect(-grassTileSize / 2, -grassTileSize / 2, grassTileSize, grassTileSize);
-              }
-              
-              ctx.globalAlpha = 0.7;
-              ctx.drawImage(grassImage, -grassTileSize / 2, -grassTileSize / 2, grassTileSize * scale, grassTileSize * scale);
-              ctx.restore();
+      // Draw ground with SVG grass system
+      const groundY = canvas.height * 0.4;
+      const groundHeight = canvas.height * 0.6;
+      const grassTileSize = 40; // Size for grass SVG tiles
+
+      // Base ground layer with seasonal tint
+      const groundColor = `rgb(${seasonalEffects.groundTint.r}, ${seasonalEffects.groundTint.g}, ${seasonalEffects.groundTint.b})`;
+      ctx.fillStyle = groundColor;
+      ctx.fillRect(0, groundY, canvas.width, groundHeight);
+
+      // Draw grass tiles with SVG files and overgrowth phases
+      const tilesX = Math.ceil(canvas.width / grassTileSize);
+      const tilesY = Math.ceil(groundHeight / grassTileSize);
+
+      for (let x = 0; x < tilesX; x++) {
+        for (let y = 0; y < tilesY; y++) {
+          const pixelX = x * grassTileSize;
+          const pixelY = groundY + y * grassTileSize;
+
+          // Calculate overgrowth phase based on game days and position
+          const daysSinceStart = world ? Math.floor(world.totalDaysPlayed) : 0;
+          const localDays = daysSinceStart + Math.floor((x + y) / 10); // Regional variation
+          const overgrowthPhase = getOvergrowthPhase(localDays);
+
+          // Skip some tiles for variety (create bare patches)
+          const seed = x * 1000 + y;
+          const shouldGrow = random(0, 1, seed) > 0.1;
+
+          if (shouldGrow) {
+            // Select appropriate SVG based on overgrowth phase
+            let grassSvg = SVG_ASSETS.grass_fresh; // Default fresh grass
+
+            if (overgrowthPhase === 'growing') {
+              grassSvg = SVG_ASSETS.grass_growing; // Use tree as taller grass placeholder
+            } else if (overgrowthPhase === 'overgrown') {
+              grassSvg = SVG_ASSETS.grass_overgrown; // Use tree for overgrown effect
             }
-          } else {
-            // Fallback to colored rectangle when SVG not loaded
-            const grassTint = `rgb(${seasonalEffects.grassTint.r}, ${seasonalEffects.grassTint.g}, ${seasonalEffects.grassTint.b})`;
-            ctx.fillStyle = grassTint;
-            ctx.globalAlpha = 0.7;
-            ctx.fillRect(pixelX, pixelY, grassTileSize, grassTileSize);
-            ctx.globalAlpha = 1;
-          }
-          
-          // Add seasonal decorations
-          ctx.save();
-          
-          // Spring flowers with SVG rendering and density control
-          if (currentSeason === 'spring' && seasonalEffects.flowerDensity) {
-            const flowerCount = getFlowerDensity(seasonalEffects.flowerDensity, seed + 200);
-            
-            for (let i = 0; i < flowerCount; i++) {
-              const flowerColor = seasonalEffects.flowerColors ? 
-                seasonalEffects.flowerColors[Math.floor(random(0, seasonalEffects.flowerColors.length, seed + 300 + i))] : 
-                '#FF69B4';
-              
-              const flowerSvg = getFlowerSvg(flowerColor);
-              
-              // Try to render flower SVG, fallback to circle
-              if (svgsLoaded && flowerSvg && svgCache[flowerSvg]) {
-                const flowerImage = svgCache[flowerSvg];
-                if (flowerImage) {
-                  ctx.save();
-                  const flowerX = pixelX + random(8, grassTileSize - 8, seed + 400 + i);
-                  const flowerY = pixelY + random(8, grassTileSize - 8, seed + 500 + i);
-                  const flowerSize = random(6, 12, seed + 600 + i);
-                  const rotation = random(0, Math.PI * 2, seed + 700 + i);
-                  
-                  ctx.translate(flowerX, flowerY);
-                  ctx.rotate(rotation);
-                  ctx.globalAlpha = 0.9;
-                  ctx.drawImage(flowerImage, -flowerSize/2, -flowerSize/2, flowerSize, flowerSize);
-                  ctx.restore();
-                }
-              } else {
-                // Fallback to colored circle
-                ctx.fillStyle = flowerColor;
-                ctx.globalAlpha = 0.8;
-                ctx.beginPath();
-                ctx.arc(pixelX + random(8, grassTileSize - 8, seed + 400 + i), 
-                       pixelY + random(8, grassTileSize - 8, seed + 500 + i), 
-                       random(2, 4, seed + 600 + i), 0, Math.PI * 2);
-                ctx.fill();
-              }
-            }
-          }
-          
-          // Fall leaves with SVG rendering
-          if (currentSeason === 'fall' && seasonalEffects.leafDensity) {
-            const leafCount = getFlowerDensity(seasonalEffects.leafDensity, seed + 700);
-            
-            for (let i = 0; i < leafCount; i++) {
-              const leafColor = seasonalEffects.leafColors ? 
-                seasonalEffects.leafColors[Math.floor(random(0, seasonalEffects.leafColors.length, seed + 800 + i))] : 
-                '#D2691E';
-              
-              // Get appropriate leaf SVG based on color
-              let leafSvg = SVG_ASSETS.leaf_orange; // default
-              if (leafColor === '#DC143C') leafSvg = SVG_ASSETS.leaf_red;
-              else if (leafColor === '#FFD700') leafSvg = SVG_ASSETS.leaf_gold;
-              else if (leafColor === '#8B4513') leafSvg = SVG_ASSETS.leaf_brown;
-              
-              // Try to render leaf SVG, fallback to rectangle
-              if (svgsLoaded && leafSvg && svgCache[leafSvg]) {
-                const leafImage = svgCache[leafSvg];
-                if (leafImage) {
-                  ctx.save();
-                  const leafX = pixelX + random(8, grassTileSize - 8, seed + 900 + i);
-                  const leafY = pixelY + random(8, grassTileSize - 8, seed + 1000 + i);
-                  const leafSize = random(8, 14, seed + 1100 + i);
-                  const rotation = random(0, Math.PI * 2, seed + 1200 + i);
-                  
-                  ctx.translate(leafX, leafY);
-                  ctx.rotate(rotation);
-                  ctx.globalAlpha = 0.8;
-                  ctx.drawImage(leafImage, -leafSize/2, -leafSize/2, leafSize, leafSize);
-                  ctx.restore();
-                }
-              } else {
-                // Fallback to rotated rectangle
-                ctx.fillStyle = leafColor;
-                ctx.globalAlpha = 0.7;
+
+            // Draw grass SVG if loaded, otherwise fallback
+            if (svgsLoaded && grassSvg && svgCache[grassSvg]) {
+              const grassImage = svgCache[grassSvg];
+              if (grassImage) {
                 ctx.save();
-                ctx.translate(pixelX + random(8, grassTileSize - 8, seed + 900 + i), 
-                            pixelY + random(8, grassTileSize - 8, seed + 1000 + i));
-                ctx.rotate(random(0, Math.PI * 2, seed + 1100 + i));
-                ctx.fillRect(-3, -1.5, 6, 3);
+
+                // Apply scaling based on overgrowth phase
+                let scale = 1;
+                if (overgrowthPhase === 'fresh') scale = 0.8;
+                if (overgrowthPhase === 'growing') scale = 1.0;
+                if (overgrowthPhase === 'overgrown') scale = 1.2;
+
+                // Apply random rotation for variety
+                const rotation = random(0, Math.PI * 2, seed + 100) * 0.1; // Small rotation
+                ctx.translate(pixelX + grassTileSize / 2, pixelY + grassTileSize / 2);
+                ctx.rotate(rotation);
+
+                // Apply seasonal grass tinting
+                const grassTint = `rgb(${seasonalEffects.grassTint.r}, ${seasonalEffects.grassTint.g}, ${seasonalEffects.grassTint.b})`;
+                ctx.globalAlpha = 0.6;
+                ctx.fillStyle = grassTint;
+                ctx.fillRect(-grassTileSize / 2, -grassTileSize / 2, grassTileSize, grassTileSize);
+
+                // Apply overgrowth phase tinting
+                if (overgrowthPhase === 'growing') {
+                  ctx.globalAlpha = 0.3;
+                  ctx.fillStyle = '#7CB342';
+                  ctx.fillRect(-grassTileSize / 2, -grassTileSize / 2, grassTileSize, grassTileSize);
+                } else if (overgrowthPhase === 'overgrown') {
+                  ctx.globalAlpha = 0.4;
+                  ctx.fillStyle = '#558B2F';
+                  ctx.fillRect(-grassTileSize / 2, -grassTileSize / 2, grassTileSize, grassTileSize);
+                }
+
+                ctx.globalAlpha = 0.7;
+                ctx.drawImage(grassImage, -grassTileSize / 2, -grassTileSize / 2, grassTileSize * scale, grassTileSize * scale);
                 ctx.restore();
               }
+            } else {
+              // Fallback to colored rectangle when SVG not loaded
+              const grassTint = `rgb(${seasonalEffects.grassTint.r}, ${seasonalEffects.grassTint.g}, ${seasonalEffects.grassTint.b})`;
+              ctx.fillStyle = grassTint;
+              ctx.globalAlpha = 0.7;
+              ctx.fillRect(pixelX, pixelY, grassTileSize, grassTileSize);
+              ctx.globalAlpha = 1;
             }
-          }
-          
-          // Winter snow with SVG rendering
-          if (currentSeason === 'winter' && seasonalEffects.snowCoverage) {
-            const snowCount = getFlowerDensity(seasonalEffects.snowCoverage, seed + 1200);
-            
-            for (let i = 0; i < snowCount; i++) {
-              // Try to render snow flake SVG, fallback to coverage
-              if (svgsLoaded && SVG_ASSETS.snow_flake && svgCache[SVG_ASSETS.snow_flake]) {
-                const snowImage = svgCache[SVG_ASSETS.snow_flake];
-                if (snowImage) {
-                  ctx.save();
-                  const snowX = pixelX + random(8, grassTileSize - 8, seed + 1300 + i);
-                  const snowY = pixelY + random(8, grassTileSize - 8, seed + 1400 + i);
-                  const snowSize = random(4, 8, seed + 1500 + i);
-                  const rotation = random(0, Math.PI * 2, seed + 1600 + i);
-                  
-                  ctx.translate(snowX, snowY);
-                  ctx.rotate(rotation);
-                  ctx.globalAlpha = (seasonalEffects.snowIntensity || 0.5) * 0.8;
-                  ctx.drawImage(snowImage, -snowSize/2, -snowSize/2, snowSize, snowSize);
-                  ctx.restore();
+
+            // Add seasonal decorations
+            ctx.save();
+
+            // Spring flowers with SVG rendering and density control
+            if (currentSeason === 'spring' && seasonalEffects.flowerDensity) {
+              const flowerCount = getFlowerDensity(seasonalEffects.flowerDensity, seed + 200);
+
+              for (let i = 0; i < flowerCount; i++) {
+                const flowerColor = seasonalEffects.flowerColors ?
+                  seasonalEffects.flowerColors[Math.floor(random(0, seasonalEffects.flowerColors.length, seed + 300 + i))] :
+                  '#FF69B4';
+
+                const flowerSvg = getFlowerSvg(flowerColor);
+
+                // Try to render flower SVG, fallback to circle
+                if (svgsLoaded && flowerSvg && svgCache[flowerSvg]) {
+                  const flowerImage = svgCache[flowerSvg];
+                  if (flowerImage) {
+                    ctx.save();
+                    const flowerX = pixelX + random(8, grassTileSize - 8, seed + 400 + i);
+                    const flowerY = pixelY + random(8, grassTileSize - 8, seed + 500 + i);
+                    const flowerSize = random(6, 12, seed + 600 + i);
+                    const rotation = random(0, Math.PI * 2, seed + 700 + i);
+
+                    ctx.translate(flowerX, flowerY);
+                    ctx.rotate(rotation);
+                    ctx.globalAlpha = 0.9;
+                    ctx.drawImage(flowerImage, -flowerSize / 2, -flowerSize / 2, flowerSize, flowerSize);
+                    ctx.restore();
+                  }
+                } else {
+                  // Fallback to colored circle
+                  ctx.fillStyle = flowerColor;
+                  ctx.globalAlpha = 0.8;
+                  ctx.beginPath();
+                  ctx.arc(pixelX + random(8, grassTileSize - 8, seed + 400 + i),
+                    pixelY + random(8, grassTileSize - 8, seed + 500 + i),
+                    random(2, 4, seed + 600 + i), 0, Math.PI * 2);
+                  ctx.fill();
                 }
-              } else {
-                // Fallback to snow coverage
-                ctx.fillStyle = '#FFFFFF';
-                ctx.globalAlpha = (seasonalEffects.snowIntensity || 0.5) * 0.6;
-                ctx.fillRect(pixelX, pixelY, grassTileSize, grassTileSize);
               }
             }
+
+            // Fall leaves with SVG rendering
+            if (currentSeason === 'autumn' && seasonalEffects.leafDensity) {
+              const leafCount = getFlowerDensity(seasonalEffects.leafDensity, seed + 700);
+
+              for (let i = 0; i < leafCount; i++) {
+                const leafColor = seasonalEffects.leafColors ?
+                  seasonalEffects.leafColors[Math.floor(random(0, seasonalEffects.leafColors.length, seed + 800 + i))] :
+                  '#D2691E';
+
+                // Get appropriate leaf SVG based on color
+                let leafSvg = SVG_ASSETS.leaf_orange; // default
+                if (leafColor === '#DC143C') leafSvg = SVG_ASSETS.leaf_red;
+                else if (leafColor === '#FFD700') leafSvg = SVG_ASSETS.leaf_gold;
+                else if (leafColor === '#8B4513') leafSvg = SVG_ASSETS.leaf_brown;
+
+                // Try to render leaf SVG, fallback to rectangle
+                if (svgsLoaded && leafSvg && svgCache[leafSvg]) {
+                  const leafImage = svgCache[leafSvg];
+                  if (leafImage) {
+                    ctx.save();
+                    const leafX = pixelX + random(8, grassTileSize - 8, seed + 900 + i);
+                    const leafY = pixelY + random(8, grassTileSize - 8, seed + 1000 + i);
+                    const leafSize = random(8, 14, seed + 1100 + i);
+                    const rotation = random(0, Math.PI * 2, seed + 1200 + i);
+
+                    ctx.translate(leafX, leafY);
+                    ctx.rotate(rotation);
+                    ctx.globalAlpha = 0.8;
+                    ctx.drawImage(leafImage, -leafSize / 2, -leafSize / 2, leafSize, leafSize);
+                    ctx.restore();
+                  }
+                } else {
+                  // Fallback to rotated rectangle
+                  ctx.fillStyle = leafColor;
+                  ctx.globalAlpha = 0.7;
+                  ctx.save();
+                  ctx.translate(pixelX + random(8, grassTileSize - 8, seed + 900 + i),
+                    pixelY + random(8, grassTileSize - 8, seed + 1000 + i));
+                  ctx.rotate(random(0, Math.PI * 2, seed + 1100 + i));
+                  ctx.fillRect(-3, -1.5, 6, 3);
+                  ctx.restore();
+                }
+              }
+            }
+
+            // Winter snow with SVG rendering
+            if (currentSeason === 'winter' && seasonalEffects.snowCoverage) {
+              const snowCount = getFlowerDensity(seasonalEffects.snowCoverage, seed + 1200);
+
+              for (let i = 0; i < snowCount; i++) {
+                // Try to render snow flake SVG, fallback to coverage
+                if (svgsLoaded && SVG_ASSETS.snow_flake && svgCache[SVG_ASSETS.snow_flake]) {
+                  const snowImage = svgCache[SVG_ASSETS.snow_flake];
+                  if (snowImage) {
+                    ctx.save();
+                    const snowX = pixelX + random(8, grassTileSize - 8, seed + 1300 + i);
+                    const snowY = pixelY + random(8, grassTileSize - 8, seed + 1400 + i);
+                    const snowSize = random(4, 8, seed + 1500 + i);
+                    const rotation = random(0, Math.PI * 2, seed + 1600 + i);
+
+                    ctx.translate(snowX, snowY);
+                    ctx.rotate(rotation);
+                    ctx.globalAlpha = (seasonalEffects.snowIntensity || 0.5) * 0.8;
+                    ctx.drawImage(snowImage, -snowSize / 2, -snowSize / 2, snowSize, snowSize);
+                    ctx.restore();
+                  }
+                } else {
+                  // Fallback to snow coverage
+                  ctx.fillStyle = '#FFFFFF';
+                  ctx.globalAlpha = (seasonalEffects.snowIntensity || 0.5) * 0.6;
+                  ctx.fillRect(pixelX, pixelY, grassTileSize, grassTileSize);
+                }
+              }
+            }
+
+            // Summer heat shimmer effect
+            if (currentSeason === 'summer' && seasonalEffects.heatWave && seasonalEffects.heatIntensity && random(0, 1, seed + 1300) < seasonalEffects.heatIntensity) {
+              ctx.fillStyle = '#FFD700';
+              ctx.globalAlpha = 0.1;
+              ctx.fillRect(pixelX, pixelY, grassTileSize, grassTileSize);
+            }
+
+            ctx.restore();
           }
-          
-          // Summer heat shimmer effect
-          if (currentSeason === 'summer' && seasonalEffects.heatWave && seasonalEffects.heatIntensity && random(0, 1, seed + 1300) < seasonalEffects.heatIntensity) {
-            ctx.fillStyle = '#FFD700';
-            ctx.globalAlpha = 0.1;
-            ctx.fillRect(pixelX, pixelY, grassTileSize, grassTileSize);
-          }
-          
-          ctx.restore();
         }
       }
-    }
 
-    const tileSize = 60;
-    const startX = 20;
-    const startY = 60;
+      const tileSize = 60;
+      const startX = 20;
+      const startY = 60;
 
-    // Draw farm plots
-    world.farmPlots.forEach((plot, idx) => {
-      const x = startX + (idx % 4) * (tileSize + 15);
-      const y = startY + Math.floor(idx / 4) * (tileSize + 15);
+      // Draw farm plots
+      world.farmPlots.forEach((plot, idx) => {
+        const x = startX + (idx % 4) * (tileSize + 15);
+        const y = startY + Math.floor(idx / 4) * (tileSize + 15);
 
-      // Draw plot background
-      ctx.fillStyle = plot.tilled ? '#A0826D' : '#90EE90';
-      ctx.fillRect(x, y, tileSize, tileSize);
+        // Draw plot background
+        ctx.fillStyle = plot.tilled ? '#A0826D' : '#90EE90';
+        ctx.fillRect(x, y, tileSize, tileSize);
 
-      // Draw border
-      ctx.strokeStyle = '#654321';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, tileSize, tileSize);
+        // Draw border
+        ctx.strokeStyle = '#654321';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, tileSize, tileSize);
 
-      // Draw crop or seed
-      if (plot.crop) {
-        const cropInfo = CROP_TYPES[plot.crop.type as CropType] || CROP_TYPES.wheat;
-        let cropColor = '#FFD700';
-        let cropSvg = '';
+        // Draw crop or seed
+        if (plot.crop) {
+          const cropInfo = CROP_TYPES[plot.crop.type as CropType] || CROP_TYPES.wheat;
+          let cropColor = '#FFD700';
+          let cropSvg = '';
 
-        switch (plot.crop.stage) {
-          case CropStage.SEED:
-            cropColor = '#FFD700';
-            cropSvg = '/assets/tiles/grass.svg'; // Seed placeholder
-            break;
-          case CropStage.SPROUTING:
-            cropColor = '#90EE90';
-            cropSvg = '/assets/tiles/grass.svg'; // Sprout placeholder
-            break;
-          case CropStage.GROWING:
-            cropColor = '#7CB342';
-            cropSvg = cropInfo.svg;
-            break;
-          case CropStage.MATURE:
-            cropColor = cropInfo.color;
-            cropSvg = cropInfo.svg;
-            break;
-          case CropStage.HARVESTABLE:
-            cropColor = cropInfo.color;
-            cropSvg = cropInfo.svg;
-            break;
-          case CropStage.DEAD:
-            cropColor = '#8B4513';
-            cropSvg = '/assets/tiles/dirt.svg'; // Dead crop placeholder
-            break;
-        }
+          switch (plot.crop.stage) {
+            case CropStage.SEED:
+              cropColor = '#8B4513';
+              cropSvg = `./assets/crops/phase1/${plot.crop.type}.svg`; // Use phase-specific seed
+              break;
+            case CropStage.SPROUTING:
+              cropColor = '#90EE90';
+              cropSvg = `./assets/crops/phase2/${plot.crop.type}.svg`; // Use phase2 sprout
+              break;
+            case CropStage.GROWING:
+              cropColor = '#7CB342';
+              cropSvg = `./assets/crops/phase3/${plot.crop.type}.svg`; // Use phase3 growing
+              break;
+            case CropStage.MATURE:
+              cropColor = cropInfo.color;
+              cropSvg = `./assets/crops/phase4/${plot.crop.type}.svg`; // Use phase4 mature
+              break;
+            case CropStage.HARVESTABLE:
+              cropColor = cropInfo.color;
+              cropSvg = cropInfo.svg; // Use full grown crop
+              break;
+            case CropStage.DEAD:
+              cropColor = '#8B4513';
+              cropSvg = './assets/crops/death/placeholder.svg'; // Dead crop
+              break;
+          }
 
-        // Apply stage-specific visual effects
-        let scale = 1;
-        let alpha = 1;
-        
-        if (plot.crop.stage === CropStage.SEED) {
-          scale = 0.6; // Smaller for seeds
-        } else if (plot.crop.stage === CropStage.SPROUTING) {
-          scale = 0.8; // Medium for sprouts
-        } else if (plot.crop.stage === CropStage.HARVESTABLE) {
-          // Add pulsing effect for harvestable crops
-          alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
-        }
-        
-        alpha *= Math.max(0.5, plot.crop.health / 100); // Apply health fading
+          // Apply stage-specific visual effects
+          let scale = 1;
+          let alpha = 1;
 
-        // Draw crop using SVG or fallback
-        if (svgsLoaded && cropSvg) {
-          const cropImage = svgCache[cropSvg];
-          if (cropImage) {
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            
-            // Calculate scaled dimensions and position
-            const scaledSize = (tileSize - 16) * scale;
-            const offset = (tileSize - scaledSize) / 2;
-            
-            ctx.drawImage(cropImage, x + offset, y + offset, scaledSize, scaledSize);
-            ctx.restore();
+          if (plot.crop.stage === CropStage.SEED) {
+            scale = 0.6; // Smaller for seeds
+          } else if (plot.crop.stage === CropStage.SPROUTING) {
+            scale = 0.8; // Medium for sprouts
+          } else if (plot.crop.stage === CropStage.HARVESTABLE) {
+            // Add pulsing effect for harvestable crops
+            alpha = 0.8 + Math.sin(Date.now() / 500) * 0.2;
+          }
+
+          alpha *= Math.max(0.5, plot.crop.health / 100); // Apply health fading
+
+          // Draw crop using SVG or fallback
+          if (svgsLoaded && cropSvg) {
+            const cropImage = svgCache[cropSvg];
+            if (cropImage) {
+              ctx.save();
+              ctx.globalAlpha = alpha;
+
+              // Calculate scaled dimensions and position
+              const scaledSize = (tileSize - 16) * scale;
+              const offset = (tileSize - scaledSize) / 2;
+
+              ctx.drawImage(cropImage, x + offset, y + offset, scaledSize, scaledSize);
+              ctx.restore();
+            } else {
+              // Fallback to colored circle if SVG not loaded
+              ctx.fillStyle = cropColor;
+              ctx.globalAlpha = alpha;
+              ctx.beginPath();
+              ctx.arc(x + tileSize / 2, y + tileSize / 2, (tileSize / 3) * scale, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Add crop type indicator
+              ctx.fillStyle = '#FFFFFF';
+              ctx.font = `${10 * scale}px Arial`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(plot.crop.type.charAt(0).toUpperCase(), x + tileSize / 2, y + tileSize / 2);
+            }
           } else {
-            // Fallback to colored circle if SVG not loaded
+            // Fallback when SVGs not loaded yet
             ctx.fillStyle = cropColor;
             ctx.globalAlpha = alpha;
             ctx.beginPath();
             ctx.arc(x + tileSize / 2, y + tileSize / 2, (tileSize / 3) * scale, 0, Math.PI * 2);
             ctx.fill();
-            
+
             // Add crop type indicator
             ctx.fillStyle = '#FFFFFF';
             ctx.font = `${10 * scale}px Arial`;
@@ -685,207 +793,181 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
             ctx.textBaseline = 'middle';
             ctx.fillText(plot.crop.type.charAt(0).toUpperCase(), x + tileSize / 2, y + tileSize / 2);
           }
+
+          // Draw health bar
+          const healthPercent = plot.crop.health / 100;
+          ctx.fillStyle = '#FF4444';
+          ctx.fillRect(x + 5, y + tileSize - 8, tileSize - 10, 4);
+          ctx.fillStyle = healthPercent > 0.5 ? '#44FF44' : '#FFAA44';
+          ctx.fillRect(x + 5, y + tileSize - 8, (tileSize - 10) * healthPercent, 4);
+
+          // Draw water level
+          ctx.fillStyle = '#4A90E2';
+          ctx.fillRect(x + 5, y + tileSize - 4, tileSize - 10, 2);
+          ctx.fillStyle = '#2E5C8A';
+          ctx.fillRect(x + 5, y + tileSize - 4, ((tileSize - 10) * plot.crop.waterLevel) / 100, 2);
         } else {
-          // Fallback when SVGs not loaded yet
-          ctx.fillStyle = cropColor;
-          ctx.globalAlpha = alpha;
-          ctx.beginPath();
-          ctx.arc(x + tileSize / 2, y + tileSize / 2, (tileSize / 3) * scale, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Add crop type indicator
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = `${10 * scale}px Arial`;
+          // Empty plot
+          ctx.fillStyle = '#8B7355';
+          ctx.font = '20px Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(plot.crop.type.charAt(0).toUpperCase(), x + tileSize / 2, y + tileSize / 2);
+          ctx.fillText('EMPTY', x + tileSize / 2, y + tileSize / 2);
         }
+      });
 
-        // Draw health bar
-        const healthPercent = plot.crop.health / 100;
-        ctx.fillStyle = '#FF4444';
-        ctx.fillRect(x + 5, y + tileSize - 8, tileSize - 10, 4);
-        ctx.fillStyle = healthPercent > 0.5 ? '#44FF44' : '#FFAA44';
-        ctx.fillRect(x + 5, y + tileSize - 8, (tileSize - 10) * healthPercent, 4);
+      // Draw buildings
+      world.buildings.forEach((building) => {
+        const buildingInfo = BUILDING_TYPES[building.type as BuildingType];
+        if (!buildingInfo) return;
 
-        // Draw water level
-        ctx.fillStyle = '#4A90E2';
-        ctx.fillRect(x + 5, y + tileSize - 4, tileSize - 10, 2);
-        ctx.fillStyle = '#2E5C8A';
-        ctx.fillRect(x + 5, y + tileSize - 4, ((tileSize - 10) * plot.crop.waterLevel) / 100, 2);
-      } else {
-        // Empty plot
-        ctx.fillStyle = '#8B7355';
-        ctx.font = '20px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('EMPTY', x + tileSize / 2, y + tileSize / 2);
-      }
-    });
+        const x = 320 + (building.position.x % 100) * 2;
+        const y = 100 + (building.position.y % 100) * 1.5;
 
-    // Draw buildings
-    world.buildings.forEach((building) => {
-      const buildingInfo = BUILDING_TYPES[building.type as BuildingType];
-      if (!buildingInfo) return;
+        // Draw building background
+        ctx.fillStyle = '#D4A574';
+        ctx.fillRect(x, y, 40, 40);
 
-      const x = 320 + (building.position.x % 100) * 2;
-      const y = 100 + (building.position.y % 100) * 1.5;
-
-      // Draw building background
-      ctx.fillStyle = '#D4A574';
-      ctx.fillRect(x, y, 40, 40);
-
-      // Draw building border
-      ctx.strokeStyle = '#8B4513';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, 40, 40);
-
-      // Draw building using SVG or fallback
-      const buildingSvg = buildingInfo.svg;
-      if (svgsLoaded && buildingSvg && svgCache[buildingSvg]) {
-        const buildingImage = svgCache[buildingSvg];
-        ctx.save();
-        ctx.drawImage(buildingImage, x + 5, y + 5, 30, 30);
-        ctx.restore();
-      } else {
-        // Fallback to colored rectangle
-        ctx.fillStyle = building.type.includes('dam') ? '#4169E1' : '#8B4513';
-        ctx.fillRect(x + 5, y + 5, 30, 30);
-        
-        // Add building type indicator
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const buildingInitial = building.type.charAt(0).toUpperCase();
-        ctx.fillText(buildingInitial, x + 20, y + 20);
-      }
-
-      // Draw building name on hover (optional label)
-      ctx.font = '10px Arial';
-      ctx.fillStyle = '#654321';
-      ctx.fillText(buildingInfo.name, x + 20, y + 38);
-    });
-
-    // Draw ore deposits
-    world.oreDeposits.forEach((deposit) => {
-      const oreInfo = ORE_TYPES[deposit.oreType as keyof typeof ORE_TYPES];
-      if (!oreInfo) return;
-
-      const x = 80 + (deposit.position.x % 100) * 1.8;
-      const y = 150 + (deposit.position.y % 100) * 1.2;
-
-      // Draw ore deposit background
-      ctx.fillStyle = '#555555';
-      ctx.fillRect(x, y, 35, 35);
-
-      // Draw ore deposit border
-      ctx.strokeStyle = '#222222';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, 35, 35);
-
-      // Draw ore using SVG or fallback
-      const oreSvg = oreInfo.svg;
-      if (svgsLoaded && oreSvg && svgCache[oreSvg]) {
-        const oreImage = svgCache[oreSvg];
-        ctx.save();
-        ctx.drawImage(oreImage, x + 5, y + 5, 25, 25);
-        ctx.restore();
-      } else {
-        // Fallback to colored circles
-        const oreColors: { [key: string]: string } = {
-          copper: '#D2691E',
-          silver: '#C0C0C0',
-          gold: '#FFD700',
-          diamond: '#B9F2FF',
-        };
-        
-        ctx.fillStyle = oreColors[deposit.oreType] || '#888888';
-        ctx.beginPath();
-        ctx.arc(x + 17.5, y + 17.5, 12, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Add ore type initial
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 10px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(deposit.oreType.charAt(0).toUpperCase(), x + 17.5, y + 17.5);
-      }
-
-      // Draw depth indicator
-      ctx.font = '8px Arial';
-      ctx.fillStyle = '#AAAAAA';
-      ctx.fillText(`D${deposit.depth}`, x + 17.5, y + 32);
-    });
-
-    // Draw land expansions
-    world.landExpansions.forEach((expansion) => {
-      const expansionType = LAND_EXPANSION_TYPES[expansion.type as keyof typeof LAND_EXPANSION_TYPES];
-      if (!expansionType) return;
-
-      const x = 200 + (expansion.position.x % 100) * 1.5;
-      const y = 50 + (expansion.position.y % 100) * 1.5;
-
-      // Draw expansion background
-      if (expansion.purchased) {
-        ctx.fillStyle = expansionType.color + '40'; // Transparent version
-        ctx.fillRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
-        
-        ctx.strokeStyle = expansionType.color;
+        // Draw building border
+        ctx.strokeStyle = '#8B4513';
         ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
-        
-        // Draw expansion using SVG or fallback
-        const expansionSvg = expansionType.svg;
-        if (svgsLoaded && expansionSvg && svgCache[expansionSvg]) {
-          const expansionImage = svgCache[expansionSvg];
+        ctx.strokeRect(x, y, 40, 40);
+
+        // Draw building using SVG or fallback
+        const buildingSvg = buildingInfo.svg;
+        if (svgsLoaded && buildingSvg && svgCache[buildingSvg]) {
+          const buildingImage = svgCache[buildingSvg];
           ctx.save();
-          ctx.drawImage(expansionImage, x + 5, y + 5, expansion.size.x * 3 - 10, expansion.size.y * 3 - 10);
+          ctx.drawImage(buildingImage, x + 5, y + 5, 30, 30);
           ctx.restore();
         } else {
-          // Fallback to text
-          ctx.font = 'bold 20px Arial';
+          // Fallback to colored rectangle
+          ctx.fillStyle = building.type.includes('dam') ? '#4169E1' : '#8B4513';
+          ctx.fillRect(x + 5, y + 5, 30, 30);
+
+          // Add building type indicator
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 12px Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(expansionType.name.substring(0, 8), x + (expansion.size.x * 3) / 2, y + (expansion.size.y * 3) / 2);
+          const buildingInitial = building.type.charAt(0).toUpperCase();
+          ctx.fillText(buildingInitial, x + 20, y + 20);
         }
-        
-        // Draw "OWNED" text
-        ctx.font = 'bold 10px Arial';
-        ctx.fillStyle = '#228B22';
-        ctx.fillText('OWNED', x + (expansion.size.x * 3) / 2, y + (expansion.size.y * 3) - 5);
-      } else {
-        // Draw unpurchased expansion with lock
-        ctx.fillStyle = '#CCCCCC40';
-        ctx.fillRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
-        
-        ctx.strokeStyle = '#CCCCCC';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
-        ctx.setLineDash([]);
-        
-        // Draw lock text
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('LOCK', x + (expansion.size.x * 3) / 2, y + (expansion.size.y * 3) / 2);
-      }
-    });
 
-    // Draw info panel
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '14px Arial';
-    ctx.textAlign = 'left';
-    const purchasedLandCount = world.landExpansions.filter(e => e.purchased).length;
-    ctx.fillText(
-      `Coins: ${world.player.coins} | Level ${world.player.level} | Buildings: ${world.buildings.length} | Ore: ${world.oreDeposits.length}`,
-      10,
-      canvas.height - 15,
-    );
+        // Draw building name on hover (optional label)
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#654321';
+        ctx.fillText(buildingInfo.name, x + 20, y + 38);
+      });
+
+      // Draw ore deposits
+      world.oreDeposits.forEach((deposit) => {
+        const oreInfo = ORE_TYPES[deposit.oreType as keyof typeof ORE_TYPES];
+        if (!oreInfo) return;
+
+        const x = 80 + (deposit.position.x % 100) * 1.8;
+        const y = 150 + (deposit.position.y % 100) * 1.2;
+
+        // Draw ore deposit background
+        ctx.fillStyle = '#555555';
+        ctx.fillRect(x, y, 35, 35);
+
+        // Draw ore deposit border
+        ctx.strokeStyle = '#222222';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, 35, 35);
+
+        // Draw ore using SVG or fallback
+        const oreSvg = oreInfo.svg;
+        if (svgsLoaded && oreSvg && svgCache[oreSvg]) {
+          const oreImage = svgCache[oreSvg];
+          ctx.save();
+          ctx.drawImage(oreImage, x + 5, y + 5, 25, 25);
+          ctx.restore();
+        } else {
+          // Fallback to colored circles
+          const oreColors: { [key: string]: string } = {
+            copper: '#D2691E',
+            silver: '#C0C0C0',
+            gold: '#FFD700',
+            diamond: '#B9F2FF',
+          };
+
+          ctx.fillStyle = oreColors[deposit.oreType] || '#888888';
+          ctx.beginPath();
+          ctx.arc(x + 17.5, y + 17.5, 12, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Add ore type initial
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(deposit.oreType.charAt(0).toUpperCase(), x + 17.5, y + 17.5);
+        }
+
+        // Draw depth indicator
+        ctx.font = '8px Arial';
+        ctx.fillStyle = '#AAAAAA';
+        ctx.fillText(`D${deposit.depth}`, x + 17.5, y + 32);
+      });
+
+      // Draw land expansions
+      world.landExpansions.forEach((expansion) => {
+        const expansionType = LAND_EXPANSION_TYPES[expansion.type as keyof typeof LAND_EXPANSION_TYPES];
+        if (!expansionType) return;
+
+        const x = 200 + (expansion.position.x % 100) * 1.5;
+        const y = 50 + (expansion.position.y % 100) * 1.5;
+
+        // Draw expansion background
+        if (expansion.purchased) {
+          ctx.fillStyle = expansionType.color + '40'; // Transparent version
+          ctx.fillRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
+
+          ctx.strokeStyle = expansionType.color;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
+
+          // Draw expansion using SVG or fallback
+          const expansionSvg = expansionType.svg;
+          if (svgsLoaded && expansionSvg && svgCache[expansionSvg]) {
+            const expansionImage = svgCache[expansionSvg];
+            ctx.save();
+            ctx.drawImage(expansionImage, x + 5, y + 5, expansion.size.x * 3 - 10, expansion.size.y * 3 - 10);
+            ctx.restore();
+          } else {
+            // Fallback to text
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(expansionType.name.substring(0, 8), x + (expansion.size.x * 3) / 2, y + (expansion.size.y * 3) / 2);
+          }
+
+          // Draw "OWNED" text
+          ctx.font = 'bold 10px Arial';
+          ctx.fillStyle = '#228B22';
+          ctx.fillText('OWNED', x + (expansion.size.x * 3) / 2, y + (expansion.size.y * 3) - 5);
+        } else {
+          // Draw unpurchased expansion with lock
+          ctx.fillStyle = '#CCCCCC40';
+          ctx.fillRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
+
+          ctx.strokeStyle = '#CCCCCC';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 5]);
+          ctx.strokeRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
+          ctx.setLineDash([]);
+
+          // Draw lock text
+          ctx.font = 'bold 12px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('LOCK', x + (expansion.size.x * 3) / 2, y + (expansion.size.y * 3) / 2);
+        }
+      });
+
+    };
 
     drawGameWorld();
   }, [world?.farmPlots, world?.buildings, world?.oreDeposits, world?.player, redrawTrigger, svgsLoaded]);
@@ -934,13 +1016,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
 
     // Check if this is a dam building
     const isDam = selectedBuildingType.includes('dam');
-    
+
     if (isDam) {
       // Handle dam building with special properties
-      const damSize = selectedBuildingType === 'small_dam' ? 2 : 
-                     selectedBuildingType === 'medium_dam' ? 3 : 4;
-      const protectionLevel = selectedBuildingType === 'small_dam' ? 1 : 
-                           selectedBuildingType === 'medium_dam' ? 3 : 5;
+      const damSize = selectedBuildingType === 'small_dam' ? 2 :
+        selectedBuildingType === 'medium_dam' ? 3 : 4;
+      const protectionLevel = selectedBuildingType === 'small_dam' ? 1 :
+        selectedBuildingType === 'medium_dam' ? 3 : 5;
       const maxFloodLevel = protectionLevel * 2;
 
       const dam: DamBuilding = {
@@ -1024,7 +1106,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
     if (!world) return '';
     const event = world.activeWeatherEvents.find(e => e.active);
     if (!event) return '';
-    
+
     const severityText = event.severity <= 2 ? 'Mild' : event.severity <= 4 ? 'Moderate' : 'Severe';
     return `${severityText} ${event.type.toUpperCase()}! Protection: ${world.damBuildings.filter(d => d.operational).length} dams`;
   };
@@ -1050,7 +1132,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
 
     const availableExpansions = getAvailableLandExpansions();
     const expansion = availableExpansions.find(e => e.id === expansionId);
-    
+
     if (!expansion) {
       setNotification('Expansion not available!');
       setTimeout(() => setNotification(''), 2000);
@@ -1115,7 +1197,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
       </View>
 
       {notification ? <Text style={styles.notification}>{notification}</Text> : null}
-      
+
       {world && world.activeWeatherEvents.some(e => e.active) && (
         <Text style={styles.weatherWarning}>
           {getWeatherWarning()}
@@ -1228,7 +1310,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
                 ]}
                 onPress={() => setSelectedCropType(cropType)}
               >
-                <Text style={styles.cropEmoji}>{cropInfo.name.substring(0, 2).toUpperCase()}</Text>
+                <Text style={styles.cropEmoji}>{cropInfo.name.substring(0, 1)}</Text>
                 <Text style={styles.cropName}>{cropInfo.name}</Text>
                 <Text style={styles.cropDetails}>{cropInfo.growthDays}d • ${cropInfo.sellValue}</Text>
               </TouchableOpacity>
@@ -1254,7 +1336,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
                   onPress={() => canAfford && setSelectedBuildingType(buildingType)}
                   disabled={!canAfford}
                 >
-                  <Text style={styles.buildingEmoji}>{buildingInfo.name.substring(0, 3).toUpperCase()}</Text>
+                  <Text style={styles.buildingEmoji}>{buildingInfo.name.substring(0, 2)}</Text>
                   <Text style={styles.buildingName}>{buildingInfo.name}</Text>
                   <Text style={styles.buildingDetails}>${buildingInfo.cost} • {buildingInfo.description}</Text>
                 </TouchableOpacity>
@@ -1276,7 +1358,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
             onPress={() => handlePlotClick(idx)}
           >
             <Text style={styles.plotEmoji}>
-              {!plot.crop ? 'EMPTY' : plot.crop.stage === CropStage.HARVESTABLE ? 'READY' : 'GROW'}
+              {!plot.crop ? 'EMPTY' : plot.crop.stage === CropStage.HARVESTABLE ? '✓' : '○'}
             </Text>
             <Text style={styles.plotIndex}>#{idx + 1}</Text>
             {plot.crop && <Text style={styles.plotHealth}>HP {Math.round(plot.crop.health)}</Text>}
@@ -1318,7 +1400,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
               const expansionType = LAND_EXPANSION_TYPES[expansion.type as keyof typeof LAND_EXPANSION_TYPES];
               const canAfford = world && world.player.coins >= expansion.cost;
               const meetsLevelReq = world && world.player.level >= expansion.requiredLevel;
-              
+
               return (
                 <TouchableOpacity
                   key={expansion.id}
@@ -1330,7 +1412,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
                   onPress={() => canAfford && meetsLevelReq && handleLandPurchase(expansion.id)}
                   disabled={!canAfford || !meetsLevelReq}
                 >
-                  <Text style={styles.landEmoji}>{expansionType?.name.substring(0, 3).toUpperCase() || 'LND'}</Text>
+                  <Text style={styles.landEmoji}>{expansionType?.name.substring(0, 2) || 'LND'}</Text>
                   <Text style={styles.landName}>{expansion.name}</Text>
                   <Text style={styles.landSize}>{expansion.size.x}×{expansion.size.y} plots</Text>
                   <Text style={styles.landDescription}>{expansion.description}</Text>
@@ -1362,9 +1444,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
         </Modal>
       )}
 
-      <MarketplaceScreen 
-        visible={showMarketplace} 
-        onClose={() => setShowMarketplace(false)} 
+      <MarketplaceScreen
+        visible={showMarketplace}
+        onClose={() => setShowMarketplace(false)}
       />
     </View>
   );

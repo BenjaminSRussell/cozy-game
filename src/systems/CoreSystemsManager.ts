@@ -66,7 +66,7 @@ export class CoreSystemsManager {
     this.resourceManager = new ResourceManager(this.timeSystem);
     this.inventoryManager = new InventoryManager();
     this.economyManager = new EconomyManager(this.inventoryManager, this.timeSystem);
-    
+
     this.playerProgress = this.initializePlayerProgress();
     this.dailyChecklist = this.initializeDailyChecklist();
     this.lastLoginDate = Date.now();
@@ -113,18 +113,18 @@ export class CoreSystemsManager {
   public update(deltaTime: number): void {
     // Update time system first (drives other systems)
     this.timeSystem.update(deltaTime);
-    
+
     // Update resource system
     this.resourceManager.update(deltaTime);
-    
+
     // Update economy system
     this.economyManager.update(deltaTime);
-    
+
     // Check for new day
     if (this.timeSystem.getCurrentTime().isNewDay) {
       this.handleNewDay();
     }
-    
+
     // Check for login streak
     this.updateLoginStreak();
   }
@@ -135,10 +135,10 @@ export class CoreSystemsManager {
   private handleNewDay(): void {
     // Reset daily checklist
     this.dailyChecklist = this.initializeDailyChecklist();
-    
+
     // Update player progress
     this.playerProgress.daysPlayed++;
-    
+
     console.log('🌅 New day! Daily checklist reset.');
   }
 
@@ -148,13 +148,13 @@ export class CoreSystemsManager {
   private updateLoginStreak(): void {
     const now = Date.now();
     const daysSinceLastLogin = Math.floor((now - this.lastLoginDate) / (24 * 60 * 60 * 1000));
-    
+
     if (daysSinceLastLogin === 1) {
       this.playerProgress.loginStreak++;
     } else if (daysSinceLastLogin > 1) {
       this.playerProgress.loginStreak = 1;
     }
-    
+
     this.lastLoginDate = now;
   }
 
@@ -172,7 +172,7 @@ export class CoreSystemsManager {
       if (!rock) return { success: false };
 
       let rewards: any = { items: [] };
-      
+
       switch (rock.resourceType) {
         case 'stone':
           rewards.items.push(this.createItem('stone', 'Stone', ItemType.STONE, 5, '🪨'));
@@ -195,7 +195,7 @@ export class CoreSystemsManager {
 
       // Update checklist
       this.dailyChecklist.completed.mineRocks = true;
-      
+
       // Add experience
       this.addExperience(5);
 
@@ -225,13 +225,13 @@ export class CoreSystemsManager {
 
       // Update checklist
       this.dailyChecklist.completed.digFossils = true;
-      
+
       // Add experience
       this.addExperience(10);
 
-      return { 
-        success: true, 
-        rewards: { items: [fossilItem] } 
+      return {
+        success: true,
+        rewards: { items: [fossilItem] }
       };
     }
 
@@ -253,13 +253,13 @@ export class CoreSystemsManager {
       );
 
       this.inventoryManager.addItem('player_main', woodItem, result.quantity);
-      
+
       // Add experience
       this.addExperience(3);
 
-      return { 
-        success: true, 
-        rewards: { items: [woodItem] } 
+      return {
+        success: true,
+        rewards: { items: [woodItem] }
       };
     }
 
@@ -281,13 +281,13 @@ export class CoreSystemsManager {
       );
 
       this.inventoryManager.addItem('player_main', fishItem, result.size);
-      
+
       // Add experience
       this.addExperience(7);
 
-      return { 
-        success: true, 
-        rewards: { items: [fishItem] } 
+      return {
+        success: true,
+        rewards: { items: [fishItem] }
       };
     }
 
@@ -309,13 +309,13 @@ export class CoreSystemsManager {
       );
 
       this.inventoryManager.addItem('player_main', forageableItem, 1);
-      
+
       // Add experience
       this.addExperience(2);
 
-      return { 
-        success: true, 
-        rewards: { items: [forageableItem] } 
+      return {
+        success: true,
+        rewards: { items: [forageableItem] }
       };
     }
 
@@ -358,6 +358,7 @@ export class CoreSystemsManager {
       [ItemType.FURNITURE]: 50,
       [ItemType.DECORATION]: 25,
       [ItemType.TOOL]: 30,
+      [ItemType.ANIMAL_PRODUCT]: 20,
     };
 
     return {
@@ -376,13 +377,13 @@ export class CoreSystemsManager {
    */
   private addExperience(amount: number): void {
     this.playerProgress.experience += amount;
-    
+
     // Check for level up
     while (this.playerProgress.experience >= this.playerProgress.experienceToNext) {
       this.playerProgress.experience -= this.playerProgress.experienceToNext;
       this.playerProgress.level++;
       this.playerProgress.experienceToNext = Math.floor(this.playerProgress.experienceToNext * 1.2);
-      
+
       console.log(`🎉 Level up! You are now level ${this.playerProgress.level}`);
     }
   }
@@ -392,25 +393,25 @@ export class CoreSystemsManager {
    */
   public checkDailyChecklist(): { completed: boolean; rewards?: any } {
     const allCompleted = Object.values(this.dailyChecklist.completed).every(completed => completed);
-    
+
     if (allCompleted && !this.dailyChecklist.rewards.coins) {
       // Award rewards
       this.economyManager.addCurrency('coins', this.dailyChecklist.rewards.coins);
       this.addExperience(this.dailyChecklist.rewards.experience);
-      
+
       // Mark rewards as claimed
       this.dailyChecklist.rewards.coins = 0;
       this.dailyChecklist.rewards.experience = 0;
-      
-      return { 
-        completed: true, 
-        rewards: { 
-          coins: 50, 
-          experience: 25 
-        } 
+
+      return {
+        completed: true,
+        rewards: {
+          coins: 50,
+          experience: 25
+        }
       };
     }
-    
+
     return { completed: false };
   }
 

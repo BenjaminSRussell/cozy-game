@@ -438,21 +438,33 @@
             }
 
             updateProgress(progress) {
-                // Update progress bar
+                // Update progress bar with smooth animation
                 const progressFill = document.getElementById('progressFill');
                 const progressText = document.getElementById('progressText');
                 const progressDetails = document.getElementById('progressDetails');
                 const assetCounter = document.getElementById('assetCounter');
                 
-                progressFill.style.width = `${progress.progress * 100}%`;
-                progressText.textContent = progress.stage;
-                progressDetails.textContent = progress.details;
-                assetCounter.textContent = `${progress.assetsLoaded} / ${progress.totalAssets} assets loaded`;
+                // Smooth progress animation
+                const currentWidth = parseFloat(progressFill.style.width) || 0;
+                const targetWidth = progress.progress * 100;
+                const newWidth = currentWidth + (targetWidth - currentWidth) * 0.3;
+                progressFill.style.width = `${newWidth}%`;
                 
-                // Enable start button when ready
+                // Enhanced text with emoji support
+                progressText.textContent = progress.stage || 'Loading...';
+                progressDetails.textContent = progress.currentAsset || progress.details || 'Processing...';
+                assetCounter.textContent = `${progress.assetsLoaded || 0} / ${progress.totalAssets || 1450} assets loaded`;
+                
+                // Add visual feedback for different stages
                 if (progress.progress >= 1.0) {
                     this.startButton.disabled = false;
-                    this.startButton.textContent = 'Game Ready!';
+                    this.startButton.textContent = '🚀 Start Your Farm!';
+                    this.startButton.style.background = 'linear-gradient(135deg, #4CAF50, #8BC34A)';
+                    this.startButton.style.transform = 'scale(1.05)';
+                } else if (progress.progress > 0.8) {
+                    this.startButton.textContent = 'Almost Ready...';
+                } else if (progress.progress > 0.5) {
+                    this.startButton.textContent = 'Loading Assets...';
                 }
             }
 

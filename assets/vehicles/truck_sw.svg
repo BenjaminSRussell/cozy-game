@@ -1,0 +1,24 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- ISOMETRIC TRUCK | SW Orientation -->
+  <g transform="translate(128, 160) scale(-1, 1)">
+    <path d="M-80,20 L0,60 L80,20 L0,-20 Z" fill="#000000" opacity="0.3" transform="translate(0, 5) scale(1, 0.6)"/>
+    <g transform="translate(-50, -20)">
+       <path d="M-30,-15 L10,5 L10,40 L-30,20 Z" fill="#1565C0"/>
+       <path d="M10,5 L50,-15 L50,20 L10,40 Z" fill="#0D47A1"/>
+       <path d="M-30,-15 L10,5 L50,-15 L10,-35 Z" fill="#64B5F6"/>
+       <path d="M15,5 L45,-10 L45,10 L15,25 Z" fill="lightblue" opacity="0.6"/>
+       <path d="M10,40 L50,20 L50,28 L10,48 Z" fill="#CFD8DC"/>
+    </g>
+    <g transform="translate(20, -10)">
+       <path d="M-40,-20 L20,10 L60,-10 L0,-40 Z" fill="#795548"/>
+       <path d="M-40,-20 L20,10 L20,25 L-40,-5 Z" fill="#5D4037"/>
+       <path d="M20,10 L60,-10 L60,5 L20,25 Z" fill="#4E342E"/>
+    </g>
+    <g transform="translate(-40, 30)">
+       <ellipse cx="0" cy="0" rx="10" ry="16" fill="#111" transform="rotate(-15)"/>
+    </g>
+    <g transform="translate(30, 20)">
+       <ellipse cx="0" cy="0" rx="12" ry="18" fill="#111" transform="rotate(-15)"/>
+    </g>
+  </g>
+</svg>

@@ -8,6 +8,7 @@ import {
   CropStage,
   FarmPlot,
   Building,
+  HomeBuilding,
   Item,
   ItemType,
   OreDeposit,
@@ -18,7 +19,200 @@ import {
   WeatherEvent,
   DamBuilding,
   Vector2D,
+  Vector3D,
+  HomeType,
+  HomeBenefitType,
+  Tool,
+  ToolType,
+  ToolTier,
+  CraftingRecipe,
+  PlayerAction,
+  PlayerAnimationState,
+  Animal,
+  Road,
+  RoadGrade,
+  Vehicle,
 } from '../types/game';
+import { RoadSystem } from '../systems/RoadSystem';
+
+const createTool = (type: ToolType, tier: ToolTier): Tool => {
+  const baseDurability = {
+    [ToolTier.WOOD]: 50,
+    [ToolTier.STONE]: 100,
+    [ToolTier.IRON]: 250,
+    [ToolTier.GOLD]: 100,
+    [ToolTier.DIAMOND]: 1000,
+  }[tier];
+
+  const efficiency = {
+    [ToolTier.WOOD]: 1.0,
+    [ToolTier.STONE]: 1.2,
+    [ToolTier.IRON]: 1.5,
+    [ToolTier.GOLD]: 2.0,
+    [ToolTier.DIAMOND]: 3.0,
+  }[tier];
+
+  return {
+    id: `tool_${type}_${tier}_${Date.now()}`,
+    name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} ${type.replace('_', ' ').charAt(0).toUpperCase() + type.replace('_', ' ').slice(1)}`,
+    type: ItemType.TOOL,
+    toolType: type,
+    tier,
+    durability: baseDurability,
+    maxDurability: baseDurability,
+    efficiency,
+    quantity: 1,
+    sellValue: 0,
+    spriteId: `tool_${type}_${tier}`,
+    rarity: 'common'
+  };
+};
+
+export const CRAFTING_RECIPES: CraftingRecipe[] = [
+  // STONE TIER UPGRADES
+  {
+    id: 'upgrade_hoe_stone',
+    name: 'Stone Hoe',
+    description: 'Sturdier hoe for detailed work.',
+    inputs: { 'wood': 25, 'stone': 15 },
+    output: { type: 'tool', id: ToolType.HOE, toolTier: ToolTier.STONE },
+    type: 'upgrade',
+    cost: 200,
+    requiredLevel: 2
+  },
+  {
+    id: 'upgrade_axe_stone',
+    name: 'Stone Axe',
+    description: 'Chops wood faster.',
+    inputs: { 'wood': 30, 'stone': 20 },
+    output: { type: 'tool', id: ToolType.AXE, toolTier: ToolTier.STONE },
+    type: 'upgrade',
+    cost: 200,
+    requiredLevel: 2
+  },
+  {
+    id: 'upgrade_pickaxe_stone',
+    name: 'Stone Pickaxe',
+    description: 'Mines ore with ease.',
+    inputs: { 'wood': 20, 'stone': 30 },
+    output: { type: 'tool', id: ToolType.PICKAXE, toolTier: ToolTier.STONE },
+    type: 'upgrade',
+    cost: 200,
+    requiredLevel: 2
+  },
+  {
+    id: 'upgrade_water_stone',
+    name: 'Stone Can',
+    description: 'Durable watering can.',
+    inputs: { 'stone': 40 },
+    output: { type: 'tool', id: ToolType.WATERING_CAN, toolTier: ToolTier.STONE },
+    type: 'upgrade',
+    cost: 200,
+    requiredLevel: 2
+  },
+  // IRON TIER UPGRADES
+  {
+    id: 'upgrade_hoe_iron',
+    name: 'Iron Hoe',
+    description: 'Professional farming tool.',
+    inputs: { 'wood': 50, 'ore_iron': 10 }, // Assuming we have refined items or raw ore 'ore_iron'? ItemType.ORE ids are usually without prefix or handled?
+    // Game currently generates 'copper', 'gold' ore types. We need to check mineOre action to see what item ID it gives.
+    // mineOre creates Item with id `ore_${deposit.oreType}_...` but usually finding by type logic.
+    // Let's assume input keys match item IDs or names if we have a registry. 
+    // Wait, the inventory items just have `id`. When `mineOre` adds items, what ID does it use?
+    // Let's check `mineOre` implementation later. For now, using 'copper' etc as placeholders.
+    // If mineOre gives `ore_copper`, we use that.
+    output: { type: 'tool', id: ToolType.HOE, toolTier: ToolTier.IRON },
+    type: 'upgrade',
+    cost: 1000,
+    requiredLevel: 5
+  },
+  // AUTOMATION - SPRINKLERS
+  {
+    id: 'craft_sprinkler_basic',
+    name: 'Basic Sprinkler',
+    description: 'Waters adjacent 4 tiles daily.',
+    inputs: { 'copper': 5, 'iron': 3 },
+    output: { type: 'building', id: 'sprinkler_basic' },
+    type: 'craft',
+    cost: 500,
+    requiredLevel: 3
+  },
+  {
+    id: 'craft_sprinkler_quality',
+    name: 'Quality Sprinkler',
+    description: 'Waters 8 surrounding tiles daily.',
+    inputs: { 'iron': 5, 'gold': 3 },
+    output: { type: 'building', id: 'sprinkler_quality' },
+    type: 'craft',
+    cost: 1500,
+    requiredLevel: 6
+  },
+  // PROCESSING MACHINES
+  {
+    id: 'craft_preserves_jar',
+    name: 'Preserves Jar',
+    description: 'Turns fruit into jam and vegetables into pickles.',
+    inputs: { 'wood': 50, 'stone': 40, 'iron': 8 },
+    output: { type: 'building', id: 'preserves_jar' },
+    type: 'craft',
+    cost: 1000,
+    requiredLevel: 4
+  },
+  {
+    id: 'craft_keg',
+    name: 'Keg',
+    description: 'Brews beverages from fruits and vegetables.',
+    inputs: { 'wood': 30, 'copper': 5, 'iron': 1, 'ore_iron': 1 }, // Placeholder resin as iron ore for now
+    output: { type: 'building', id: 'keg' },
+    type: 'craft',
+    cost: 2500,
+    requiredLevel: 8
+  },
+  // FERTILIZERS
+  {
+    id: 'craft_fertilizer_speed',
+    name: 'Speed-Grow',
+    description: 'Increases crop growth speed by 50%.',
+    inputs: { 'wood': 20, 'stone': 10 },
+    output: { type: 'item', id: 'fertilizer_speed', quantity: 5 },
+    type: 'craft',
+    cost: 100,
+    requiredLevel: 2
+  },
+  {
+    id: 'craft_fertilizer_quality',
+    name: 'Quality Fertilizer',
+    description: 'Improves chance for higher quality crops.',
+    inputs: { 'iron': 2, 'stone': 20 },
+    output: { type: 'item', id: 'fertilizer_quality', quantity: 5 },
+    type: 'craft',
+    cost: 150,
+    requiredLevel: 4
+  },
+  {
+    id: 'craft_fertilizer_water',
+    name: 'Water Retaining Soil',
+    description: 'Reduces water consumption by 50%.',
+    inputs: { 'stone': 30 },
+    output: { type: 'item', id: 'fertilizer_water', quantity: 5 },
+    type: 'craft',
+    cost: 80,
+    requiredLevel: 3
+  },
+  // BUILDINGS - GARAGE
+  {
+    id: 'craft_garage',
+    name: 'Garage',
+    description: 'A cozy spot for your tractor. Protects it from the elements.',
+    inputs: { 'wood': 100, 'stone': 50, 'iron': 10 },
+    output: { type: 'building', id: 'garage' },
+    type: 'craft',
+    cost: 5000,
+    requiredLevel: 2
+  }
+];
+
 
 /**
  * Game Store Interface - Complete state management for Cozy Haven
@@ -330,6 +524,73 @@ interface GameStore {
   applyWeatherDamage: (weatherEvent: WeatherEvent) => void;
 
   // ============================================================================
+  // HOME SYSTEM - Purchase, upgrade, and manage homes with benefits
+  // ============================================================================
+
+  /**
+   * Purchase a new home building
+   * Checks level requirements and coin cost before placing
+   * @param homeType - Type of home to purchase
+   * @param position - Grid position where home will be placed
+   */
+  purchaseHome: (homeType: HomeType, position: Vector3D) => void;
+
+  /**
+   * Upgrade an existing home to next level
+   * Increases benefits and unlocks new features
+   * @param homeId - ID of home to upgrade
+   */
+  upgradeHome: (homeId: string) => void;
+
+  /**
+   * Claim daily benefits from a home
+   * Collects coins, applies passive bonuses
+   * @param homeId - ID of home to claim benefits from
+   */
+  claimHomeBenefits: (homeId: string) => void;
+
+  /**
+   * Get available homes for purchase based on player level
+   * Returns homes that meet level requirements
+   * @returns Array of available home types with data
+   */
+  getAvailableHomes: () => Array<{
+    homeType: HomeType;
+    requiredLevel: number;
+    baseCost: number;
+    description: string;
+    tier: string;
+    benefitType: HomeBenefitType;
+    benefitValue: number;
+  }>;
+
+  /**
+   * Get all owned homes and their current status
+   * @returns Array of owned homes with benefit info
+   */
+  getOwnedHomes: () => HomeBuilding[];
+
+  /**
+   * Calculate total active benefits from all homes
+   * Returns combined effects of all owned homes
+   * @returns Object with total bonus values
+   */
+  getTotalHomeBenefits: () => {
+    cropGrowthBonus: number;
+    dailyCoinGeneration: number;
+    storageBonus: number;
+    weatherProtection: number;
+    irrigationBonus: number;
+    efficiencyBonus: number;
+  };
+
+  /**
+   * Remove a home building
+   * @param homeId - ID of home to remove
+   */
+  removeHome: (homeId: string) => void;
+
+  // ============================================================================
   // MARKETPLACE SYSTEM - Sell crops, ore, and items
   // ============================================================================
 
@@ -378,6 +639,80 @@ interface GameStore {
    * @param newSettings - Partial settings object with values to update
    */
   updateSettings: (newSettings: Partial<GameSettings>) => void;
+
+  // ============================================================================
+  // CRAFTING & ANIMATIONS
+  // ============================================================================
+
+  /**
+   * Craft an item or upgrade a tool
+   * @param recipeId - ID of the recipe to craft
+   */
+  craftItem: (recipeId: string) => void;
+
+  /**
+   * Repair a tool's durability
+   * @param toolType - Type of tool to repair
+   */
+  repairTool: (toolType: ToolType) => void;
+
+  /**
+   * Start processing an item in a machine
+   * @param buildingId - ID of the machine building
+   * @param itemId - ID of the item to process
+   */
+  processItem: (buildingId: string, itemId: string) => void;
+
+  /**
+   * Collect the output from a finished machine
+   * @param buildingId - ID of the machine building
+   */
+  collectMachineOutput: (buildingId: string) => void;
+
+  /**
+   * Apply fertilizer to a farm plot
+   * @param plotId - ID of the plot
+   * @param itemId - ID of the fertilizer item
+   */
+  applyFertilizer: (plotId: string, itemId: string) => void;
+
+  /**
+   * Purchase an animal
+   * @param type - Animal species
+   * @param buildingId - Building to house the animal
+   */
+  buyAnimal: (type: 'chicken' | 'cow' | 'sheep', buildingId: string) => void;
+
+  /**
+   * Interact with an animal
+   * @param animalId - ID of animal
+   * @param action - Care action ('pet' or 'feed')
+   */
+  careForAnimal: (animalId: string, action: 'pet' | 'feed') => void;
+
+  /**
+   * Collect product from an animal
+   * @param animalId - ID of animal
+   */
+  collectAnimalProduct: (animalId: string) => void;
+
+  /**
+   * Set player animation state
+   * @param action - Current player action ('idle', 'walk', etc.)
+   */
+  setPlayerAnimation: (action: PlayerAction) => void;
+
+
+  // ============================================================================
+  // TRANSPORTATION SYSTEM
+  // ============================================================================
+
+  buildRoad: (position: Vector2D, grade?: RoadGrade, lanes?: 1 | 2) => void;
+  upgradeRoad: (position: Vector2D) => void;
+  spawnVehicle: (type: 'tractor' | 'truck', position: Vector3D) => void;
+  mountVehicle: (vehicleId: string) => void;
+  dismountVehicle: () => void;
+  movePlayer: (position: Vector3D) => void;
 }
 
 /**
@@ -459,6 +794,14 @@ const createInitialWorld = (playerName: string): GameWorld => {
     },
   ];
 
+  const startingTools = {
+    [ToolType.HOE]: createTool(ToolType.HOE, ToolTier.WOOD),
+    [ToolType.WATERING_CAN]: createTool(ToolType.WATERING_CAN, ToolTier.WOOD),
+    [ToolType.AXE]: createTool(ToolType.AXE, ToolTier.WOOD),
+    [ToolType.PICKAXE]: createTool(ToolType.PICKAXE, ToolTier.WOOD),
+    [ToolType.SCYTHE]: createTool(ToolType.SCYTHE, ToolTier.WOOD),
+  };
+
   return {
     id: `world_${Date.now()}`,
     createdAt: Date.now(),
@@ -471,8 +814,19 @@ const createInitialWorld = (playerName: string): GameWorld => {
       name: playerName,
       level: 1,
       experience: 0,
-      coins: 50, // Starting currency in bucks
-      inventory: [],
+      coins: 3000, // Starting currency for testing ranching
+      inventory: [
+        {
+          id: 'item_hay_starting',
+          name: 'Hay',
+          type: ItemType.CROP,
+          quantity: 50,
+          sellValue: 5,
+          spriteId: 'hay',
+          rarity: 'common'
+        }
+      ],
+      tools: startingTools,
       unlocks: new Set(),
       stats: {
         farmingLevel: 1,
@@ -480,11 +834,41 @@ const createInitialWorld = (playerName: string): GameWorld => {
         diggingLevel: 1,
         total_play_time: 0,
       },
+      animation: {
+        action: 'idle',
+        frame: 0,
+        direction: 0,
+        isPlaying: false
+      },
+      position: { x: 50, y: 50, z: 1 },
+      rotation: 0
     },
     farmPlots: [],
-    buildings: [],
+    buildings: [
+      {
+        id: 'starting_garage',
+        type: 'garage',
+        position: { x: 55, y: 45, z: 0 },
+        rotation: 0,
+        unlocked: true,
+        level: 1,
+        spriteId: 'building_garage'
+      }
+    ],
+    homeBuildings: [], // Initialize empty home buildings array
+    roads: [],
+    vehicles: [
+      {
+        id: 'starting_tractor',
+        type: 'tractor',
+        position: { x: 55, y: 45, z: 1.1 }, // Parked at the garage
+        rotation: 90, // Default to West
+        speed: 2.0
+      }
+    ],
     oreDeposits: [],
     woodSources: [],
+    animals: [],
     tilledLand: [],
     expansions: [],
     landExpansions: initialLandExpansions,
@@ -566,30 +950,131 @@ export const useGameStore = create<GameStore>()(
 
             // Update crop growth based on time advancement
             const updatedWorld = { ...state.world, dayTime: newDayTime };
+
             if (daysAdvanced > 0) {
               updatedWorld.totalDaysPlayed += daysAdvanced;
+
+              // RUN AUTOMATION - Sprinklers water crops
+              const sprinklers = updatedWorld.buildings.filter(b => b.automationType?.startsWith('sprinkler'));
+              const wateredPlots = new Set<string>();
+
+              sprinklers.forEach(sprinkler => {
+                const range = sprinkler.automationType === 'sprinkler_basic' ? 1 :
+                  sprinkler.automationType === 'sprinkler_quality' ? 1 : 2;
+                const pattern = sprinkler.automationType === 'sprinkler_basic' ? 'cross' : 'square';
+
+                // Find plots in range
+                updatedWorld.farmPlots.forEach(plot => {
+                  const dx = Math.abs(plot.position.x - sprinkler.position.x);
+                  const dy = Math.abs(plot.position.y - sprinkler.position.y);
+
+                  let inRange = false;
+                  if (pattern === 'cross') {
+                    // Basic: only cardinal directions (N, S, E, W)
+                    inRange = (dx === 0 && dy <= range) || (dy === 0 && dx <= range);
+                  } else {
+                    // Quality/Iridium: all tiles in square
+                    inRange = dx <= range && dy <= range;
+                  }
+
+                  if (inRange && plot.crop) {
+                    wateredPlots.add(plot.id);
+                  }
+                });
+              });
+
               updatedWorld.farmPlots = updatedWorld.farmPlots.map((plot) => {
                 if (!plot.crop) return plot;
 
                 const crop = plot.crop;
-                const minutesGrowing = Math.min(minutes, 1440);
-                const growthRate = 0.1; // Adjustable
                 const healthDecay = 0.05;
+
+                // Fertilizer logic
+                const speedFactor = plot.fertilizerType === 'speed' ? 1.5 : 1.0;
+                const waterRetainFactor = plot.fertilizerType === 'water' ? 0.5 : 1.0;
+
+                // Apply sprinkler watering
+                const wasWatered = wateredPlots.has(plot.id);
+                const newWaterLevel = wasWatered ? 100 : Math.max(0, crop.waterLevel - (10 * daysAdvanced * waterRetainFactor));
 
                 return {
                   ...plot,
+                  watered: wasWatered,
                   crop: {
                     ...crop,
                     health: Math.max(0, crop.health - healthDecay * daysAdvanced),
-                    waterLevel: Math.max(0, crop.waterLevel - 10 * daysAdvanced),
+                    waterLevel: newWaterLevel,
                     stage:
                       crop.health < 30
                         ? CropStage.DEAD
-                        : crop.waterLevel < 20
+                        : newWaterLevel < 20
                           ? crop.stage
-                          : Math.min(CropStage.HARVESTABLE, crop.stage + 0.1) as any,
+                          : Math.min(CropStage.HARVESTABLE, crop.stage + (0.1 * daysAdvanced * speedFactor)) as any,
                   },
                 };
+              });
+            }
+
+            // Update machine processing
+            if (updatedWorld.buildings) {
+              updatedWorld.buildings = updatedWorld.buildings.map((building) => {
+                if (!building.machineState || !building.machineState.processingItemId || building.machineState.isFinished) {
+                  return building;
+                }
+
+                const newState = { ...building.machineState };
+                const remaining = (newState.duration || 0) - minutes;
+
+                if (remaining <= 0) {
+                  return {
+                    ...building,
+                    machineState: {
+                      ...newState,
+                      duration: 0,
+                      isFinished: true
+                    }
+                  };
+                }
+
+                return {
+                  ...building,
+                  machineState: {
+                    ...newState,
+                    duration: remaining
+                  }
+                };
+              });
+            }
+
+            // Update animals
+            if (updatedWorld.animals) {
+              updatedWorld.animals = updatedWorld.animals.map((animal) => {
+                let newState = { ...animal };
+
+                // Hunger decay (approx 20% per day, so 20/1440 per minute)
+                newState.hunger = Math.max(0, newState.hunger - (20 / 1440) * minutes);
+
+                // AI movement (random walk near building)
+                const building = updatedWorld.buildings.find(b => b.id === animal.buildingId);
+                if (building && Math.random() < 0.05 * (minutes / 10)) { // Scale movement with time jump
+                  const dx = (Math.random() - 0.5) * 4;
+                  const dy = (Math.random() - 0.5) * 4;
+                  newState.position = {
+                    x: Math.max(building.position.x - 3, Math.min(building.position.x + 3, newState.position.x + dx)),
+                    y: Math.max(building.position.y - 3, Math.min(building.position.y + 3, newState.position.y + dy))
+                  };
+                  newState.rotation = dx > 0 ? 0 : 180;
+                }
+
+                // Product generation (once per day jump)
+                if (daysAdvanced > 0 && newState.hunger > 20 && !newState.hasProduct) {
+                  const produceChance = 0.4 + (newState.affection / 2000);
+                  if (Math.random() < produceChance) {
+                    newState.hasProduct = true;
+                  }
+                }
+
+                return newState;
               });
             }
 
@@ -634,8 +1119,8 @@ export const useGameStore = create<GameStore>()(
             const existing = state.world.player.inventory.find((i) => i.id === item.id);
             const inventory = existing
               ? state.world.player.inventory.map((i) =>
-                  i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i,
-                )
+                i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i,
+              )
               : [...state.world.player.inventory, item];
 
             return {
@@ -679,6 +1164,28 @@ export const useGameStore = create<GameStore>()(
           set((state) => {
             if (!state.world) return state;
 
+            // Check for Hoe
+            const tools = state.world.player.tools;
+            const hoe = tools[ToolType.HOE];
+
+            if (!hoe) {
+              console.log("No hoe equipped!");
+              return state;
+            }
+
+            // Consume durability
+            const newDurability = hoe.durability - 1;
+            if (newDurability <= 0) {
+              // Break tool logic could go here, or just stop working. 
+              // For now, let's keep it simple: stop working if 0.
+              if (hoe.durability <= 0) return state;
+            }
+
+            const updatedTools = {
+              ...tools,
+              [ToolType.HOE]: { ...hoe, durability: Math.max(0, newDurability) }
+            };
+
             const newPlot: FarmPlot = {
               id: `plot_${Date.now()}`,
               position,
@@ -691,6 +1198,7 @@ export const useGameStore = create<GameStore>()(
               world: {
                 ...state.world,
                 farmPlots: [...state.world.farmPlots, newPlot],
+                player: { ...state.world.player, tools: updatedTools }
               },
             };
           });
@@ -727,37 +1235,78 @@ export const useGameStore = create<GameStore>()(
             const plot = state.world.farmPlots.find((p) => p.id === plotId);
             if (!plot || !plot.crop || plot.crop.stage !== CropStage.HARVESTABLE) return state;
 
-            // Determine sell value based on crop type
-            const sellValues: { [key: string]: number } = {
-              wheat: 50,
-              carrot: 40,
-              tomato: 60,
-              corn: 75,
+            const player = state.world.player;
+            const crop = plot.crop;
+
+            // Determine base sell value
+            const baseSellValues: { [key: string]: number } = {
+              wheat: 10,
+              carrot: 12,
+              tomato: 15,
+              corn: 20,
             };
-            const sellValue = sellValues[plot.crop.type] || 50;
+            const baseValue = baseSellValues[crop.type] || 10;
+
+            // Quality Logic
+            // Chance for higher quality increases with level
+            const roll = Math.random();
+            const levelBonus = player.level * 0.02;
+            const fertilizerBonus = plot.fertilizerType === 'quality' ? 0.2 : 0;
+            const totalBonus = levelBonus + fertilizerBonus;
+
+            let quality: 'normal' | 'silver' | 'gold' | 'iridium' = 'normal';
+            let qualityMultiplier = 1.0;
+
+            if (roll < 0.05 + totalBonus / 2 && player.level >= 10) {
+              quality = 'iridium';
+              qualityMultiplier = 2.0;
+            } else if (roll < 0.15 + totalBonus) {
+              quality = 'gold';
+              qualityMultiplier = 1.5;
+            } else if (roll < 0.4 + totalBonus) {
+              quality = 'silver';
+              qualityMultiplier = 1.25;
+            }
+
+            // Yield logic - influenced by health
+            const yieldCount = Math.floor(2 + (crop.health / 50));
 
             // Add harvested crop to inventory
             const harvestedItem: Item = {
-              id: `harvest_${Date.now()}`,
-              name: `${plot.crop.type.charAt(0).toUpperCase() + plot.crop.type.slice(1)}`,
+              id: `harvest_${crop.type}_${quality}_${Date.now()}`,
+              name: `${crop.type.charAt(0).toUpperCase() + crop.type.slice(1)} (${quality !== 'normal' ? quality : 'Normal'})`,
               type: ItemType.CROP,
-              quantity: 3, // Base yield
-              sellValue: sellValue,
-              spriteId: plot.crop.type,
-              rarity: 'common',
+              quantity: yieldCount,
+              sellValue: Math.floor(baseValue * qualityMultiplier),
+              spriteId: crop.type,
+              rarity: quality === 'iridium' ? 'legendary' : quality === 'gold' ? 'rare' : quality === 'silver' ? 'uncommon' : 'common',
+              quality: quality,
             };
 
             const updatedPlots = state.world.farmPlots.map((p) =>
-              p.id === plotId ? { ...p, crop: undefined } : p,
+              p.id === plotId ? { ...p, crop: undefined, fertilizerType: undefined } : p,
             );
+
+            // Add item to inventory (stacking logic check)
+            let newInventory = [...player.inventory];
+            const existingIndex = newInventory.findIndex(i => i.id === harvestedItem.id);
+
+            if (existingIndex >= 0) {
+              newInventory[existingIndex] = {
+                ...newInventory[existingIndex],
+                quantity: newInventory[existingIndex].quantity + yieldCount
+              };
+            } else {
+              newInventory.push(harvestedItem);
+            }
 
             return {
               world: {
                 ...state.world,
                 farmPlots: updatedPlots,
                 player: {
-                  ...state.world.player,
-                  inventory: [...state.world.player.inventory, harvestedItem],
+                  ...player,
+                  inventory: newInventory,
                 },
               },
             };
@@ -768,15 +1317,40 @@ export const useGameStore = create<GameStore>()(
           set((state) => {
             if (!state.world) return state;
 
+            // Check for Watering Can
+            const tools = state.world.player.tools;
+            const can = tools[ToolType.WATERING_CAN];
+
+            if (!can || can.durability <= 0) {
+              console.log("No watering can or empty!");
+              return state;
+            }
+
+            // Consume durability (water)
+            // Water can concept: durability = amount of water left? Or actual tool durability?
+            // Let's treat durability as "charge" or "condition". For MVP, simple durability.
+            const newDurability = can.durability - 1;
+
+            const updatedTools = {
+              ...tools,
+              [ToolType.WATERING_CAN]: { ...can, durability: Math.max(0, newDurability) }
+            };
+
             const updatedPlots = state.world.farmPlots.map((plot) => {
               if (plot.id !== plotId || !plot.crop) return plot;
               return {
                 ...plot,
-                crop: { ...plot.crop, waterLevel: Math.min(100, plot.crop.waterLevel + 50) },
+                crop: { ...plot.crop, waterLevel: Math.min(100, plot.crop.waterLevel + 50 * can.efficiency) },
               };
             });
 
-            return { world: { ...state.world, farmPlots: updatedPlots } };
+            return {
+              world: {
+                ...state.world,
+                farmPlots: updatedPlots,
+                player: { ...state.world.player, tools: updatedTools }
+              }
+            };
           });
         },
 
@@ -905,11 +1479,28 @@ export const useGameStore = create<GameStore>()(
           set((state) => {
             if (!state.world) return state;
 
+            // Check for Pickaxe
+            const tools = state.world.player.tools;
+            const pickaxe = tools[ToolType.PICKAXE];
+
+            if (!pickaxe || pickaxe.durability <= 0) {
+              console.log("No pickaxe!");
+              return state;
+            }
+
             const deposit = state.world.oreDeposits.find((d) => d.id === depositId);
             if (!deposit) return state;
 
+            const durabilityCost = 1;
+            const miningPower = 10 * pickaxe.efficiency;
+
+            const updatedTools = {
+              ...tools,
+              [ToolType.PICKAXE]: { ...pickaxe, durability: Math.max(0, pickaxe.durability - durabilityCost) }
+            };
+
             const oreItem: Item = {
-              id: `ore_${Date.now()}`,
+              id: deposit.oreType, // Use consistent ID for stacking
               name: deposit.oreType,
               type: ItemType.ORE,
               quantity: Math.floor(Math.random() * 3) + 1,
@@ -921,7 +1512,7 @@ export const useGameStore = create<GameStore>()(
             const updatedDeposits = state.world.oreDeposits
               .map((d) =>
                 d.id === depositId
-                  ? { ...d, durability: d.durability - 10, lastMinedAt: Date.now() }
+                  ? { ...d, durability: d.durability - miningPower, lastMinedAt: Date.now() }
                   : d,
               )
               .filter((d) => d.durability > 0);
@@ -933,6 +1524,7 @@ export const useGameStore = create<GameStore>()(
                 player: {
                   ...state.world.player,
                   inventory: [...state.world.player.inventory, oreItem],
+                  tools: updatedTools
                 },
               },
             };
@@ -968,14 +1560,28 @@ export const useGameStore = create<GameStore>()(
           set((state) => {
             if (!state.world) return state;
 
+            // Check for Axe
+            const tools = state.world.player.tools;
+            const axe = tools[ToolType.AXE];
+
+            if (!axe || axe.durability <= 0) {
+              console.log("No axe!");
+              return state;
+            }
+
             const source = state.world.woodSources.find((w) => w.id === sourceId);
             if (!source || source.health < 50) return state;
+
+            const updatedTools = {
+              ...tools,
+              [ToolType.AXE]: { ...axe, durability: Math.max(0, axe.durability - 1) }
+            };
 
             const woodItem: Item = {
               id: `wood_${Date.now()}`,
               name: 'Wood',
               type: ItemType.WOOD,
-              quantity: 3,
+              quantity: 3 * Math.floor(axe.efficiency),
               sellValue: 75,
               spriteId: 'wood',
               rarity: 'common',
@@ -992,6 +1598,7 @@ export const useGameStore = create<GameStore>()(
                 player: {
                   ...state.world.player,
                   inventory: [...state.world.player.inventory, woodItem],
+                  tools: updatedTools
                 },
               },
             };
@@ -1137,9 +1744,9 @@ export const useGameStore = create<GameStore>()(
               const weatherTypes: WeatherType[] = ['drought', 'flood', 'rain', 'storm'];
               const randomType = weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
               const randomSeverity = Math.floor(Math.random() * 3) + 1; // 1-3 severity
-              const randomCenter = { 
-                x: Math.random() * state.world.mapSize.x, 
-                y: Math.random() * state.world.mapSize.y 
+              const randomCenter = {
+                x: Math.random() * state.world.mapSize.x,
+                y: Math.random() * state.world.mapSize.y
               };
               const randomRadius = Math.random() * 20 + 10; // 10-30 units radius
 
@@ -1223,7 +1830,7 @@ export const useGameStore = create<GameStore>()(
             if (!dam.operational) continue;
 
             // Check if position is within dam's protected areas
-            const isProtected = dam.protectedAreas.some(protectedPos => 
+            const isProtected = dam.protectedAreas.some(protectedPos =>
               Math.abs(protectedPos.x - position.x) <= 1 && Math.abs(protectedPos.y - position.y) <= 1
             );
 
@@ -1263,8 +1870,8 @@ export const useGameStore = create<GameStore>()(
                   // Floods can destroy crops unless protected by dams
                   const protection = state.world?.damBuildings?.reduce((max, dam) => {
                     if (!dam.operational) return max;
-                    const isProtected = dam.protectedAreas.some(protectedPos => 
-                      Math.abs(protectedPos.x - plot.position.x) <= 1 && 
+                    const isProtected = dam.protectedAreas.some(protectedPos =>
+                      Math.abs(protectedPos.x - plot.position.x) <= 1 &&
                       Math.abs(protectedPos.y - plot.position.y) <= 1
                     );
                     return isProtected ? Math.max(max, dam.protectionLevel) : max;
@@ -1313,9 +1920,9 @@ export const useGameStore = create<GameStore>()(
         // MARKETPLACE ACTIONS
         // ========================================================================
 
-        sellHarvestableCrops: (plotIds: string[]) => {
+        sellHarvestableCrops: (plotIds: string[]): number => {
           let totalEarnings = 0;
-          
+
           set((state) => {
             if (!state.world) return state;
 
@@ -1325,7 +1932,7 @@ export const useGameStore = create<GameStore>()(
             const updatedPlots = state.world.farmPlots.map(plot => {
               if (plotIds.includes(plot.id) && plot.crop && plot.crop.stage === CropStage.HARVESTABLE) {
                 totalEarnings += pricePerCrop;
-                
+
                 return {
                   ...plot,
                   crop: undefined,
@@ -1347,30 +1954,544 @@ export const useGameStore = create<GameStore>()(
               },
             };
           });
-              items.push({
-                id: `crop_${plot.id}`,
-                name: plot.crop.type.charAt(0).toUpperCase() + plot.crop.type.slice(1),
-                type: 'crop',
-                quantity: 1,
-                currentPrice,
-                quality: Math.round(plot.crop.health),
-              });
+
+          return totalEarnings;
+        },
+
+        buyAnimal: (type, buildingId) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const building = state.world.buildings.find(b => b.id === buildingId);
+            if (!building) return state;
+
+            const cost = type === 'chicken' ? 800 : type === 'cow' ? 1500 : 2000;
+            if (state.world.player.coins < cost) return state;
+
+            const newAnimal: Animal = {
+              id: `animal_${type}_${Date.now()}`,
+              type,
+              name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${state.world.animals ? state.world.animals.length + 1 : 1}`,
+              buildingId,
+              hunger: 100,
+              affection: 0,
+              lastFedDay: state.world.totalDaysPlayed,
+              hasProduct: false,
+              position: { x: building.position.x, y: building.position.y },
+              rotation: 0
+            };
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins - cost
+                },
+                animals: [...(state.world.animals || []), newAnimal]
+              }
+            };
+          });
+        },
+
+        careForAnimal: (animalId, action) => {
+          set((state) => {
+            if (!state.world || !state.world.animals) return state;
+
+            let updatedAnimals = [...state.world.animals];
+            const animalIdx = updatedAnimals.findIndex(a => a.id === animalId);
+            if (animalIdx === -1) return state;
+
+            const animal = updatedAnimals[animalIdx];
+
+            if (action === 'pet') {
+              updatedAnimals[animalIdx] = {
+                ...animal,
+                affection: Math.min(1000, animal.affection + 10)
+              };
+            } else if (action === 'feed') {
+              // Check for hay in inventory
+              const hayIdx = state.world.player.inventory.findIndex(i => i.spriteId === 'hay');
+              if (hayIdx === -1) return state;
+
+              const newInventory = [...state.world.player.inventory];
+              if (newInventory[hayIdx].quantity > 1) {
+                newInventory[hayIdx] = { ...newInventory[hayIdx], quantity: newInventory[hayIdx].quantity - 1 };
+              } else {
+                newInventory.splice(hayIdx, 1);
+              }
+
+              updatedAnimals[animalIdx] = {
+                ...animal,
+                hunger: 100,
+                lastFedDay: state.world.totalDaysPlayed
+              };
+
+              return {
+                world: {
+                  ...state.world,
+                  player: {
+                    ...state.world.player,
+                    inventory: newInventory
+                  },
+                  animals: updatedAnimals
+                }
+              };
             }
+
+            return {
+              world: {
+                ...state.world,
+                animals: updatedAnimals
+              }
+            };
+          });
+        },
+
+        collectAnimalProduct: (animalId) => {
+          set((state) => {
+            if (!state.world || !state.world.animals) return state;
+
+            const animal = state.world.animals.find(a => a.id === animalId);
+            if (!animal || !animal.hasProduct) return state;
+
+            const productType = animal.type === 'chicken' ? 'egg' : animal.type === 'cow' ? 'milk' : 'wool';
+            const quality = animal.affection > 800 ? 'gold' : animal.affection > 400 ? 'silver' : 'normal';
+            const value = productType === 'egg' ? 25 : productType === 'milk' ? 100 : 150;
+            const multiplier = quality === 'gold' ? 1.5 : quality === 'silver' ? 1.25 : 1.0;
+
+            const productItem: Item = {
+              id: `${productType}_${Date.now()}`,
+              name: `${productType.charAt(0).toUpperCase() + productType.slice(1)} (${quality})`,
+              type: ItemType.ANIMAL_PRODUCT,
+              quantity: 1,
+              sellValue: Math.floor(value * multiplier),
+              spriteId: productType,
+              rarity: quality === 'gold' ? 'rare' : quality === 'silver' ? 'uncommon' : 'common',
+              quality: quality as any
+            };
+
+            const newInventory = [...state.world.player.inventory];
+            const existingIdx = newInventory.findIndex(i => i.spriteId === productItem.spriteId && i.quality === productItem.quality);
+            if (existingIdx >= 0) {
+              newInventory[existingIdx] = { ...newInventory[existingIdx], quantity: newInventory[existingIdx].quantity + 1 };
+            } else {
+              newInventory.push(productItem);
+            }
+
+            const updatedAnimals = state.world.animals.map(a =>
+              a.id === animalId ? { ...a, hasProduct: false } : a
+            );
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  inventory: newInventory
+                },
+                animals: updatedAnimals
+              }
+            };
+          });
+        },
+        sellInventoryItem: (itemId: string, quantity: number) => {
+          let earnings = 0;
+          set((state) => {
+            if (!state.world) return state;
+
+            const item = state.world.player.inventory.find(i => i.id === itemId);
+            if (!item || item.quantity < quantity) return state;
+
+            earnings = item.sellValue * quantity;
+
+            const inventory = state.world.player.inventory
+              .map((i) =>
+                i.id === itemId ? { ...i, quantity: Math.max(0, i.quantity - quantity) } : i,
+              )
+              .filter((i) => i.quantity > 0);
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins + earnings,
+                  inventory,
+                },
+              },
+            };
+          });
+          return earnings;
+        },
+
+        getMarketPrices: () => {
+          return {
+            wheat: { basePrice: 50, currentPrice: 50, demandMultiplier: 1 },
+            carrot: { basePrice: 40, currentPrice: 40, demandMultiplier: 1 },
+            tomato: { basePrice: 60, currentPrice: 60, demandMultiplier: 1 },
+            copper: { basePrice: 100, currentPrice: 100, demandMultiplier: 1 },
+            iron: { basePrice: 150, currentPrice: 150, demandMultiplier: 1 },
+            gold: { basePrice: 500, currentPrice: 500, demandMultiplier: 1 },
+          };
+        },
+
+        updateMarketPrices: () => {
+          // Future implementation: fluctuate prices
+        },
+
+        getSellableItems: () => {
+          const { world } = get();
+          if (!world) return [];
+
+          return world.player.inventory.map(item => ({
+            id: item.id,
+            name: item.name,
+            type: item.type as 'crop' | 'ore' | 'wood',
+            quantity: item.quantity,
+            currentPrice: item.sellValue,
+            quality: 1
+          }));
+        },
+
+        // ========================================================================
+        // HOME SYSTEM ACTIONS
+        // ========================================================================
+
+        purchaseHome: (homeType: HomeType, position: Vector3D) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            // Home configurations with benefits and costs
+            const homeConfigs: { [key in HomeType]: {
+              requiredLevel: number;
+              baseCost: number;
+              benefitType: HomeBenefitType;
+              benefitValue: number;
+              description: string;
+              tier: 'starter' | 'mid-tier' | 'premium' | 'special';
+              upgradeCosts: number[];
+            } } = {
+              cottage: {
+                requiredLevel: 1,
+                baseCost: 200,
+                benefitType: 'crop_boost',
+                benefitValue: 10,
+                description: 'Boosts crop growth speed by 10%',
+                tier: 'starter',
+                upgradeCosts: [300, 500]
+              },
+              ranch_house: {
+                requiredLevel: 1,
+                baseCost: 250,
+                benefitType: 'animal_boost',
+                benefitValue: 15,
+                description: 'Increases animal product value by 15%',
+                tier: 'starter',
+                upgradeCosts: [350, 600]
+              },
+              forest_cabin: {
+                requiredLevel: 2,
+                baseCost: 300,
+                benefitType: 'tree_boost',
+                benefitValue: 20,
+                description: 'Reduces tree regrowth time by 20%',
+                tier: 'starter',
+                upgradeCosts: [450, 750]
+              },
+              victorian_house: {
+                requiredLevel: 6,
+                baseCost: 800,
+                benefitType: 'coin_gen',
+                benefitValue: 50,
+                description: 'Generates 50 coins per day',
+                tier: 'mid-tier',
+                upgradeCosts: [1200, 2000]
+              },
+              farmhouse: {
+                requiredLevel: 8,
+                baseCost: 1000,
+                benefitType: 'storage',
+                benefitValue: 50,
+                description: 'Increases storage capacity by 50%',
+                tier: 'mid-tier',
+                upgradeCosts: [1500, 2500]
+              },
+              lake_house: {
+                requiredLevel: 10,
+                baseCost: 1200,
+                benefitType: 'irrigation',
+                benefitValue: 25,
+                description: 'Reduces crop water needs by 25%',
+                tier: 'mid-tier',
+                upgradeCosts: [1800, 3000]
+              },
+              mansion: {
+                requiredLevel: 16,
+                baseCost: 3000,
+                benefitType: 'coin_gen',
+                benefitValue: 200,
+                description: 'Generates 200 coins per day',
+                tier: 'premium',
+                upgradeCosts: [4500, 7500]
+              },
+              treehouse_estate: {
+                requiredLevel: 20,
+                baseCost: 4000,
+                benefitType: 'efficiency',
+                benefitValue: 30,
+                description: 'Boosts all nearby building efficiency by 30%',
+                tier: 'premium',
+                upgradeCosts: [6000, 10000]
+              },
+              beach_villa: {
+                requiredLevel: 25,
+                baseCost: 5000,
+                benefitType: 'tourism',
+                benefitValue: 100,
+                description: 'Attracts tourists for special events and bonuses',
+                tier: 'premium',
+                upgradeCosts: [7500, 12500]
+              },
+              greenhouse_home: {
+                requiredLevel: 30,
+                baseCost: 6000,
+                benefitType: 'season_override',
+                benefitValue: 100,
+                description: 'Year-round growing regardless of season',
+                tier: 'special',
+                upgradeCosts: [9000, 15000]
+              },
+              windmill_residence: {
+                requiredLevel: 35,
+                baseCost: 7000,
+                benefitType: 'energy_gen',
+                benefitValue: 50,
+                description: 'Provides free energy for tools and equipment',
+                tier: 'special',
+                upgradeCosts: [10500, 17500]
+              },
+              wizard_tower: {
+                requiredLevel: 40,
+                baseCost: 10000,
+                benefitType: 'magical_bonuses',
+                benefitValue: 75,
+                description: 'Magical crop bonuses and weather protection',
+                tier: 'special',
+                upgradeCosts: [15000, 25000]
+              }
+            };
+
+            const config = homeConfigs[homeType];
+            if (!config) return state;
+
+            // Check level requirement
+            if (state.world.player.level < config.requiredLevel) {
+              console.log(`Level ${config.requiredLevel} required to purchase ${homeType}`);
+              return state;
+            }
+
+            // Check coin cost
+            if (state.world.player.coins < config.baseCost) {
+              console.log(`Insufficient coins for ${homeType}`);
+              return state;
+            }
+
+            const newHome: HomeBuilding = {
+              id: `home_${Date.now()}`,
+              type: homeType,
+              position,
+              rotation: 0,
+              unlocked: true,
+              level: 1,
+              spriteId: `/assets/buildings/${homeType}.svg`,
+              homeType,
+              benefitType: config.benefitType,
+              benefitValue: config.benefitValue,
+              upgradeLevel: 1,
+              maxUpgradeLevel: 3,
+              dailyCoinsGenerated: config.benefitType === 'coin_gen' ? config.benefitValue : 0,
+              lastBenefitClaimed: Date.now(),
+              occupied: true,
+              requiredLevel: config.requiredLevel,
+              baseCost: config.baseCost,
+              upgradeCosts: config.upgradeCosts,
+              description: config.description,
+              tier: config.tier
+            };
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins - config.baseCost,
+                },
+                homeBuildings: [...state.world.homeBuildings, newHome],
+              },
+            };
+          });
+        },
+
+        upgradeHome: (homeId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const homeIndex = state.world.homeBuildings.findIndex(h => h.id === homeId);
+            if (homeIndex === -1) return state;
+
+            const home = state.world.homeBuildings[homeIndex];
+            if (home.upgradeLevel >= home.maxUpgradeLevel) return state;
+
+            const upgradeCost = home.upgradeCosts[home.upgradeLevel - 1];
+            if (state.world.player.coins < upgradeCost) return state;
+
+            const upgradedHome = {
+              ...home,
+              upgradeLevel: home.upgradeLevel + 1,
+              benefitValue: Math.floor(home.benefitValue * 1.5), // 50% increase per upgrade
+              dailyCoinsGenerated: home.dailyCoinsGenerated ? Math.floor(home.dailyCoinsGenerated * 1.5) : undefined
+            };
+
+            const updatedHomes = [...state.world.homeBuildings];
+            updatedHomes[homeIndex] = upgradedHome;
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins - upgradeCost,
+                },
+                homeBuildings: updatedHomes,
+              },
+            };
+          });
+        },
+
+        claimHomeBenefits: (homeId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const home = state.world.homeBuildings.find(h => h.id === homeId);
+            if (!home || !home.dailyCoinsGenerated) return state;
+
+            const now = Date.now();
+            const hoursSinceLastClaim = (now - (home.lastBenefitClaimed || now)) / (1000 * 60 * 60);
+
+            if (hoursSinceLastClaim < 24) {
+              console.log('Benefits can only be claimed once every 24 hours');
+              return state;
+            }
+
+            const coinsEarned = home.dailyCoinsGenerated * (home.upgradeLevel - 1 + 1);
+
+            const updatedHomes = state.world.homeBuildings.map(h =>
+              h.id === homeId ? { ...h, lastBenefitClaimed: now } : h
+            );
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins + coinsEarned,
+                },
+                homeBuildings: updatedHomes,
+              },
+            };
+          });
+        },
+
+        getAvailableHomes: () => {
+          const { world } = get();
+          if (!world) return [];
+
+          const homeConfigs: { [key in HomeType]: any } = {
+            cottage: { requiredLevel: 1, baseCost: 200, benefitType: 'crop_boost', benefitValue: 10, description: 'Boosts crop growth speed by 10%', tier: 'starter' },
+            ranch_house: { requiredLevel: 1, baseCost: 250, benefitType: 'animal_boost', benefitValue: 15, description: 'Increases animal product value by 15%', tier: 'starter' },
+            forest_cabin: { requiredLevel: 2, baseCost: 300, benefitType: 'tree_boost', benefitValue: 20, description: 'Reduces tree regrowth time by 20%', tier: 'starter' },
+            victorian_house: { requiredLevel: 6, baseCost: 800, benefitType: 'coin_gen', benefitValue: 50, description: 'Generates 50 coins per day', tier: 'mid-tier' },
+            farmhouse: { requiredLevel: 8, baseCost: 1000, benefitType: 'storage', benefitValue: 50, description: 'Increases storage capacity by 50%', tier: 'mid-tier' },
+            lake_house: { requiredLevel: 10, baseCost: 1200, benefitType: 'irrigation', benefitValue: 25, description: 'Reduces crop water needs by 25%', tier: 'mid-tier' },
+            mansion: { requiredLevel: 16, baseCost: 3000, benefitType: 'coin_gen', benefitValue: 200, description: 'Generates 200 coins per day', tier: 'premium' },
+            treehouse_estate: { requiredLevel: 20, baseCost: 4000, benefitType: 'efficiency', benefitValue: 30, description: 'Boosts all nearby building efficiency by 30%', tier: 'premium' },
+            beach_villa: { requiredLevel: 25, baseCost: 5000, benefitType: 'tourism', benefitValue: 100, description: 'Attracts tourists for special events and bonuses', tier: 'premium' },
+            greenhouse_home: { requiredLevel: 30, baseCost: 6000, benefitType: 'season_override', benefitValue: 100, description: 'Year-round growing regardless of season', tier: 'special' },
+            windmill_residence: { requiredLevel: 35, baseCost: 7000, benefitType: 'energy_gen', benefitValue: 50, description: 'Provides free energy for tools and equipment', tier: 'special' },
+            wizard_tower: { requiredLevel: 40, baseCost: 10000, benefitType: 'magical_bonuses', benefitValue: 75, description: 'Magical crop bonuses and weather protection', tier: 'special' }
+          };
+
+          return Object.entries(homeConfigs)
+            .filter(([_, config]) => world.player.level >= config.requiredLevel)
+            .map(([homeType, config]) => ({
+              homeType: homeType as HomeType,
+              ...config
+            }));
+        },
+
+        getOwnedHomes: () => {
+          const { world } = get();
+          return world?.homeBuildings || [];
+        },
+
+        getTotalHomeBenefits: () => {
+          const { world } = get();
+          if (!world) return {
+            cropGrowthBonus: 0,
+            dailyCoinGeneration: 0,
+            storageBonus: 0,
+            weatherProtection: 0,
+            irrigationBonus: 0,
+            efficiencyBonus: 0,
+          };
+
+          const benefits = world.homeBuildings.reduce((acc, home) => {
+            switch (home.benefitType) {
+              case 'crop_boost':
+                acc.cropGrowthBonus += home.benefitValue;
+                break;
+              case 'coin_gen':
+                acc.dailyCoinGeneration += home.dailyCoinsGenerated || 0;
+                break;
+              case 'storage':
+                acc.storageBonus += home.benefitValue;
+                break;
+              case 'weather_protection':
+                acc.weatherProtection += home.benefitValue;
+                break;
+              case 'irrigation':
+                acc.irrigationBonus += home.benefitValue;
+                break;
+              case 'efficiency':
+                acc.efficiencyBonus += home.benefitValue;
+                break;
+            }
+            return acc;
+          }, {
+            cropGrowthBonus: 0,
+            dailyCoinGeneration: 0,
+            storageBonus: 0,
+            weatherProtection: 0,
+            irrigationBonus: 0,
+            efficiencyBonus: 0,
           });
 
-          // Add inventory items
-          world.player.inventory.forEach(item => {
-            if (item.type === ItemType.CROP || item.type === ItemType.ORE || item.type === ItemType.WOOD) {
-              const basePrices: { [key: string]: number } = {
-                // Crops
-                wheat: 2, carrot: 3, tomato: 4, corn: 5, potato: 3,
-                lettuce: 2, onion: 3, garlic: 4, peppers: 5, pumpkin: 8,
-                strawberries: 6, blueberries: 7,
-                // Ore
-                copper: 5, iron: 8, silver: 12, gold: 18, diamond: 20, coal: 3,
-                // Wood
-                oak: 4, pine: 3, maple: 5, birch: 3,
-                // Special items
+          return benefits;
+        },
+
+        removeHome: (homeId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            return {
+              world: {
+                ...state.world,
+                homeBuildings: state.world.homeBuildings.filter(h => h.id !== homeId),
+              },
+            };
+          });
+        },
 
         // ========================================================================
         // SETTINGS ACTIONS
@@ -1380,6 +2501,482 @@ export const useGameStore = create<GameStore>()(
           set((state) => ({
             settings: { ...state.settings, ...newSettings },
           }));
+        },
+
+        // ========================================================================
+        // CRAFTING & ANIMATIONS
+        // ========================================================================
+
+        craftItem: (recipeId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
+            if (!recipe) return state;
+
+            const player = state.world.player;
+
+            if (player.level < recipe.requiredLevel) return state;
+            if (player.coins < recipe.cost) return state; // Coat check fixed :P
+
+            // Check inputs
+            for (const [itemId, quantity] of Object.entries(recipe.inputs)) {
+              // Try exact ID match first, then name
+              const item = player.inventory.find(i => i.id === itemId || i.name.toLowerCase() === itemId.toLowerCase());
+              if (!item || item.quantity < quantity) {
+                return state;
+              }
+            }
+
+            // Deduct inputs
+            const newInventory = player.inventory.map(item => {
+              // Checking if this item is used in recipe
+              const required = recipe.inputs[item.id] || recipe.inputs[item.name.toLowerCase()];
+              if (required) {
+                return { ...item, quantity: item.quantity - required };
+              }
+              return item;
+            }).filter(i => i.quantity > 0);
+
+            // Create Output
+            let newTools = { ...player.tools };
+            let newInv = [...newInventory]; // Copy new inventory from deducted state
+
+            if (recipe.output.type === 'tool') {
+              const newTool = createTool(recipe.output.id as ToolType, recipe.output.toolTier!);
+              newTools[newTool.toolType] = newTool;
+            } else if (recipe.output.type === 'building') {
+              // Add building item to inventory
+              // For now, sprinklers are items you place. We need an ItemType.BUILDING or similar?
+              // Or just add it as a generic item with type 'decoration' or 'furniture' for now?
+              // Let's use 'decoration' as a fallback if BUILDING doesn't exist
+              const buildingItem: Item = {
+                id: recipe.output.id,
+                name: recipe.name,
+                type: ItemType.DECORATION, // closest fit
+                quantity: 1,
+                sellValue: Math.floor(recipe.cost / 2),
+                spriteId: recipe.output.id,
+                rarity: 'rare'
+              };
+
+              // Add to inventory logic (simplified push or stack)
+              const existingIdx = newInv.findIndex(i => i.id === buildingItem.id);
+              if (existingIdx >= 0) {
+                newInv[existingIdx] = { ...newInv[existingIdx], quantity: newInv[existingIdx].quantity + 1 };
+              } else {
+                newInv.push(buildingItem);
+              }
+            } else {
+              // Generic Item Logic
+              const item: Item = {
+                id: recipe.output.id,
+                name: recipe.name,
+                type: ItemType.DECORATION, // fallback
+                quantity: recipe.output.quantity || 1,
+                sellValue: 10,
+                spriteId: recipe.output.id,
+                rarity: 'common'
+              };
+              const existingIdx = newInv.findIndex(i => i.id === item.id);
+              if (existingIdx >= 0) {
+                newInv[existingIdx] = { ...newInv[existingIdx], quantity: newInv[existingIdx].quantity + (recipe.output.quantity || 1) };
+              } else {
+                newInv.push(item);
+              }
+            }
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...player,
+                  coins: player.coins - recipe.cost,
+                  inventory: newInv,
+                  tools: newTools
+                }
+              }
+            };
+          });
+        },
+
+        repairTool: (toolType: ToolType) => {
+          set((state) => {
+            if (!state.world) return state;
+            const tool = state.world.player.tools[toolType];
+            if (!tool) return state;
+
+            const missingDurability = tool.maxDurability - tool.durability;
+            if (missingDurability <= 0) return state;
+
+            const costPerPoint = 1;
+            const totalCost = missingDurability * costPerPoint;
+
+            if (state.world.player.coins < totalCost) return state;
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins - totalCost,
+                  tools: {
+                    ...state.world.player.tools,
+                    [toolType]: { ...tool, durability: tool.maxDurability }
+                  }
+                }
+              }
+            };
+          });
+        },
+
+        processItem: (buildingId: string, itemId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const building = state.world.buildings.find(b => b.id === buildingId);
+            const item = state.world.player.inventory.find(i => i.id === itemId);
+
+            if (!building || !item || building.machineState?.processingItemId) return state;
+
+            // Define processing recipes
+            const processingRecipes: { [key: string]: { [key: string]: { output: string, duration: number } } } = {
+              preserves_jar: {
+                tomato: { output: 'pickled_tomato', duration: 300 },
+                corn: { output: 'pickled_corn', duration: 300 },
+                carrot: { output: 'pickled_carrot', duration: 300 },
+                wheat: { output: 'wheat_flour', duration: 120 },
+              },
+              keg: {
+                wheat: { output: 'beer', duration: 480 },
+                tomato: { output: 'tomato_juice', duration: 480 },
+                corn: { output: 'corn_juice', duration: 480 },
+              }
+            };
+
+            const machineRecipes = processingRecipes[building.type];
+            if (!machineRecipes) return state;
+
+            const recipe = machineRecipes[item.spriteId]; // Using spriteId for generic matching
+            if (!recipe) return state;
+
+            // Deduct item
+            const newInventory = state.world.player.inventory.map(i =>
+              i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i
+            ).filter(i => i.quantity > 0);
+
+            // Start machine
+            const updatedBuildings = state.world.buildings.map(b =>
+              b.id === buildingId ? {
+                ...b,
+                machineState: {
+                  processingItemId: item.id,
+                  startTime: state.world!.dayTime,
+                  duration: recipe.duration,
+                  outputItemId: recipe.output,
+                  isFinished: false
+                }
+              } : b
+            );
+
+            return {
+              world: {
+                ...state.world,
+                player: { ...state.world.player, inventory: newInventory },
+                buildings: updatedBuildings
+              }
+            };
+          });
+        },
+
+        collectMachineOutput: (buildingId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const building = state.world.buildings.find(b => b.id === buildingId);
+            if (!building || !building.machineState?.isFinished) return state;
+
+            const outputId = building.machineState.outputItemId!;
+            const inputItemId = building.machineState.processingItemId!;
+
+            // Calculate value based on input or fixed artisan premium
+            // We can look up the input item in inventory or assume a default bonus
+            // Since the input item is already removed, we use a heuristic or store it in state
+            // For now, let's use a standard bonus: Machines increase value by 2x-3x
+            const baseValue = building.type === 'keg' ? 150 : 80;
+
+            // Create output item
+            const outputItem: Item = {
+              id: `${outputId}_${Date.now()}`,
+              name: outputId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+              type: ItemType.CROP, // Artisan good
+              quantity: 1,
+              sellValue: baseValue,
+              spriteId: outputId,
+              rarity: building.type === 'keg' ? 'rare' : 'uncommon'
+            };
+
+            const updatedBuildings = state.world.buildings.map(b =>
+              b.id === buildingId ? { ...b, machineState: undefined } : b
+            );
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  inventory: [...state.world.player.inventory, outputItem]
+                },
+                buildings: updatedBuildings
+              }
+            };
+          });
+        },
+
+        applyFertilizer: (plotId: string, itemId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const plot = state.world.farmPlots.find(p => p.id === plotId);
+            const item = state.world.player.inventory.find(i => i.id === itemId);
+
+            if (!plot || !plot.tilled || plot.fertilizerType || !item || item.type !== ItemType.SEED) {
+              // Assuming fertilizer is tagged as SEED or we need a new FERTILIZER type
+              // For now, check if name contains fertilizer
+              if (!item?.name.toLowerCase().includes('fertilizer')) return state;
+            }
+
+            const fertilizerType = item.name.toLowerCase().includes('quality') ? 'quality' :
+              item.name.toLowerCase().includes('speed') ? 'speed' : 'water';
+
+            const newInventory = state.world.player.inventory.map(i =>
+              i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i
+            ).filter(i => i.quantity > 0);
+
+            const updatedPlots = state.world.farmPlots.map(p =>
+              p.id === plotId ? { ...p, fertilizerType: fertilizerType as any } : p
+            );
+
+            return {
+              world: {
+                ...state.world,
+                player: { ...state.world.player, inventory: newInventory },
+                farmPlots: updatedPlots
+              }
+            };
+          });
+        },
+
+        setPlayerAnimation: (action: PlayerAction) => {
+          set((state) => {
+            if (!state.world) return state;
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  animation: {
+                    ...state.world.player.animation,
+                    action,
+                    isPlaying: action !== 'idle'
+                  }
+                }
+              }
+            };
+          });
+        },
+
+        // ========================================================================
+        // TRANSPORTATION ACTIONS
+        // ========================================================================
+
+        buildRoad: (position: Vector2D, grade: RoadGrade = 'gravel', lanes: 1 | 2 = 1) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            // Gravel 1: 5, Gravel 2: 15, Paved 1: 50, Paved 2: 150
+            const costMap = {
+              'gravel_1': 5,
+              'gravel_2': 15,
+              'paved_1': 50,
+              'paved_2': 150
+            };
+            const cost = costMap[`${grade}_${lanes}` as keyof typeof costMap] || 10;
+
+            if (state.world.player.coins < cost) return state;
+
+            const existingRoad = state.world.roads.find(r => r.position.x === position.x && r.position.y === position.y);
+            if (existingRoad) return state;
+
+            const newRoad: Road = {
+              id: `road_${Date.now()}`,
+              type: grade === 'paved' ? 'paved' : 'dirt',
+              grade,
+              lanes,
+              position,
+              connections: 0
+            };
+
+            const updatedRoads = RoadSystem.refreshAllConnections([...state.world.roads, newRoad]);
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins - cost
+                },
+                roads: updatedRoads
+              }
+            };
+          });
+        },
+
+        upgradeRoad: (position: Vector2D) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const existingIndex = state.world.roads.findIndex(r => r.position.x === position.x && r.position.y === position.y);
+            if (existingIndex === -1) return state;
+
+            const current = state.world.roads[existingIndex];
+            let nextGrade = current.grade;
+            let nextLanes = current.lanes;
+
+            // Upgrade sequence: Gravel 1 -> Gravel 2 -> Paved 1 -> Paved 2
+            if (current.grade === 'gravel' && current.lanes === 1) {
+              nextLanes = 2;
+            } else if (current.grade === 'gravel' && current.lanes === 2) {
+              nextGrade = 'paved';
+              nextLanes = 1;
+            } else if (current.grade === 'paved' && current.lanes === 1) {
+              nextLanes = 2;
+            } else {
+              return state; // Already max level
+            }
+
+            const cost = (nextGrade === 'paved' ? 100 : 20);
+            if (state.world.player.coins < cost) return state;
+
+            const upgradedRoad: Road = {
+              ...current,
+              grade: nextGrade,
+              lanes: nextLanes,
+              type: nextGrade === 'paved' ? 'paved' : 'dirt'
+            };
+
+            const newRoads = [...state.world.roads];
+            newRoads[existingIndex] = upgradedRoad;
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  coins: state.world.player.coins - cost
+                },
+                roads: RoadSystem.refreshAllConnections(newRoads)
+              }
+            };
+          });
+        },
+
+        spawnVehicle: (type: 'tractor' | 'truck', position: Vector3D) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            const newVehicle: Vehicle = {
+              id: `veh_${Date.now()}`,
+              type,
+              position,
+              rotation: 90, // Default to West as per user request
+              speed: type === 'tractor' ? 2.0 : 3.0, // Multiplier
+            };
+
+            return {
+              world: {
+                ...state.world,
+                vehicles: [...state.world.vehicles, newVehicle]
+              }
+            };
+          });
+        },
+
+        mountVehicle: (vehicleId: string) => {
+          set((state) => {
+            if (!state.world) return state;
+            const vehicle = state.world.vehicles.find(v => v.id === vehicleId);
+            if (!vehicle) return state;
+
+            // If already mounted, dismount first? Or error.
+            if (state.world.player.mountedVehicleId) return state;
+
+            const updatedVehicle = { ...vehicle, mountedBy: state.world.player.id };
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  mountedVehicleId: vehicleId,
+                  // Snap player to vehicle pos
+                  position: vehicle.position
+                },
+                vehicles: state.world.vehicles.map(v => v.id === vehicleId ? updatedVehicle : v)
+              }
+            };
+          });
+        },
+
+        dismountVehicle: () => {
+          set((state) => {
+            if (!state.world || !state.world.player.mountedVehicleId) return state;
+
+            const vehicleId = state.world.player.mountedVehicleId;
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  mountedVehicleId: undefined,
+                  // Find safe spot to dismount? For now same spot.
+                },
+                vehicles: state.world.vehicles.map(v => v.id === vehicleId ? { ...v, mountedBy: undefined } : v)
+              }
+            };
+          });
+        },
+
+        movePlayer: (position: Vector3D) => {
+          set((state) => {
+            if (!state.world) return state;
+
+            if (state.world.player.mountedVehicleId) {
+              // Move vehicle instead
+              const vehicleId = state.world.player.mountedVehicleId;
+              return {
+                world: {
+                  ...state.world,
+                  player: {
+                    ...state.world.player,
+                    position // Player follows vehicle
+                  },
+                  vehicles: state.world.vehicles.map(v => v.id === vehicleId ? { ...v, position } : v)
+                }
+              };
+            }
+
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  position
+                }
+              }
+            };
+          });
         },
       }),
       {
