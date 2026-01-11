@@ -42,3 +42,4 @@ A peaceful farming adventure game built with React Native and Expo.
 - Canvas for game rendering
 
 Enjoy your cozy farming experience! 🏡
+# cozy-game
