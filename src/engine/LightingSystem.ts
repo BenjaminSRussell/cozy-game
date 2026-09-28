@@ -90,7 +90,7 @@ export class DynamicLightingSystem {
     const hour = time.hour + time.minute / 60;
     const { sunrise, sunset } = this.getSunriseSunset(season);
     
-    // Calculate sun position (0ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â° at sunrise, 180ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â° at sunset)
+    // Calculate sun position (0° at sunrise, 180° at sunset)
     const sunAngle = ((hour - sunrise) / (sunset - sunrise)) * Math.PI;
     const sunHeight = Math.sin(sunAngle);
     const sunX = Math.cos(sunAngle);
@@ -100,10 +100,12 @@ export class DynamicLightingSystem {
     const moonHeight = Math.sin(moonAngle);
     const moonX = Math.cos(moonAngle);
 
-    // Determine time periods (based on seasonal sunrise/sunset)
-    const isNight = hour < sunrise || hour > sunset;
-    const isGoldenHour = (hour >= 5 && hour <= 7) || (hour >= 17 && hour <= 19);
-    const isBlueHour = (hour >= 4 && hour <= 5) || (hour >= 19 && hour <= 20);
+    // Determine time periods (based on seasonal sunrise/sunset):
+    // golden hour is the hour after sunrise and the hour before sunset,
+    // blue hour is the hour of twilight outside them, night is the rest
+    const isGoldenHour = (hour >= sunrise && hour <= sunrise + 1) || (hour >= sunset - 1 && hour <= sunset);
+    const isBlueHour = (hour >= sunrise - 1 && hour < sunrise) || (hour > sunset && hour <= sunset + 1);
+    const isNight = hour < sunrise - 1 || hour > sunset + 1;
 
     // Calculate ambient color based on time
     let ambientColor = { r: 255, g: 255, b: 255 };
@@ -238,6 +240,17 @@ export class DynamicLightingSystem {
   // Get current time
   getCurrentTime(): TimeOfDay {
     return this.currentTime;
+  }
+
+  // Get current season
+  getSeason(): Season {
+    return this.currentSeason;
+  }
+
+  // Set season; sunrise and sunset move with it
+  setSeason(season: Season): void {
+    this.currentSeason = season;
+    this.lightingState = this.calculateLightingState(this.currentTime, this.currentSeason);
   }
 
   // Set time speed
