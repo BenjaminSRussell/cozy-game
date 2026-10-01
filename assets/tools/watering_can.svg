@@ -1,0 +1,56 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="canBodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4CAF50"/>
+      <stop offset="50%" stop-color="#388E3C"/>
+      <stop offset="100%" stop-color="#2E7D32"/>
+    </linearGradient>
+    <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#64B5F6" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#1976D2" stop-opacity="0.8"/>
+    </linearGradient>
+    <filter id="canShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <g filter="url(#canShadow)">
+    <!-- Main body -->
+    <ellipse cx="32" cy="32" rx="18" ry="16" fill="url(#canBodyGrad)"/>
+    
+    <!-- Handle -->
+    <path d="M 50 32 Q 56 32 56 40 Q 56 48 50 48" 
+          fill="none" 
+          stroke="#2E7D32" 
+          stroke-width="3" 
+          stroke-linecap="round"/>
+    
+    <!-- Spout -->
+    <path d="M 14 28 L 8 24 L 8 20 L 12 18 L 16 20" 
+          fill="url(#canBodyGrad)" 
+          stroke="#2E7D32" 
+          stroke-width="1" 
+          stroke-linejoin="round"/>
+    
+    <!-- Rose head (spout end) -->
+    <circle cx="8" cy="20" r="3" fill="#2E7D32"/>
+    <circle cx="8" cy="20" r="1.5" fill="#1B5E20"/>
+    
+    <!-- Water drops -->
+    <g fill="url(#waterGrad)">
+      <ellipse cx="6" cy="24" rx="1" ry="2"/>
+      <ellipse cx="8" cy="26" rx="1" ry="2"/>
+      <ellipse cx="10" cy="24" rx="1" ry="2"/>
+    </g>
+    
+    <!-- Fill opening -->
+    <ellipse cx="32" cy="20" rx="6" ry="4" fill="#2E7D32"/>
+    <ellipse cx="32" cy="20" rx="4" ry="2.5" fill="#1B5E20"/>
+    
+    <!-- Body highlight -->
+    <ellipse cx="28" cy="28" rx="8" ry="6" fill="#81C784" opacity="0.4"/>
+    
+    <!-- Water level indicator -->
+    <ellipse cx="32" cy="35" rx="12" ry="3" fill="#1976D2" opacity="0.3"/>
+  </g>
+</svg>
