@@ -1,4 +1,4 @@
-import { Vector2D, Vector3D, TileType, Building, CropType } from '../types/game';
+import type { Vector2D, Vector3D, TileType, Building, CropType } from '../types/game';
 
 /**
  * Tile-based world system for 2.5D isometric rendering

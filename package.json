@@ -11,7 +11,7 @@
     "lint": "tsc --noEmit",
     "serve:static": "node server.js",
     "build": "echo 'Run export-web to build static assets' && expo export:web",
-    "test": "echo 'Running tests...' && echo 'All tests passed!'",
+    "test": "vitest run --maxWorkers 2",
     "clean": "echo 'Cleaning build files...'"
   },
   "dependencies": {
@@ -33,7 +33,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^5.0.4"
   },
   "private": true
 }
