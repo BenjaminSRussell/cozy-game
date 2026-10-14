@@ -1364,7 +1364,7 @@ export const useGameStore = create<GameStore>()(
               if (plot.id !== plotId || !plot.crop) return plot;
               return {
                 ...plot,
-                crop: { ...plot.crop, waterLevel: Math.min(100, plot.crop.waterLevel + 50 * can.efficiency) },
+                crop: { ...plot.crop, waterLevel: Math.min(100, plot.crop.waterLevel + 30) },
               };
             });
 
