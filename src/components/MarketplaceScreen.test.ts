@@ -15,7 +15,7 @@ vi.mock('../store/gameStore', () => ({
 }));
 
 import { EconomySystem } from '../systems/EconomySystem';
-import { listedSellPrice } from './MarketplaceScreen';
+import { listedSellPrice, MARKET_ITEMS } from './MarketplaceScreen';
 
 const CORN_CATALOG_BASE = 5;
 
@@ -50,5 +50,18 @@ describe('MarketplaceScreen listed sell price', () => {
     expect(economy.getPrice('carrot')).toBe(0);
     expect(listedSellPrice('carrot', economy)).toBe(3);
     expect(listedSellPrice('not-a-market-item', economy)).toBe(0);
+  });
+});
+
+describe('MarketplaceScreen catalog icons', () => {
+  it('does not give iron and coal the same icon', () => {
+    expect(MARKET_ITEMS.iron.icon).toBe('🔩');
+    expect(MARKET_ITEMS.coal.icon).toBe('🪨');
+    expect(MARKET_ITEMS.iron.icon).not.toBe(MARKET_ITEMS.coal.icon);
+    expect(MARKET_ITEMS.silver.icon).toBe('⚪');
+    expect(MARKET_ITEMS.gold.icon).toBe('🟡');
+
+    const icons = Object.values(MARKET_ITEMS).map((item) => item.icon);
+    expect(new Set(icons).size).toBe(icons.length);
   });
 });

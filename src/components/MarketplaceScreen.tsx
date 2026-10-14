@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } fr
 import { useGameStore } from '../store/gameStore';
 import { CropStage, Item, ItemType } from '../types/game';
 
-const MARKET_ITEMS: { [key: string]: { basePrice: number; demandMultiplier: number; icon: string } } = {
+export const MARKET_ITEMS: { [key: string]: { basePrice: number; demandMultiplier: number; icon: string } } = {
   // Crops - Common crops worth 1-5 bucks
   wheat: { basePrice: 2, demandMultiplier: 1.0, icon: '🌾' },
   carrot: { basePrice: 3, demandMultiplier: 1.2, icon: '🥕' },
@@ -20,11 +20,11 @@ const MARKET_ITEMS: { [key: string]: { basePrice: number; demandMultiplier: numb
 
   // Ore - More valuable but still reasonable (5-20 bucks)
   copper: { basePrice: 5, demandMultiplier: 1.0, icon: '🟠' },
-  iron: { basePrice: 8, demandMultiplier: 0.9, icon: '⚫' },
+  iron: { basePrice: 8, demandMultiplier: 0.9, icon: '🔩' },
   silver: { basePrice: 12, demandMultiplier: 1.3, icon: '⚪' },
   gold: { basePrice: 18, demandMultiplier: 1.5, icon: '🟡' },
   diamond: { basePrice: 20, demandMultiplier: 2.0, icon: '💎' },
-  coal: { basePrice: 3, demandMultiplier: 0.8, icon: '⚫' },
+  coal: { basePrice: 3, demandMultiplier: 0.8, icon: '🪨' },
 
   // Wood - Common materials (1-5 bucks)
   oak: { basePrice: 4, demandMultiplier: 0.8, icon: '🪵' },
@@ -134,7 +134,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
             quantity: item.quantity,
             basePrice: 0,
             currentPrice: currentPrice,
-            icon: '📦',
+            icon: MARKET_ITEMS[itemId]?.icon ?? '📦',
             quality: 100
           });
         }
