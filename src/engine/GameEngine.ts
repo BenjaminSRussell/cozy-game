@@ -21,8 +21,8 @@ import { Vector3D } from '../types/game';
  * - Physics simulation support (ready for future physics)
  * - FPS counter and performance metrics
  *
- * The engine runs at a target FPS and uses requestAnimationFrame
- * for smooth 60 FPS gameplay on capable devices.
+ * The engine runs on requestAnimationFrame, so a hidden tab pauses the
+ * loop. Delta time is capped at 0.1s so returning does not fast-forward.
  */
 
 /**
@@ -58,6 +58,28 @@ export interface EngineStats {
 }
 
 /**
+ * Offscreen surface used when the caller has no canvas.
+ * The simulation loop still runs; drawing is a no-op until sprites exist.
+ */
+function createHeadlessCanvas(): GameCanvas {
+  const canvas = {
+    addEventListener() {},
+  } as unknown as HTMLCanvasElement;
+
+  const context = {
+    canvas,
+    save() {},
+    restore() {},
+    fillRect() {},
+    createLinearGradient() {
+      return { addColorStop() {} };
+    },
+  } as unknown as CanvasRenderingContext2D;
+
+  return { context, width: 1, height: 1 };
+}
+
+/**
  * Game Engine class
  * Core game loop and rendering orchestration
  */
@@ -83,17 +105,17 @@ export class GameEngine {
   /** Whether game loop is currently running */
   private isRunning: boolean = false;
 
-  /** Timestamp of last frame for delta time calculation */
-  private lastFrameTime: number = 0;
+  /** Previous requestAnimationFrame timestamp, in milliseconds */
+  private lastTimestamp: number = 0;
 
   /** Number of frames since last FPS update */
   private frameCount: number = 0;
 
-  /** Timestamp of last FPS calculation */
+  /** Timestamp of last FPS calculation (same clock as requestAnimationFrame) */
   private fpsUpdateTime: number = 0;
 
-  /** RequestAnimationFrame callback ID */
-  private animationFrameId: number | null = null;
+  /** requestAnimationFrame id, cancelled by stop() */
+  private rafId: number = 0;
 
   // ========== Randomization for visual variety ==========
 
@@ -126,10 +148,11 @@ export class GameEngine {
 
   /**
    * Create Game Engine instance
-   * @param canvas - HTML canvas element for rendering
+   * @param canvas - Canvas to draw into. When omitted, the loop still ticks
+   *   on an offscreen surface and the mounted view draws itself.
    * @param config - Optional engine configuration overrides
    */
-  constructor(canvas: GameCanvas, config: Partial<GameEngineConfig> = {}) {
+  constructor(canvas: GameCanvas = createHeadlessCanvas(), config: Partial<GameEngineConfig> = {}) {
     this.canvas = canvas;
     this.renderer = new Renderer2D5(canvas);
 
@@ -153,23 +176,23 @@ export class GameEngine {
     if (this.isRunning) return;
 
     this.isRunning = true;
-    this.lastFrameTime = Date.now();
+    const now = performance.now();
+    this.lastTimestamp = now;
     this.realTimeAtStart = Date.now();
-    this.fpsUpdateTime = Date.now();
+    this.fpsUpdateTime = now;
 
-    this.gameLoop();
+    this.rafId = requestAnimationFrame(this.loop.bind(this));
   }
 
   /**
    * Stop the game loop
    * Halts rendering and updates
-   * Cancels pending animation frame request
+   * Cancels the pending animation frame
    */
   stop(): void {
     this.isRunning = false;
-    if (this.animationFrameId !== null) {
-      cancelAnimationFrame(this.animationFrameId);
-    }
+    cancelAnimationFrame(this.rafId);
+    this.rafId = 0;
   }
 
   /**
@@ -191,46 +214,43 @@ export class GameEngine {
   }
 
   /**
-   * Main game loop
+   * Main game loop. `timestamp` comes from requestAnimationFrame, which does not
+   * fire while the tab is hidden.
    */
-  private gameLoop = (): void => {
-    const now = Date.now();
-    const deltaTime = (now - this.lastFrameTime) / 1000; // Convert to seconds
-    this.lastFrameTime = now;
+  private loop(timestamp: number): void {
+    if (!this.isRunning) return;
 
-    // Update game time
+    // Cap a late frame so a backgrounded tab cannot dump seconds of game time.
+    const deltaTime = Math.min((timestamp - this.lastTimestamp) / 1000, 0.1);
+    this.lastTimestamp = timestamp;
+
     this.gameTime += deltaTime * this.config.timeScale;
     this.stats.deltaTime = deltaTime;
     this.stats.totalElapsedTime = this.gameTime;
 
-    // Update game state
     this.update(deltaTime);
-
-    // Render
     this.render();
 
-    // Update FPS counter
     this.frameCount++;
-    if (now - this.fpsUpdateTime >= 1000) {
+    if (timestamp - this.fpsUpdateTime >= 1000) {
       this.stats.fps = this.frameCount;
       this.frameCount = 0;
-      this.fpsUpdateTime = now;
+      this.fpsUpdateTime = timestamp;
 
       if (this.config.enableDebug) {
         console.log(`FPS: ${this.stats.fps}, Memory: ${this.getMemoryUsage()}MB`);
       }
     }
 
-    if (this.isRunning) {
-      this.animationFrameId = requestAnimationFrame(this.gameLoop);
-    }
-  };
+    if (!this.isRunning) return;
+    this.rafId = requestAnimationFrame(this.loop.bind(this));
+  }
 
   /**
    * Update game state
    */
   private update(deltaTime: number): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
 
     if (!store.world) return;
 
@@ -289,7 +309,7 @@ export class GameEngine {
     // - Particle effects
     // - Water physics for irrigation
     // - Wind effects for crops
-    const store = useGameStore();
+    const store = useGameStore.getState();
     if (!store.world) return;
 
     // Future: Add physics-based interactions here
@@ -302,7 +322,7 @@ export class GameEngine {
    * Render frame
    */
   private render(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
 
     if (!store.world) return;
 
@@ -322,7 +342,7 @@ export class GameEngine {
    * Queue game objects for rendering
    */
   private queueGameObjects(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
 
     if (!store.world) return;
 
@@ -351,7 +371,7 @@ export class GameEngine {
    * Queue terrain tiles with randomization
    */
   private queueTerrain(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
     if (!store.world) return;
 
     // Create seeded random for consistent terrain
@@ -384,7 +404,7 @@ export class GameEngine {
    * Queue farm plots with enhanced visual details
    */
   private queueFarmPlots(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
     if (!store.world) return;
 
     const random = Math.random;
@@ -435,7 +455,7 @@ export class GameEngine {
    * Queue buildings
    */
   private queueBuildings(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
     if (!store.world) return;
 
     store.world.buildings.forEach((building) => {
@@ -458,7 +478,7 @@ export class GameEngine {
    * Queue resource deposits
    */
   private queueResources(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
     if (!store.world) return;
 
     // Ore deposits
@@ -498,7 +518,7 @@ export class GameEngine {
    * Queue weather effects and events
    */
   private queueWeatherEffects(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
     if (!store.world) return;
 
     // Render active weather events
@@ -595,7 +615,7 @@ export class GameEngine {
    * Player position is derived from world state
    */
   private queueCharacters(): void {
-    const store = useGameStore();
+    const store = useGameStore.getState();
     if (!store.world) return;
 
     // Render player character

@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'rea
 import { useGameStore } from './src/store/gameStore';
 import { PersistenceManager } from './src/systems/PersistenceManager';
 import { AudioManager } from './src/systems/AudioManager';
+import { GameEngine } from './src/engine/GameEngine';
 import { IsometricGameScreen } from './src/components/IsometricGameScreen';
 import { LoadingScreen } from './src/components/LoadingScreen';
 import { AssetLoader, LoadingProgress } from './src/rendering/AssetLoader';
@@ -30,10 +31,8 @@ interface GameAppState {
  * - Initialize AudioManager for background music playback
  * - Initialize PersistenceManager for SQLite save/load functionality
  * - Manage application state (loading → menu → gameplay)
- * - Run 60 FPS game loop with updates for:
- *   - Time progression (0.1 game minutes per real second)
- *   - Crop growth calculations
- *   - Auto-save every ~30 seconds
+ * - Start GameEngine when play begins. Time, crops, and physics tick there
+ *   on requestAnimationFrame, not on a React setInterval.
  * - Handle resource cleanup on unmount (stop audio)
  * - Navigate between menu screen and game screen
  *
@@ -53,7 +52,6 @@ export default function App() {
   const audioRef = useRef<AudioManager | null>(null);
   const assetLoaderRef = useRef<AssetLoader | null>(null);
   const gameStoreRef = useRef(useGameStore());
-  const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
    * Initialize systems
@@ -161,31 +159,17 @@ export default function App() {
   }, []);
 
   /**
-   * Start game loop
+   * Simulation ticks live in GameEngine. requestAnimationFrame pauses in a
+   * hidden tab; the engine clamps the next delta so time does not jump.
    */
   useEffect(() => {
     if (!state.gameStarted) return;
 
-    const store = gameStoreRef.current;
-
-    // Update game state every frame
-    gameLoopRef.current = setInterval(() => {
-      if (!store.world) return;
-
-      // Advance game time (1 real second = 0.1 game minutes)
-      store.advanceTime(0.1);
-
-      // Update crop growth
-      store.updateCropGrowth(0.016); // ~60 FPS
-
-      // Auto-save every 30 seconds
-      if (Math.random() < 0.01) {
-        store.saveGame();
-      }
-    }, 1000 / 60); // 60 FPS
+    const engine = new GameEngine();
+    engine.start();
 
     return () => {
-      if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+      engine.stop();
     };
   }, [state.gameStarted]);
 
