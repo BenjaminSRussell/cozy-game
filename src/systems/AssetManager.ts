@@ -51,10 +51,44 @@ export class AssetManager {
 
   /**
    * Create Asset Manager instance
-   * Automatically loads all built-in free assets
+   * Automatically loads all built-in free assets.
+   * Pass `{ loadBuiltinAssets: false }` to start empty (used by tests).
    */
-  constructor() {
-    this.initializeBuiltinAssets();
+  constructor(options?: { loadBuiltinAssets?: boolean }) {
+    if (options?.loadBuiltinAssets !== false) {
+      this.initializeBuiltinAssets();
+    }
+  }
+
+  /**
+   * Insert or replace an asset by id.
+   * A second register with the same id (hot reload, remount) updates the
+   * existing row instead of appending another copy to the category list.
+   */
+  private storeAsset(asset: SpriteAsset): void {
+    const previous = this.assets.get(asset.id);
+    this.assets.set(asset.id, asset);
+
+    if (previous && previous.category !== asset.category) {
+      const previousCategory = this.assetLibrary[previous.category];
+      if (previousCategory) {
+        this.assetLibrary[previous.category] = previousCategory.filter(
+          (entry) => entry.id !== asset.id
+        );
+      }
+    }
+
+    if (!this.assetLibrary[asset.category]) {
+      this.assetLibrary[asset.category] = [];
+    }
+
+    const categoryAssets = this.assetLibrary[asset.category];
+    const existingIndex = categoryAssets.findIndex((entry) => entry.id === asset.id);
+    if (existingIndex >= 0) {
+      categoryAssets[existingIndex] = asset;
+    } else {
+      categoryAssets.push(asset);
+    }
   }
 
   /**
@@ -170,11 +204,7 @@ export class AssetManager {
     cropTypes.forEach(name => registerCrop(name));
 
     builtinAssets.forEach((asset) => {
-      this.assets.set(asset.id, asset);
-      if (!this.assetLibrary[asset.category]) {
-        this.assetLibrary[asset.category] = [];
-      }
-      this.assetLibrary[asset.category].push(asset);
+      this.storeAsset(asset);
     });
   }
 
@@ -185,12 +215,7 @@ export class AssetManager {
    */
   registerFreeAsset(asset: SpriteAsset): void {
     asset.source = 'free';
-    this.assets.set(asset.id, asset);
-
-    if (!this.assetLibrary[asset.category]) {
-      this.assetLibrary[asset.category] = [];
-    }
-    this.assetLibrary[asset.category].push(asset);
+    this.storeAsset(asset);
   }
 
   /**
@@ -202,12 +227,7 @@ export class AssetManager {
    */
   registerAIAsset(asset: SpriteAsset, imageData: Blob): void {
     asset.source = 'ai_generated';
-    this.assets.set(asset.id, asset);
-
-    if (!this.assetLibrary[asset.category]) {
-      this.assetLibrary[asset.category] = [];
-    }
-    this.assetLibrary[asset.category].push(asset);
+    this.storeAsset(asset);
 
     // Store image data
     const url = URL.createObjectURL(imageData);
@@ -227,12 +247,7 @@ export class AssetManager {
    */
   registerCustomAsset(asset: SpriteAsset, canvas: HTMLCanvasElement): void {
     asset.source = 'custom';
-    this.assets.set(asset.id, asset);
-
-    if (!this.assetLibrary[asset.category]) {
-      this.assetLibrary[asset.category] = [];
-    }
-    this.assetLibrary[asset.category].push(asset);
+    this.storeAsset(asset);
 
     // Convert canvas to image
     canvas.toBlob((blob) => {
@@ -350,11 +365,19 @@ export class AssetManager {
   }
 
   /**
-   * Get all registered assets
-   * @returns Array of all SpriteAsset objects
+   * Get all registered assets, one entry per id.
+   * Repeated register calls must not make TextureManager preload the same image twice.
+   * @returns Array of SpriteAsset objects with duplicate ids removed
    */
   getAllAssets(): SpriteAsset[] {
-    return Array.from(this.assets.values());
+    const seen = new Set<string>();
+    return Array.from(this.assets.values()).filter((asset) => {
+      if (seen.has(asset.id)) {
+        return false;
+      }
+      seen.add(asset.id);
+      return true;
+    });
   }
 
   /**
