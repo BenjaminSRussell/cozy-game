@@ -5,6 +5,8 @@ import { theme } from '../styles/theme';
 interface CozyIconButtonProps {
     emoji: string;
     label: string;
+    /** Screen-reader name. Falls back to `label` when omitted. */
+    accessibilityLabel?: string;
     isActive?: boolean;
     onPress: () => void;
     disabled?: boolean;
@@ -15,12 +17,14 @@ interface CozyIconButtonProps {
 export const CozyIconButton: React.FC<CozyIconButtonProps> = ({
     emoji,
     label,
+    accessibilityLabel,
     isActive = false,
     onPress,
     disabled = false,
     durability,
     style,
 }) => {
+    const accessibleName = accessibilityLabel ?? label;
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     const handlePressIn = () => {
@@ -69,6 +73,10 @@ export const CozyIconButton: React.FC<CozyIconButtonProps> = ({
             onHoverIn={handleHoverIn}
             onHoverOut={handleHoverOut}
             disabled={disabled}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={accessibleName}
+            aria-label={accessibleName}
             style={[{ flex: 1, maxWidth: 80 }, style]}
         >
             <Animated.View
@@ -79,7 +87,16 @@ export const CozyIconButton: React.FC<CozyIconButtonProps> = ({
                     { transform: [{ scale: scaleAnim }] },
                 ]}
             >
-                <Text style={styles.emoji}>{emoji}</Text>
+                <Text
+                    style={styles.emoji}
+                    accessible={false}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no"
+                    // RN Web ignores the native hide props and would expose the glyph.
+                    aria-hidden
+                >
+                    {emoji}
+                </Text>
                 <Text style={[styles.label, isActive && styles.activeLabel]}>{label}</Text>
 
                 {durability !== undefined && (
