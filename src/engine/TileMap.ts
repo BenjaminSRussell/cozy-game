@@ -93,10 +93,13 @@ export class TileMap {
   }
 
   /**
-   * Get tile at position
+   * Get tile at position. Out-of-range coordinates return null, not undefined.
    */
-  getTile(x: number, y: number): TileData | undefined {
-    return this.tiles.get(this.getTileKey(x, y));
+  getTile(x: number, y: number): TileData | null {
+    if (x < 0 || y < 0 || x >= this.config.width || y >= this.config.height) {
+      return null;
+    }
+    return this.tiles.get(this.getTileKey(x, y)) ?? null;
   }
 
   /**
