@@ -508,6 +508,291 @@ export function clockHudView(input: ClockHudInput): ClockHudView {
   };
 }
 
+/** Ten inventory slots. Keys 1–9 then 0 select indexes 0–9. */
+export const HOTBAR_SLOT_COUNT = 10;
+export const HOTBAR_SLOT_SIZE = 48;
+export const HOTBAR_SLOT_GAP = 8;
+export const HOTBAR_SELECTED_BORDER = theme.colors.hotbarSelected;
+export const HOTBAR_KEY_CODES = [
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
+  'Digit6',
+  'Digit7',
+  'Digit8',
+  'Digit9',
+  'Digit0',
+] as const;
+
+const HOTBAR_KEY_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'] as const;
+const HOTBAR_TOOL_ORDER = [
+  ToolType.HOE,
+  ToolType.WATERING_CAN,
+  ToolType.AXE,
+  ToolType.PICKAXE,
+  ToolType.SCYTHE,
+] as const;
+const HOTBAR_CODE_TO_SLOT = new Map<string, number>([
+  ['Digit1', 0],
+  ['Digit2', 1],
+  ['Digit3', 2],
+  ['Digit4', 3],
+  ['Digit5', 4],
+  ['Digit6', 5],
+  ['Digit7', 6],
+  ['Digit8', 7],
+  ['Digit9', 8],
+  ['Digit0', 9],
+  ['Numpad1', 0],
+  ['Numpad2', 1],
+  ['Numpad3', 2],
+  ['Numpad4', 3],
+  ['Numpad5', 4],
+  ['Numpad6', 5],
+  ['Numpad7', 6],
+  ['Numpad8', 7],
+  ['Numpad9', 8],
+  ['Numpad0', 9],
+]);
+const HOTBAR_TOOL_ICON_KEYS = ['watering_can', 'pickaxe', 'scythe', 'hoe', 'axe'] as const;
+const HOTBAR_ICONS: Record<string, string> = {
+  watering_can: '💧',
+  pickaxe: '⛏️',
+  scythe: '🌾',
+  hoe: '🪴',
+  axe: '🪓',
+  hay: '🌾',
+  wheat: '🌾',
+  carrot: '🥕',
+  tomato: '🍅',
+  corn: '🌽',
+  potato: '🥔',
+  apple: '🍎',
+  lettuce: '🥬',
+  onion: '🧅',
+  garlic: '🧄',
+  pumpkin: '🎃',
+  strawberry: '🍓',
+  blueberries: '🫐',
+  wood: '🪵',
+  stone: '🪨',
+  iron: '⚙️',
+  gold: '✨',
+  seed: '🌱',
+  egg: '🥚',
+  milk: '🥛',
+  wool: '🧶',
+  fertilizer: '🧪',
+};
+
+export interface HotbarSlotItem {
+  id?: string;
+  name?: string;
+  quantity?: number;
+  spriteId?: string;
+  type?: string;
+  toolType?: string;
+  durability?: number;
+  maxDurability?: number;
+  waterLevel?: number;
+  maxWater?: number;
+}
+
+export interface HotbarMeterView {
+  kind: 'durability' | 'water';
+  percent: number;
+  width: string;
+  color: string;
+}
+
+export interface HotbarSlotView {
+  index: number;
+  keyLabel: string;
+  size: number;
+  empty: boolean;
+  selected: boolean;
+  borderColor: string;
+  icon: string | null;
+  quantityLabel: string | null;
+  quantityCorner: 'bottom-right';
+  meter: HotbarMeterView | null;
+  accessibilityLabel: string;
+}
+
+export interface HotbarLayout {
+  slotCount: number;
+  slotSize: number;
+  gap: number;
+  anchor: 'bottom';
+  selectedBorder: string;
+  slots: HotbarSlotView[];
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
+}
+
+function ratioPercent(current: number, max: number | undefined, fallbackMax: number): number {
+  const cap = finiteNumber(max) && max > 0 ? max : fallbackMax;
+  return clampPercent((current / cap) * 100);
+}
+
+/** Top-row 1–0 and numpad 1–0. Movement codes stay with the walk handler. */
+export function hotbarSlotFromKey(code: string, key?: string): number | null {
+  const fromCode = HOTBAR_CODE_TO_SLOT.get(code);
+  if (fromCode !== undefined) return fromCode;
+  if (key === '0') return 9;
+  if (key !== undefined && key.length === 1 && key >= '1' && key <= '9') {
+    return key.charCodeAt(0) - 49;
+  }
+  return null;
+}
+
+export function selectHotbarSlot(index: number): number {
+  if (!Number.isFinite(index)) return 0;
+  const slot = Math.trunc(index);
+  if (slot < 0) return 0;
+  if (slot >= HOTBAR_SLOT_COUNT) return HOTBAR_SLOT_COUNT - 1;
+  return slot;
+}
+
+/** Positive deltaY (wheel down) is the next slot. Magnitude still moves one slot. */
+export function hotbarWheelDelta(deltaY: number): number {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return 0;
+  return deltaY > 0 ? 1 : -1;
+}
+
+export function cycleHotbarSlot(current: number, delta: number): number {
+  if (!Number.isFinite(delta) || delta === 0) return selectHotbarSlot(current);
+  const step = delta > 0 ? 1 : -1;
+  return (selectHotbarSlot(current) + step + HOTBAR_SLOT_COUNT) % HOTBAR_SLOT_COUNT;
+}
+
+function isDirectIcon(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('/') || trimmed.includes('.')) return false;
+  return !/[a-z0-9]/i.test(trimmed);
+}
+
+export function hotbarItemIcon(item: HotbarSlotItem): string {
+  const sprite = item.spriteId?.trim() ?? '';
+  if (sprite && isDirectIcon(sprite)) return sprite;
+  const fields = [item.toolType, item.spriteId, item.id, item.name];
+  for (const field of fields) {
+    if (!field) continue;
+    const normalized = field.toLowerCase();
+    for (const iconKey of HOTBAR_TOOL_ICON_KEYS) {
+      if (normalized.includes(iconKey)) return HOTBAR_ICONS[iconKey];
+    }
+  }
+  for (const field of fields) {
+    if (!field) continue;
+    const normalized = field.toLowerCase();
+    if (HOTBAR_ICONS[normalized]) return HOTBAR_ICONS[normalized];
+    const parts = normalized.split(/[^a-z0-9]+/).filter((part) => part.length > 0);
+    for (const part of parts) {
+      if (HOTBAR_ICONS[part]) return HOTBAR_ICONS[part];
+    }
+    for (const iconKey of Object.keys(HOTBAR_ICONS)) {
+      if (iconKey.includes('_')) continue;
+      if (normalized.includes(iconKey)) return HOTBAR_ICONS[iconKey];
+    }
+  }
+  return '📦';
+}
+
+function isWaterContainer(item: HotbarSlotItem): boolean {
+  if (item.toolType === ToolType.WATERING_CAN) return true;
+  const blob = `${item.toolType ?? ''} ${item.spriteId ?? ''} ${item.name ?? ''} ${item.id ?? ''}`.toLowerCase();
+  return blob.includes('watering');
+}
+
+/** Durability for tools. Watering cans and explicit waterLevel use the water bar. */
+export function hotbarMeter(item: HotbarSlotItem): HotbarMeterView | null {
+  if (finiteNumber(item.waterLevel)) {
+    const percent = ratioPercent(item.waterLevel, item.maxWater, 100);
+    return { kind: 'water', percent, width: `${percent}%`, color: theme.colors.sky };
+  }
+  if (!finiteNumber(item.durability)) return null;
+  const percent = ratioPercent(item.durability, item.maxDurability, 100);
+  if (isWaterContainer(item)) {
+    return { kind: 'water', percent, width: `${percent}%`, color: theme.colors.sky };
+  }
+  return { kind: 'durability', percent, width: `${percent}%`, color: theme.colors.sage };
+}
+
+export function hotbarLayout(
+  items: readonly (HotbarSlotItem | null | undefined)[],
+  selectedIndex: number,
+): HotbarLayout {
+  const selected = selectHotbarSlot(selectedIndex);
+  const slots = HOTBAR_KEY_LABELS.map((keyLabel, index): HotbarSlotView => {
+    const item = items[index] ?? null;
+    const selectedSlot = index === selected;
+    const meter = item ? hotbarMeter(item) : null;
+    const quantityLabel = item && finiteNumber(item.quantity)
+      ? String(Math.max(0, Math.trunc(item.quantity)))
+      : null;
+    const name = item?.name?.trim() || (item ? 'item' : '');
+    const detail = item
+      ? `${name}${quantityLabel ? `, stack ${quantityLabel}` : ''}${meter ? `, ${meter.kind} ${Math.round(meter.percent)}%` : ''}`
+      : 'empty';
+    return {
+      index,
+      keyLabel,
+      size: HOTBAR_SLOT_SIZE,
+      empty: item == null,
+      selected: selectedSlot,
+      borderColor: selectedSlot ? HOTBAR_SELECTED_BORDER : theme.colors.glassBorder,
+      icon: item ? hotbarItemIcon(item) : null,
+      quantityLabel,
+      quantityCorner: 'bottom-right',
+      meter,
+      accessibilityLabel: `Hotbar slot ${keyLabel}, ${detail}${selectedSlot ? ', selected' : ''}`,
+    };
+  });
+  return {
+    slotCount: HOTBAR_SLOT_COUNT,
+    slotSize: HOTBAR_SLOT_SIZE,
+    gap: HOTBAR_SLOT_GAP,
+    anchor: 'bottom',
+    selectedBorder: HOTBAR_SELECTED_BORDER,
+    slots,
+  };
+}
+
+/**
+ * Inventory keeps its own indexes. Equipped tools fill leftover slots so a
+ * durability or water bar is visible without a second inventory list.
+ */
+export function hotbarItemsFromPlayer(player: {
+  inventory?: readonly HotbarSlotItem[] | null;
+  tools?: Partial<Record<ToolType, HotbarSlotItem | undefined>> | null;
+}): (HotbarSlotItem | null)[] {
+  const inventory = player.inventory ?? [];
+  const slots: (HotbarSlotItem | null)[] = Array.from({ length: HOTBAR_SLOT_COUNT }, (_, index) => {
+    return inventory[index] ?? null;
+  });
+  const tools = HOTBAR_TOOL_ORDER
+    .map((toolType) => player.tools?.[toolType])
+    .filter((tool): tool is HotbarSlotItem => tool != null);
+  let toolCursor = 0;
+  for (let index = 0; index < HOTBAR_SLOT_COUNT && toolCursor < tools.length; index += 1) {
+    if (slots[index] == null) {
+      slots[index] = tools[toolCursor];
+      toolCursor += 1;
+    }
+  }
+  return slots;
+}
+
 /** Buttons keep their own presses. A touch on the canvas or empty left half still drives the stick. */
 export function isJoystickIgnoredTarget(target: EventTarget | null): boolean {
   if (typeof Element === 'undefined') return false;
@@ -566,6 +851,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const notificationTimerRef = useRef<NotificationTimerId>(null);
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
   const [showCrafting, setShowCrafting] = useState(false);
+  const [selectedHotbarSlot, setSelectedHotbarSlot] = useState(0);
 
   const showNotification = (msg: string, durationMs = 2000) => {
     setNotification(msg);
@@ -663,6 +949,34 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('touchmove', blockScrollWhileDragging);
       window.cancelAnimationFrame(frameId);
+    };
+  }, []);
+
+  // 1–0 selects a slot. The wheel moves one slot and wraps. Walk keys stay in the effect above.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTypingTarget(event.target)) return;
+      const slot = hotbarSlotFromKey(event.code, event.key);
+      if (slot === null) return;
+      event.preventDefault();
+      setSelectedHotbarSlot(slot);
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (isTypingTarget(event.target)) return;
+      const delta = hotbarWheelDelta(event.deltaY);
+      if (delta === 0) return;
+      setSelectedHotbarSlot((current) => cycleHotbarSlot(current, delta));
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('wheel', onWheel, { passive: true });
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('wheel', onWheel);
     };
   }, []);
 
@@ -973,6 +1287,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     day: world.totalDaysPlayed,
     coins: world.player.coins,
   });
+  const hotbar = hotbarLayout(hotbarItemsFromPlayer(world.player), selectedHotbarSlot);
 
   return (
     <JoystickTouchRoot
@@ -1276,6 +1591,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         <Text style={styles.instructionText}>• Click on voxels to interact with them</Text>
         <Text style={styles.instructionText}>• Use arrow buttons to move camera</Text>
         <Text style={styles.instructionText}>• WASD or arrow keys walk across the farm</Text>
+        <Text style={styles.instructionText}>• Keys 1-0, the scroll wheel, or a tap selects the hotbar</Text>
         <Text style={styles.instructionText}>• Drag the left half of the screen to walk</Text>
         <Text style={styles.instructionText}>• Select actions then click to place/build</Text>
         <Text style={styles.instructionText}>• Watch your crops grow in beautiful 3D!</Text>
@@ -1370,6 +1686,111 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         >
           {staminaGauge.label}
         </div>
+      </div>
+
+      <div
+        aria-label="Hotbar"
+        style={{
+          position: 'fixed',
+          left: '50%',
+          bottom: 12,
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: hotbar.gap,
+          maxWidth: 'calc(100% - 24px)',
+          overflowX: 'auto',
+          zIndex: 25,
+          pointerEvents: 'auto',
+        }}
+      >
+        {hotbar.slots.map((slot) => (
+          <button
+            key={slot.index}
+            type="button"
+            aria-label={slot.accessibilityLabel}
+            aria-pressed={slot.selected}
+            onClick={() => setSelectedHotbarSlot(selectHotbarSlot(slot.index))}
+            style={{
+              width: slot.size,
+              height: slot.size,
+              padding: 0,
+              margin: 0,
+              boxSizing: 'border-box',
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              borderRadius: 8,
+              border: `2px solid ${slot.borderColor}`,
+              background: theme.colors.glassBg,
+              boxShadow: slot.selected ? `0 0 10px ${slot.borderColor}` : theme.shadows.crisp,
+              cursor: 'pointer',
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                top: 1,
+                left: 3,
+                fontSize: 9,
+                fontWeight: 700,
+                lineHeight: '10px',
+                color: theme.colors.cocoa,
+                opacity: 0.75,
+              }}
+            >
+              {slot.keyLabel}
+            </span>
+            {slot.icon ? (
+              <span aria-hidden style={{ fontSize: 22, lineHeight: '24px' }}>{slot.icon}</span>
+            ) : null}
+            {slot.quantityLabel !== null ? (
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  right: 2,
+                  bottom: slot.meter ? 6 : 1,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  lineHeight: '12px',
+                  color: theme.colors.cocoa,
+                  textShadow: '0 0 2px #fff',
+                }}
+              >
+                {slot.quantityLabel}
+              </span>
+            ) : null}
+            {slot.meter ? (
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: 4,
+                  right: 4,
+                  bottom: 3,
+                  height: 4,
+                  borderRadius: 2,
+                  background: 'rgba(93, 64, 55, 0.18)',
+                  overflow: 'hidden',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'block',
+                    height: '100%',
+                    width: slot.meter.width,
+                    background: slot.meter.color,
+                  }}
+                />
+              </span>
+            ) : null}
+          </button>
+        ))}
       </div>
     </JoystickTouchRoot>
   );

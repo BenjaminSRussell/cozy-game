@@ -20,6 +20,8 @@ export const theme = {
         staminaHigh: '#10B981',
         staminaMid: '#F59E0B',
         staminaLow: '#EF4444',
+        // Selected hotbar slot border. Independent of the stamina amber stop.
+        hotbarSelected: '#F59E0B',
 
         // UI Specific
         glassBg: 'rgba(255, 255, 255, 0.65)',
