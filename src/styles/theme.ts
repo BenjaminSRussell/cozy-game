@@ -16,6 +16,10 @@ export const theme = {
         success: '#8FBC8F',
         warning: '#F4A261',
         error: '#E76F51',
+        // Stamina gauge: above 50%, 20% through 50%, below 20%
+        staminaHigh: '#10B981',
+        staminaMid: '#F59E0B',
+        staminaLow: '#EF4444',
 
         // UI Specific
         glassBg: 'rgba(255, 255, 255, 0.65)',

@@ -401,6 +401,53 @@ export function applyJoystickPlacement(
   nub.style.transform = `translate(${gesture.nubX}px, ${gesture.nubY}px)`;
 }
 
+/** Vertical stamina gauge on the isometric screen. Fill only — no regen. */
+export const STAMINA_GAUGE_WIDTH = 24;
+export const STAMINA_GAUGE_HEIGHT = 180;
+export const STAMINA_GAUGE_RADIUS = 12;
+export const STAMINA_PULSE_CLASS = 'stamina-gauge-pulse';
+export const STAMINA_PULSE_ANIMATION = 'stamina-gauge-pulse 0.85s ease-in-out infinite';
+export const STAMINA_PULSE_CSS = `@keyframes stamina-gauge-pulse{0%,100%{opacity:1}50%{opacity:.45}}.${STAMINA_PULSE_CLASS}{animation:${STAMINA_PULSE_ANIMATION}}`;
+
+export interface StaminaGaugeView {
+  width: number;
+  height: number;
+  borderRadius: number;
+  /** (currentStamina / maxStamina) * 100, clamped to 0–100. */
+  fillPercent: number;
+  fillHeight: string;
+  color: string;
+  pulse: boolean;
+  pulseClass: string;
+  pulseStyle: { animation: string } | Record<string, never>;
+  label: string;
+}
+
+/** Above 50% emerald, 20% through 50% amber, below 20% crimson and pulsing. */
+export function staminaGaugeView(currentStamina: number, maxStamina: number): StaminaGaugeView {
+  const current = Number.isFinite(currentStamina) ? currentStamina : 0;
+  const max = Number.isFinite(maxStamina) && maxStamina > 0 ? maxStamina : 0;
+  const fillPercent = max > 0 ? Math.min(100, Math.max(0, (current / max) * 100)) : 0;
+  const pulse = fillPercent < 20;
+  const color = fillPercent > 50
+    ? theme.colors.staminaHigh
+    : fillPercent >= 20
+      ? theme.colors.staminaMid
+      : theme.colors.staminaLow;
+  return {
+    width: STAMINA_GAUGE_WIDTH,
+    height: STAMINA_GAUGE_HEIGHT,
+    borderRadius: STAMINA_GAUGE_RADIUS,
+    fillPercent,
+    fillHeight: `${fillPercent}%`,
+    color,
+    pulse,
+    pulseClass: pulse ? STAMINA_PULSE_CLASS : '',
+    pulseStyle: pulse ? { animation: STAMINA_PULSE_ANIMATION } : {},
+    label: `${Math.round(currentStamina)} / ${maxStamina}`,
+  };
+}
+
 /** Buttons keep their own presses. A touch on the canvas or empty left half still drives the stick. */
 export function isJoystickIgnoredTarget(target: EventTarget | null): boolean {
   if (typeof Element === 'undefined') return false;
@@ -859,6 +906,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
   const joystickRest = joystickRestPosition();
   const joystickSize = JOYSTICK_OUTER_RADIUS * 2;
+  const staminaGauge = staminaGaugeView(world.player.stamina, world.player.maxStamina);
 
   return (
     <JoystickTouchRoot
@@ -1192,6 +1240,62 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
             pointerEvents: 'none',
           }}
         />
+      </div>
+
+      <style>{STAMINA_PULSE_CSS}</style>
+      <div
+        aria-label="Stamina"
+        style={{
+          position: 'fixed',
+          right: 16,
+          bottom: 16,
+          width: staminaGauge.width,
+          height: staminaGauge.height,
+          zIndex: 30,
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: staminaGauge.width,
+            height: staminaGauge.height,
+            borderRadius: staminaGauge.borderRadius,
+            overflow: 'hidden',
+            backgroundColor: 'rgba(93, 64, 55, 0.28)',
+            boxSizing: 'border-box',
+          }}
+        >
+          <div
+            className={staminaGauge.pulseClass || undefined}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: staminaGauge.fillHeight,
+              backgroundColor: staminaGauge.color,
+              borderRadius: staminaGauge.borderRadius,
+              ...staminaGauge.pulseStyle,
+            }}
+          />
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%) rotate(-90deg)',
+            color: theme.colors.cream,
+            fontSize: 12,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            textShadow: '0 1px 2px rgba(0,0,0,0.7)',
+          }}
+        >
+          {staminaGauge.label}
+        </div>
       </div>
     </JoystickTouchRoot>
   );
