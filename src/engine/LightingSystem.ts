@@ -90,7 +90,7 @@ export class DynamicLightingSystem {
     const hour = time.hour + time.minute / 60;
     const { sunrise, sunset } = this.getSunriseSunset(season);
     
-    // Calculate sun position (0ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â° at sunrise, 180ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â° at sunset)
+    // Calculate sun position (0° at sunrise, 180° at sunset)
     const sunAngle = ((hour - sunrise) / (sunset - sunrise)) * Math.PI;
     const sunHeight = Math.sin(sunAngle);
     const sunX = Math.cos(sunAngle);
@@ -252,6 +252,12 @@ export class DynamicLightingSystem {
       minute: Math.max(0, Math.min(59, minute)),
       totalMinutes: hour * 60 + minute
     };
+    this.lightingState = this.calculateLightingState(this.currentTime, this.currentSeason);
+  }
+
+  // Set season used for sunrise and sunset
+  setSeason(season: Season): void {
+    this.currentSeason = season;
     this.lightingState = this.calculateLightingState(this.currentTime, this.currentSeason);
   }
 
