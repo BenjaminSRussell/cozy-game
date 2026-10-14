@@ -65,6 +65,13 @@ export class IsometricRenderer {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas context failed');
     this.ctx = ctx;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.scale(dpr, dpr);
     this.textureManager = TextureManager.getInstance();
     this.windSystem = WindSystem.getInstance();
 

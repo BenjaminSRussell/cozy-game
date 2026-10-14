@@ -1,13 +1,27 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IsometricRenderer } from './IsometricRenderer';
 
 const TILE_SIZE = 64;
 
-function canvasOf(width: number, height: number): HTMLCanvasElement {
+beforeEach(() => {
+  vi.stubGlobal('window', { devicePixelRatio: 1 });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function canvasOf(
+  width: number,
+  height: number,
+  scale: (x: number, y: number) => void = () => {}
+): HTMLCanvasElement {
   return {
     width,
     height,
-    getContext: () => ({}),
+    style: {},
+    getContext: () => ({ scale }),
+    getBoundingClientRect: () => ({ width, height }),
   } as unknown as HTMLCanvasElement;
 }
 
@@ -73,5 +87,35 @@ describe('IsometricRenderer.screenToVoxel', () => {
     expect(renderer.screenToVoxel(pastX.x, pastX.y)).toBeNull();
     expect(renderer.screenToVoxel(pastY.x, pastY.y)).toBeNull();
     expect(renderer.screenToVoxel(last.x, last.y)).toEqual({ x: 99, y: 79 });
+  });
+});
+
+describe('IsometricRenderer devicePixelRatio', () => {
+  it('sets canvas.width to rect.width * 2 when dpr is 2', () => {
+    vi.stubGlobal('window', { devicePixelRatio: 2 });
+    const rect = { width: 800, height: 600 };
+    const scale = vi.fn();
+    const canvas = canvasOf(rect.width, rect.height, scale);
+
+    new IsometricRenderer(canvas);
+
+    expect(canvas.width).toBe(rect.width * 2);
+    expect(canvas.height).toBe(rect.height * 2);
+    expect(canvas.style.width).toBe(`${rect.width}px`);
+    expect(canvas.style.height).toBe(`${rect.height}px`);
+    expect(scale).toHaveBeenCalledWith(2, 2);
+  });
+
+  it('sets canvas.width to rect.width when dpr is 1', () => {
+    vi.stubGlobal('window', { devicePixelRatio: 1 });
+    const rect = { width: 800, height: 600 };
+    const canvas = canvasOf(rect.width, rect.height);
+
+    new IsometricRenderer(canvas);
+
+    expect(canvas.width).toBe(rect.width);
+    expect(canvas.height).toBe(rect.height);
+    expect(canvas.style.width).toBe(`${rect.width}px`);
+    expect(canvas.style.height).toBe(`${rect.height}px`);
   });
 });
