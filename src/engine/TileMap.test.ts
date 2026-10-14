@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Building } from '../types/game';
-import { TileMap } from './TileMap';
+import { CollisionFlag, TileMap } from './TileMap';
 
 function house(x: number, y: number): Building {
   return {
@@ -138,6 +138,60 @@ describe('TileMap', () => {
         }
       }
     }
+  });
+
+  it('blocks water, trees, and buildings while a grass tile stays walkable', () => {
+    const grid = { width: 4, height: 2, tileSize: 16, elevationScale: 8 };
+    const map = new TileMap(grid);
+    expect(map.collisionMatrix).toBeInstanceOf(Uint8Array);
+    expect(map.collisionMatrix.length).toBe(grid.width * grid.height);
+    expect(CollisionFlag.NONE).toBe(0);
+    expect(CollisionFlag.WATER).toBe(1 << 0);
+    expect(CollisionFlag.CLIFF).toBe(1 << 1);
+    expect(CollisionFlag.BUILDING).toBe(1 << 2);
+    expect(CollisionFlag.FENCE).toBe(1 << 3);
+    expect(CollisionFlag.TREE).toBe(1 << 4);
+
+    for (const tile of map.getAllTiles()) {
+      const index = tile.position.y * grid.width + tile.position.x;
+      if (tile.type === 'water') {
+        expect(map.collisionMatrix[index]).toBe(CollisionFlag.WATER);
+        expect(map.isTileWalkable(tile.position.x, tile.position.y)).toBe(false);
+      } else {
+        expect(map.collisionMatrix[index]).toBe(CollisionFlag.NONE);
+        expect(map.isTileWalkable(tile.position.x, tile.position.y)).toBe(true);
+      }
+    }
+
+    map.setTile(0, 0, { type: 'grass', walkable: true, building: undefined, crop: undefined });
+    map.setTile(1, 0, { type: 'water', walkable: false, building: undefined, crop: undefined });
+    map.setTile(2, 0, { type: 'grass', walkable: true, building: undefined, crop: undefined });
+    map.setTile(3, 0, { type: 'grass', walkable: true, building: undefined, crop: undefined });
+
+    expect(map.collisionMatrix[0]).toBe(CollisionFlag.NONE);
+    expect(map.isTileWalkable(0, 0)).toBe(true);
+    expect(map.isWalkable(0, 0)).toBe(true);
+
+    expect(map.collisionMatrix[1]).toBe(CollisionFlag.WATER);
+    expect(map.isTileWalkable(1, 0)).toBe(false);
+
+    const tree = { ...house(2, 0), id: 'tree-1', type: 'tree', spriteId: 'tree' };
+    expect(map.placeBuilding(2, 0, tree)).toBe(true);
+    expect(map.collisionMatrix[2]).toBe(CollisionFlag.TREE);
+    expect(map.isTileWalkable(2, 0)).toBe(false);
+
+    const barn = { ...house(3, 0), id: 'barn-1', type: 'barn', spriteId: 'barn' };
+    expect(map.placeBuilding(3, 0, barn)).toBe(true);
+    expect(map.collisionMatrix[3]).toBe(CollisionFlag.BUILDING);
+    expect(map.isTileWalkable(3, 0)).toBe(false);
+    expect(map.isWalkable(3, 0)).toBe(false);
+
+    expect(map.isTileWalkable(0, 0)).toBe(true);
+    expect(map.isTileWalkable(-1, 0)).toBe(false);
+    expect(map.isTileWalkable(0, -1)).toBe(false);
+    expect(map.isTileWalkable(grid.width, 0)).toBe(false);
+    expect(map.isTileWalkable(0, grid.height)).toBe(false);
+    expect(map.isTileWalkable(1.5, 0)).toBe(false);
   });
 
   it('returns only tiles inside the requested radius', () => {
