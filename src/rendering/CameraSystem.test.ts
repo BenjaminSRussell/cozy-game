@@ -42,3 +42,47 @@ describe('CameraSystem arrival snap', () => {
     expect(camera.zoom).toBe(1.0005);
   });
 });
+
+describe('CameraSystem frame-rate independent smoothing', () => {
+  function stepAt(dt: number): { x: number; y: number; zoom: number } {
+    const camera = new CameraSystem(800, 600);
+    camera.moveTo({ x: 200, y: -80 });
+    camera.zoomTo(2);
+    camera.update(dt);
+    return { x: camera.position.x, y: camera.position.y, zoom: camera.zoom };
+  }
+
+  it('matches the original 0.1 step at 60 FPS and about half of that at 120 FPS', () => {
+    const at60 = stepAt(0.0167);
+    expect(at60.x / 200).toBeCloseTo(0.1, 3);
+    expect(at60.y / -80).toBeCloseTo(0.1, 3);
+    expect((at60.zoom - 1) / 1).toBeCloseTo(0.1, 3);
+
+    const at120 = stepAt(0.0083);
+    expect(at120.x / 200).toBeCloseTo(0.053, 2);
+    expect(at120.y / -80).toBeCloseTo(0.053, 2);
+    expect(at120.zoom - 1).toBeCloseTo(0.053, 2);
+    expect(at120.x).toBeLessThan(at60.x / 1.5);
+  });
+
+  it('covers the same distance in the same real time at 30 FPS and 120 FPS', () => {
+    const travel = (dt: number, seconds: number) => {
+      const camera = new CameraSystem(800, 600);
+      camera.moveTo({ x: 1000, y: -400 });
+      camera.zoomTo(3);
+      const frames = Math.round(seconds / dt);
+      for (let i = 0; i < frames; i++) {
+        camera.update(dt);
+      }
+      return camera;
+    };
+
+    const slow = travel(1 / 30, 0.5);
+    const fast = travel(1 / 120, 0.5);
+    expect(fast.position.x).toBeCloseTo(slow.position.x, 4);
+    expect(fast.position.y).toBeCloseTo(slow.position.y, 4);
+    expect(fast.zoom).toBeCloseTo(slow.zoom, 4);
+    expect(slow.position.x).toBeGreaterThan(900);
+    expect(slow.position.x).toBeLessThan(1000);
+  });
+});
