@@ -4,6 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { CropStage, DamBuilding } from '../types/game';
 import { DrawingScreen } from './DrawingScreen';
 import { MarketplaceScreen } from './MarketplaceScreen';
+import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModal';
 import { LoadingScreen } from './LoadingScreen';
 import { AdvancedParticleSystem } from '../engine/ParticleSystem';
 import { DemoAssets } from '../assets/DemoAssets';
@@ -521,7 +522,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
     getAvailableHomes,
     getOwnedHomes,
     getTotalHomeBenefits,
-    removeHome
+    removeHome,
+    advanceTime,
   } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selectedAction, setSelectedAction] = useState<'plant' | 'water' | 'harvest' | 'build' | 'mine' | null>(null);
@@ -1378,6 +1380,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
     setTimeout(() => setNotification(''), 2000);
   };
 
+  const shipping = useEndOfDayShipping(world, advanceTime);
+
   if (!world) {
     return (
       <View style={styles.container}>
@@ -1659,6 +1663,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
       <MarketplaceScreen
         visible={showMarketplace}
         onClose={() => setShowMarketplace(false)}
+      />
+
+      <ShippingSummaryModal
+        visible={shipping.open}
+        rows={shipping.rows}
+        onContinue={shipping.onContinue}
       />
     </View>
   );

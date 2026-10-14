@@ -597,6 +597,16 @@ export interface Vehicle {
   mountedBy?: string; // Player ID
 }
 
+/**
+ * One shipping-bin row for the current day.
+ * `gold` matches the coins added for this sale, with quality applied once.
+ */
+export interface ShippedTodayEntry {
+  name: string;
+  quantity: number;
+  gold: number;
+}
+
 // ============================================================================
 // WORLD STATE - Complete game world definition
 // ============================================================================
@@ -619,6 +629,11 @@ export interface GameWorld {
   dayTime: number;
   /** Total days elapsed since world creation */
   totalDaysPlayed: number;
+  /**
+   * Sales recorded for the current day.
+   * `gold` is the coins added for that sale. Cleared when the day rolls.
+   */
+  shippedToday: ShippedTodayEntry[];
   /** Player character state */
   player: PlayerState;
   /** All farm plots with growing crops */
