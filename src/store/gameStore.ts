@@ -1338,6 +1338,9 @@ export const useGameStore = create<GameStore>()(
         },
 
         waterCrop: (plotId: string) => {
+          const plot = get().world?.farmPlots.find((entry) => entry.id === plotId);
+          if (plot?.crop?.stage === CropStage.DEAD) return;
+
           set((state) => {
             if (!state.world) return state;
 
