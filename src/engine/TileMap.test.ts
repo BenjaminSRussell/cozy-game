@@ -105,6 +105,41 @@ describe('TileMap', () => {
     expect(first.getTile(2, 0)?.variant).toBe(3);
   });
 
+  it('keeps hashed elevation stable, non-negative, and smooth between neighbors', () => {
+    const wide = { width: 16, height: 16, tileSize: 16, elevationScale: 8 };
+    const first = new TileMap(wide);
+    const second = new TileMap(wide);
+    const origin = first.getTile(0, 0);
+    const again = second.getTile(0, 0);
+    expect(origin).not.toBeNull();
+    expect(again).not.toBeNull();
+    if (!origin || !again) return;
+    expect(origin.elevation).toBe(again.elevation);
+    expect(Number.isFinite(origin.elevation)).toBe(true);
+    expect(origin.elevation).toBeGreaterThanOrEqual(0);
+    expect(origin.elevation).toBeLessThanOrEqual(4);
+
+    for (let y = 0; y < wide.height; y++) {
+      for (let x = 0; x < wide.width; x++) {
+        const tile = first.getTile(x, y);
+        const twin = second.getTile(x, y);
+        expect(tile).not.toBeNull();
+        if (!tile || !twin) return;
+        expect(tile.elevation).toBe(twin.elevation);
+        expect(tile.elevation).toBeGreaterThanOrEqual(0);
+        expect(tile.elevation).toBeLessThanOrEqual(4);
+        const right = x + 1 < wide.width ? first.getTile(x + 1, y) : null;
+        const down = y + 1 < wide.height ? first.getTile(x, y + 1) : null;
+        if (right) {
+          expect(Math.abs(tile.elevation - right.elevation)).toBeLessThanOrEqual(1.5);
+        }
+        if (down) {
+          expect(Math.abs(tile.elevation - down.elevation)).toBeLessThanOrEqual(1.5);
+        }
+      }
+    }
+  });
+
   it('returns only tiles inside the requested radius', () => {
     const map = new TileMap({ width: 5, height: 5, tileSize: 16, elevationScale: 8 });
     const positions = map.getTilesInRange(2, 2, 1).map((tile) => `${tile.position.x},${tile.position.y}`);
