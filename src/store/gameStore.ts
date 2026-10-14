@@ -32,6 +32,7 @@ import {
   Road,
   RoadGrade,
   Vehicle,
+  getQualityMultiplier,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
 import { liveIsometricRenderers } from '../rendering/IsometricRenderer';
@@ -2284,28 +2285,19 @@ export const useGameStore = create<GameStore>()(
           });
         },
         sellInventoryItem: (itemId: string, quantity: number) => {
-          let earnings = 0;
+          const item = get().world?.player.inventory.find((entry) => entry.id === itemId);
+          const removed = get().removeItem(itemId, quantity);
+          if (!item || !removed) return 0;
+
+          const earnings = item.sellValue * getQualityMultiplier(item.quality) * quantity;
           set((state) => {
             if (!state.world) return state;
-
-            const item = state.world.player.inventory.find(i => i.id === itemId);
-            if (!item || item.quantity < quantity) return state;
-
-            earnings = item.sellValue * quantity;
-
-            const inventory = state.world.player.inventory
-              .map((i) =>
-                i.id === itemId ? { ...i, quantity: Math.max(0, i.quantity - quantity) } : i,
-              )
-              .filter((i) => i.quantity > 0);
-
             return {
               world: {
                 ...state.world,
                 player: {
                   ...state.world.player,
                   coins: state.world.player.coins + earnings,
-                  inventory,
                 },
               },
             };

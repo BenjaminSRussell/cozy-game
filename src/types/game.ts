@@ -157,6 +157,20 @@ export interface Item {
   quality?: 'normal' | 'silver' | 'gold' | 'iridium';
 }
 
+/**
+ * Sell-price multiplier for an item quality.
+ * Missing quality and `'normal'` are the base rate.
+ */
+export function getQualityMultiplier(quality: Item['quality']): number {
+  switch (quality) {
+    case 'iridium': return 2.0;
+    case 'gold': return 1.5;
+    case 'silver': return 1.25;
+    case 'normal':
+    default: return 1.0; // undefined also falls here
+  }
+}
+
 // ============================================================================
 // FARMING SYSTEM - Crop planting and growth mechanics
 // ============================================================================
