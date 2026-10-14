@@ -26,6 +26,19 @@ export interface GameTime {
   isNewDay: boolean;
 }
 
+/** Day within a 28-day season. Day 1 follows day 28 of the previous season. */
+export interface SeasonCalendar {
+  season: Season;
+  day: number;
+}
+
+/** Result of advancing the 28-day season calendar by one day. */
+export interface SeasonAdvance {
+  seasonChanged: boolean;
+  previous: SeasonCalendar;
+  current: SeasonCalendar;
+}
+
 export interface ResourceNode {
   id: string;
   position: { x: number; y: number };
@@ -79,6 +92,11 @@ export class TimeSystem {
   private readonly DAY_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
   private readonly GAME_MINUTES_PER_REAL_SECOND = 0.1; // 1 real second = 0.1 game minutes
   private readonly DAILY_RESET_HOUR = 5; // 5 AM like Animal Crossing
+  /** In-game days before a season rolls over. Spring 28 becomes Summer 1. */
+  static readonly DAYS_PER_SEASON = 28;
+  static readonly SEASON_ORDER: readonly Season[] = ['spring', 'summer', 'autumn', 'winter'];
+  /** Separate from the real-month season on GameTime. Starts at Spring 1. */
+  private seasonCalendar: SeasonCalendar = { season: 'spring', day: 1 };
 
   constructor() {
     this.currentTime = this.initializeTime();
@@ -386,20 +404,63 @@ export class TimeSystem {
   }
 
   /**
+   * In-game season calendar (Spring 1 … Winter 28). Not the real-month clock.
+   */
+  public getSeasonCalendar(): SeasonCalendar {
+    return { ...this.seasonCalendar };
+  }
+
+  /**
+   * Set the in-game season calendar. Day is clamped to 1–28.
+   */
+  public setSeasonCalendar(season: Season, day: number): void {
+    if (!TimeSystem.SEASON_ORDER.includes(season)) return;
+    const whole = Math.floor(day);
+    if (!Number.isFinite(whole)) return;
+    const clamped = Math.min(TimeSystem.DAYS_PER_SEASON, Math.max(1, whole));
+    this.seasonCalendar = { season, day: clamped };
+  }
+
+  /**
+   * Advance one calendar day.
+   * Day 28 becomes day 1 of the next season: spring → summer → autumn → winter → spring.
+   */
+  public advanceSeasonCalendar(): SeasonAdvance {
+    const previous: SeasonCalendar = { ...this.seasonCalendar };
+    if (previous.day >= TimeSystem.DAYS_PER_SEASON) {
+      const index = TimeSystem.SEASON_ORDER.indexOf(previous.season);
+      const nextSeason = TimeSystem.SEASON_ORDER[(index + 1) % TimeSystem.SEASON_ORDER.length] ?? 'spring';
+      this.seasonCalendar = { season: nextSeason, day: 1 };
+    } else {
+      this.seasonCalendar = { season: previous.season, day: previous.day + 1 };
+    }
+    const current: SeasonCalendar = { ...this.seasonCalendar };
+    return {
+      seasonChanged: previous.season !== current.season,
+      previous,
+      current,
+    };
+  }
+
+  /**
    * Save time system state
    */
-  public save(): { time: GameTime; dailyReset: DailyResetSystem } {
+  public save(): { time: GameTime; dailyReset: DailyResetSystem; calendar: SeasonCalendar } {
     return {
       time: { ...this.currentTime },
       dailyReset: { ...this.dailyReset },
+      calendar: { ...this.seasonCalendar },
     };
   }
 
   /**
    * Load time system state
    */
-  public load(data: { time: GameTime; dailyReset: DailyResetSystem }): void {
+  public load(data: { time: GameTime; dailyReset: DailyResetSystem; calendar?: SeasonCalendar }): void {
     this.currentTime = { ...data.time };
     this.dailyReset = { ...data.dailyReset };
+    if (data.calendar) {
+      this.setSeasonCalendar(data.calendar.season, data.calendar.day);
+    }
   }
 }

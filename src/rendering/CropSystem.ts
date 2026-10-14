@@ -4,7 +4,7 @@
  * Detailed crop growth with multiple stages, health, and environmental factors
  */
 
-import { CropStage } from '../types/game';
+import { CropStage, type Season } from '../types/game';
 
 export interface CropVoxel {
   x: number;
@@ -65,6 +65,8 @@ export class CropSystem {
   private crops: Map<string, CropVoxel> = new Map();
   private cropConfigs: Map<string, CropConfig> = new Map();
   private currentTime: number = Date.now();
+  /** Season last passed to updateCrops. Null until the first tick. */
+  private observedSeason: string | null = null;
 
   constructor() {
     this.initializeCropConfigs();
@@ -321,6 +323,11 @@ export class CropSystem {
   public updateCrops(deltaTime: number, season: string): void {
     this.currentTime += deltaTime;
 
+    if (this.observedSeason !== null && this.observedSeason !== season) {
+      this.witherOnSeasonAdvance(season);
+    }
+    this.observedSeason = season;
+
     this.crops.forEach((crop, id) => {
       const config = this.cropConfigs.get(crop.cropType);
       if (!config) return;
@@ -374,6 +381,37 @@ export class CropSystem {
         crop.height = 1;
       }
     });
+  }
+
+  /**
+   * Wither planted crops whose config seasons do not include the new season.
+   * Used on a calendar boundary (day 28 → day 1). No greenhouse tile is stored
+   * on these crops, so every out-of-season plant dies. CropStage.DEAD is the
+   * dead state; harvest already requires HARVESTABLE.
+   */
+  public witherOnSeasonAdvance(season: string): void {
+    const next = this.parseSeason(season);
+    if (!next) return;
+
+    this.crops.forEach((crop) => {
+      if (crop.stage === CropStage.DEAD) return;
+      const config = this.cropConfigs.get(crop.cropType);
+      if (!config || config.seasons.includes(next)) return;
+      crop.stage = CropStage.DEAD;
+      crop.height = 1;
+    });
+  }
+
+  private parseSeason(season: string): Season | null {
+    switch (season) {
+      case 'spring':
+      case 'summer':
+      case 'autumn':
+      case 'winter':
+        return season;
+      default:
+        return null;
+    }
   }
 
   /**
