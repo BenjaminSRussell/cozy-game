@@ -127,12 +127,9 @@ const SVG_ASSETS: { [key: string]: number } = {
   snow_flake: require('../../assets/seasons/winter/snow_flake.svg'),
   snow_coverage: require('../../assets/seasons/winter/snow_coverage.svg'),
 
-  // Tools. No lawn-mower SVG exists; those keys keep the building stand-ins.
+  // Tools. lawn_mower_* SVGs are absent and are not mapped onto buildings.
   rake: require('../../assets/tools/rake.svg'),
   snow_shovel: require('../../assets/tools/snow_shovel.svg'),
-  lawn_mower_basic: require('../../assets/buildings/shed.svg'),
-  lawn_mower_pro: require('../../assets/buildings/barn.svg'),
-  lawn_mower_riding: require('../../assets/buildings/house.svg'),
 };
 
 /**
