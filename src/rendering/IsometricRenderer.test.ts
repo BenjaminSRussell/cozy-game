@@ -1,4 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Node's experimental localStorage has no methods unless --localstorage-file is set.
+// gameStore persists through it, so install a memory shim before the store loads.
+vi.hoisted(() => {
+  const memory = new Map<string, string>();
+  const storage: Storage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => {
+      memory.set(key, String(value));
+    },
+    removeItem: (key) => {
+      memory.delete(key);
+    },
+    clear: () => {
+      memory.clear();
+    },
+    key: (index) => Array.from(memory.keys())[index] ?? null,
+    get length() {
+      return memory.size;
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: storage,
+    configurable: true,
+  });
+});
+
+import { useGameStore } from '../store/gameStore';
 import { IsometricRenderer } from './IsometricRenderer';
 
 const TILE_SIZE = 64;
@@ -131,5 +159,104 @@ describe('IsometricRenderer devicePixelRatio', () => {
     expect(renderer.screenToVoxel(screen.x, screen.y)).toEqual({ x: 3, y: 5 });
     expect(renderer.screenToVoxel(tileToScreen(-1, 4, css).x, tileToScreen(-1, 4, css).y)).toBeNull();
     expect(renderer.screenToVoxel(tileToScreen(100, 0, css).x, tileToScreen(100, 0, css).y)).toBeNull();
+  });
+});
+
+function renderCanvas(): HTMLCanvasElement {
+  const gradient = { addColorStop: () => {} };
+  const ctx = {
+    scale: () => {},
+    clearRect: () => {},
+    createLinearGradient: () => gradient,
+    fillRect: () => {},
+    fillStyle: '',
+  };
+  return {
+    width: 800,
+    height: 600,
+    style: {},
+    getContext: () => ctx,
+    getBoundingClientRect: () => ({ width: 800, height: 600 }),
+  } as unknown as HTMLCanvasElement;
+}
+
+/** Enough world data for buildVoxelWorld to walk terrain, crops, and props. */
+function staticWorld() {
+  return {
+    mapSize: { x: 10, y: 10 },
+    farmPlots: [],
+    buildings: [],
+    oreDeposits: [],
+    woodSources: [],
+    animals: [],
+    roads: [],
+    vehicles: [],
+    grassGrowth: {},
+    player: { position: { x: 1, y: 2, z: 0 } },
+  } as never;
+}
+
+describe('IsometricRenderer worldDirty', () => {
+  const proto = IsometricRenderer.prototype as unknown as {
+    buildVoxelWorld: (world: unknown) => void;
+    drawVoxels: () => void;
+    drawWindParticles: (world: unknown) => void;
+    drawUI: (world: unknown) => void;
+  };
+
+  let drawVoxels: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    drawVoxels = vi.spyOn(proto, 'drawVoxels').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawWindParticles').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawUI').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('builds voxels once at startup and again only after markDirty', () => {
+    const buildVoxelWorld = vi.spyOn(proto, 'buildVoxelWorld');
+    const renderer = new IsometricRenderer(renderCanvas());
+    const world = staticWorld();
+
+    renderer.render(world);
+    renderer.render(world);
+    renderer.render(world);
+
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
+    expect(drawVoxels).toHaveBeenCalledTimes(3);
+
+    renderer.markDirty();
+    renderer.render(world);
+    renderer.render(world);
+
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(2);
+    expect(drawVoxels).toHaveBeenCalledTimes(5);
+  });
+
+  it('rebuilds after plantCrop and waterCrop replace the world, not on an unchanged render', () => {
+    const buildVoxelWorld = vi.spyOn(proto, 'buildVoxelWorld');
+    const renderer = new IsometricRenderer(renderCanvas());
+    const world = staticWorld();
+
+    renderer.render(world);
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
+
+    useGameStore.getState().createNewGame('DirtyFlag');
+    renderer.render(world);
+    renderer.render(world);
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(2);
+
+    useGameStore.getState().plantCrop('no-such-plot', 'wheat');
+    renderer.render(world);
+    renderer.render(world);
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(3);
+
+    useGameStore.getState().waterCrop('no-such-plot');
+    renderer.render(world);
+    renderer.render(world);
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(4);
   });
 });

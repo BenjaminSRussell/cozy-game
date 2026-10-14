@@ -47,10 +47,19 @@ interface IsometricPoint {
   depth: number;
 }
 
+const liveRenderers = new Set<IsometricRenderer>();
+
+/** Isometric renderers currently constructed. Store world commits mark these dirty. */
+export function liveIsometricRenderers(): Iterable<IsometricRenderer> {
+  return liveRenderers;
+}
+
 export class IsometricRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private voxels: Voxel[] = [];
+  /** First render builds; later renders reuse voxels until markDirty(). */
+  private worldDirty = true;
   private camera = { x: 0, y: 0, z: 0 };
   /** World bounds from the last render(); picks outside this are rejected. */
   private mapSize: { x: number; y: number } | null = null;
@@ -82,6 +91,11 @@ export class IsometricRenderer {
 
     // Set closer default zoom/tile size
     this.tileSize = 64;
+    liveRenderers.add(this);
+  }
+
+  public markDirty(): void {
+    this.worldDirty = true;
   }
 
   private isTreeCrop(world: GameWorld, x: number, y: number): boolean {
@@ -1119,6 +1133,12 @@ export class IsometricRenderer {
     this.ctx.restore();
   }
 
+  private drawVoxels(): void {
+    this.voxels.forEach(voxel => {
+      this.drawVoxel(voxel);
+    });
+  }
+
   /**
    * Main render function
    */
@@ -1150,12 +1170,13 @@ export class IsometricRenderer {
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, width, height);
 
-    // Build and render voxels
-    this.buildVoxelWorld(world);
+    // Rebuild the voxel list only when the world changed. Drawing still runs every call.
+    if (this.worldDirty) {
+      this.buildVoxelWorld(world);
+      this.worldDirty = false;
+    }
 
-    this.voxels.forEach(voxel => {
-      this.drawVoxel(voxel);
-    });
+    this.drawVoxels();
 
     // Draw Wind Particles
     this.drawWindParticles(world);
