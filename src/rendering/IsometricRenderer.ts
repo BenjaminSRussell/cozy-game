@@ -71,6 +71,12 @@ export class IsometricRenderer {
   private textureManager: TextureManager;
   private windSystem: WindSystem;
   private playerGridPos: { x: number, y: number } | null = null;
+  /** Grid tile under the pointer. Null when the pointer is off the map. */
+  hoveredTile: { x: number; y: number } | null = null;
+  /** Last world passed to render(); a hover repaint reuses it and does not set worldDirty. */
+  private lastWorld: GameWorld | null = null;
+  private boundPointerMove: EventListener;
+  private boundPointerLeave: EventListener;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -92,6 +98,47 @@ export class IsometricRenderer {
     // Set closer default zoom/tile size
     this.tileSize = 64;
     liveRenderers.add(this);
+    this.boundPointerMove = (event: Event) => this.handlePointerMove(event);
+    this.boundPointerLeave = () => this.setHoveredTile(null);
+    this.canvas.addEventListener?.('pointermove', this.boundPointerMove);
+    this.canvas.addEventListener?.('pointerleave', this.boundPointerLeave);
+  }
+
+  /**
+   * Pointer coordinates are CSS pixels, the same space as screenToVoxel.
+   * canvas.width is the HiDPI backing store (css size × dpr); do not scale into it.
+   */
+  private handlePointerMove(event: Event): void {
+    const pointer = event as PointerEvent;
+    if (!Number.isFinite(pointer.clientX) || !Number.isFinite(pointer.clientY)) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = pointer.clientX - (rect.left ?? 0);
+    const y = pointer.clientY - (rect.top ?? 0);
+    this.setHoveredTile(this.screenToVoxel(x, y));
+  }
+
+  private setHoveredTile(next: { x: number; y: number } | null): void {
+    if (this.sameHover(this.hoveredTile, next)) return;
+    this.hoveredTile = next;
+    // A pending world rebuild must stay pending; hover only repaints a clean cache.
+    if (!this.lastWorld || this.worldDirty) return;
+    this.render(this.lastWorld);
+  }
+
+  private sameHover(
+    a: { x: number; y: number } | null,
+    b: { x: number; y: number } | null
+  ): boolean {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    return a.x === b.x && a.y === b.y;
+  }
+
+  private isTileOnMap(tile: { x: number; y: number }): boolean {
+    if (!Number.isFinite(tile.x) || !Number.isFinite(tile.y)) return false;
+    if (tile.x < 0 || tile.y < 0) return false;
+    if (this.mapSize && (tile.x >= this.mapSize.x || tile.y >= this.mapSize.y)) return false;
+    return true;
   }
 
   public markDirty(): void {
@@ -1143,6 +1190,7 @@ export class IsometricRenderer {
    * Main render function
    */
   render(world: GameWorld): void {
+    this.lastWorld = world;
     const width = this.cssWidth;
     const height = this.cssHeight;
     this.mapSize = world.mapSize;
@@ -1183,6 +1231,33 @@ export class IsometricRenderer {
 
     // Draw UI overlay
     this.drawUI(world);
+    this.drawHoveredTile();
+  }
+
+  /** Diamond snapped to hoveredTile. Null or off-map draws nothing. */
+  private drawHoveredTile(): void {
+    const tile = this.hoveredTile;
+    if (!tile) return;
+
+    const iso = this.worldToIsometric(tile.x, tile.y, 0);
+    const tileWidth = this.tileSize;
+    const tileHeight = this.tileSize / 2;
+    const isoX = iso.screenX;
+    const isoY = iso.screenY;
+    const isValidAction = this.isTileOnMap(tile);
+    if (!isValidAction) return;
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(isoX, isoY - tileHeight / 2);
+    this.ctx.lineTo(isoX + tileWidth / 2, isoY);
+    this.ctx.lineTo(isoX, isoY + tileHeight / 2);
+    this.ctx.lineTo(isoX - tileWidth / 2, isoY);
+    this.ctx.closePath();
+    this.ctx.strokeStyle = isValidAction ? 'rgba(255, 255, 255, 0.8)' : 'rgba(239, 68, 68, 0.8)';
+    this.ctx.lineWidth = 2;
+    this.ctx.stroke();
+    this.ctx.fillStyle = isValidAction ? 'rgba(255, 255, 255, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+    this.ctx.fill();
   }
 
   private drawUI(world: GameWorld): void {
@@ -1260,11 +1335,9 @@ export class IsometricRenderer {
     const gridX = Math.round(relX / halfTile / 2 + relY / quarterTile / 2);
     const gridY = Math.round(relY / quarterTile / 2 - relX / halfTile / 2);
 
-    if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) return null;
-    if (gridX < 0 || gridY < 0) return null;
-    if (this.mapSize && (gridX >= this.mapSize.x || gridY >= this.mapSize.y)) return null;
-
-    return { x: gridX, y: gridY };
+    const tile = { x: gridX, y: gridY };
+    if (!this.isTileOnMap(tile)) return null;
+    return tile;
   }
 
   resize(width: number, height: number): void {
@@ -1433,6 +1506,8 @@ export class IsometricRenderer {
   }
 
   dispose(): void {
+    this.canvas.removeEventListener?.('pointermove', this.boundPointerMove);
+    this.canvas.removeEventListener?.('pointerleave', this.boundPointerLeave);
     this.voxels = [];
   }
 }
