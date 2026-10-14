@@ -34,7 +34,7 @@ import {
   Vehicle,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
-import { consumeCraftingInputs } from './craftingInputs';
+import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
 
 const createTool = (type: ToolType, tier: ToolTier): Tool => {
   const baseDurability = {
@@ -116,13 +116,7 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     id: 'upgrade_hoe_iron',
     name: 'Iron Hoe',
     description: 'Professional farming tool.',
-    inputs: { 'wood': 50, 'ore_iron': 10 }, // Assuming we have refined items or raw ore 'ore_iron'? ItemType.ORE ids are usually without prefix or handled?
-    // Game currently generates 'copper', 'gold' ore types. We need to check mineOre action to see what item ID it gives.
-    // mineOre creates Item with id `ore_${deposit.oreType}_...` but usually finding by type logic.
-    // Let's assume input keys match item IDs or names if we have a registry. 
-    // Wait, the inventory items just have `id`. When `mineOre` adds items, what ID does it use?
-    // Let's check `mineOre` implementation later. For now, using 'copper' etc as placeholders.
-    // If mineOre gives `ore_copper`, we use that.
+    inputs: { 'wood': 50, 'iron': 10 },
     output: { type: 'tool', id: ToolType.HOE, toolTier: ToolTier.IRON },
     type: 'upgrade',
     cost: 1000,
@@ -3064,3 +3058,15 @@ export const useGameStore = create<GameStore>()(
     ),
   ),
 );
+
+/**
+ * True when the current inventory can pay this recipe's material inputs.
+ * A missing `inputs` map is an empty cost, so a bad recipe cannot throw.
+ * Level and coin gates stay in `craftItem`.
+ */
+export function checkCanCraft(recipeId: string): boolean {
+  const recipe = CRAFTING_RECIPES.find((entry) => entry.id === recipeId);
+  if (!recipe) return false;
+  const inventory = useGameStore.getState().world?.player.inventory ?? [];
+  return hasCraftingInputs(inventory, recipe.inputs ?? {});
+}
