@@ -34,6 +34,7 @@ import {
   Vehicle,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
+import { liveIsometricRenderers } from '../rendering/IsometricRenderer';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
 
 const createTool = (type: ToolType, tier: ToolTier): Tool => {
@@ -3071,6 +3072,17 @@ export const useGameStore = create<GameStore>()(
     ),
   ),
 );
+
+// plantCrop, waterCrop, and the other actions that replace `world` mark the
+// isometric voxel cache dirty after the commit. Actions themselves are unchanged.
+let seenWorld = useGameStore.getState().world;
+useGameStore.subscribe((state) => {
+  if (state.world === seenWorld) return;
+  seenWorld = state.world;
+  for (const renderer of liveIsometricRenderers()) {
+    renderer.markDirty();
+  }
+});
 
 /**
  * True when the current inventory can pay this recipe's material inputs.
