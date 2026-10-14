@@ -189,6 +189,48 @@ function readImportText(source: string): string {
   return decodeURIComponent(payload);
 }
 
+/** Player fields an older save may omit. `stamina` is not on PlayerState yet. */
+type LoadedPlayer = Partial<GameWorld['player']> & { stamina?: number };
+
+/** Parsed save. Not Partial<GameWorld>: that intersection would require a full PlayerState. */
+type LoadedWorld = {
+  player?: LoadedPlayer;
+  farmPlots?: GameWorld['farmPlots'];
+  buildings?: GameWorld['buildings'];
+};
+
+/**
+ * Stand-in player when a save has none. No shared helper exists yet.
+ * Enough fields for the store to read name, level, inventory, and stamina.
+ */
+function createDefaultPlayer(): LoadedPlayer {
+  return {
+    id: 'player',
+    name: 'Farmer',
+    level: 1,
+    experience: 0,
+    coins: 0,
+    inventory: [],
+    tools: {},
+    unlocks: new Set<string>(),
+    stats: {
+      farmingLevel: 1,
+      buildingLevel: 1,
+      diggingLevel: 1,
+      total_play_time: 0,
+    },
+    animation: {
+      action: 'idle',
+      frame: 0,
+      direction: 0,
+      isPlaying: false,
+    },
+    position: { x: 0, y: 0, z: 0 },
+    rotation: 0,
+    stamina: 100,
+  };
+}
+
 /**
  * Persistence Manager class
  * Manages local save/load for worlds, slots, and settings
@@ -285,7 +327,9 @@ export class PersistenceManager {
 
   /**
    * Load game world from localStorage
-   * Retrieves serialized GameWorld by ID and deserializes from JSON
+   * Retrieves serialized GameWorld by ID and deserializes from JSON.
+   * Older saves may omit player, stamina, farmPlots, or buildings; those
+   * get defaults so callers do not read undefined. Invalid JSON returns null.
    * @param worldId - ID of the world to load
    * @returns GameWorld object or null if not found or error occurs
    */
@@ -293,7 +337,24 @@ export class PersistenceManager {
     try {
       const raw = store().getItem(worldKey(worldId));
       if (!raw) return null;
-      return JSON.parse(raw) as GameWorld;
+
+      const world = JSON.parse(raw) as LoadedWorld;
+      if (world == null || typeof world !== 'object') {
+        return null;
+      }
+
+      const player = world.player ?? createDefaultPlayer();
+      world.player = player;
+      if (player.stamina === undefined) {
+        player.stamina = 100;
+      }
+      if (!world.farmPlots) {
+        world.farmPlots = [];
+      }
+      if (!world.buildings) {
+        world.buildings = [];
+      }
+      return world as GameWorld;
     } catch (error) {
       console.error('Failed to load world:', error);
       return null;

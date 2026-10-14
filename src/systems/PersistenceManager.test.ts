@@ -76,7 +76,12 @@ describe('PersistenceManager localStorage', () => {
     await manager.saveWorld(world);
 
     expect(localStorage.getItem('cozy_save_slot1')).toBe(JSON.stringify(world));
-    await expect(manager.loadWorld('slot1')).resolves.toEqual(world);
+    await expect(manager.loadWorld('slot1')).resolves.toEqual({
+      ...world,
+      player: { name: 'Ben', level: 5, stamina: 100 },
+      farmPlots: [],
+      buildings: [],
+    });
 
     await manager.createSaveSlot(world);
     const slots = await manager.getSaveSlots();
@@ -134,5 +139,52 @@ describe('PersistenceManager.saveWorld', () => {
     const manager = new PersistenceManager();
     await expect(manager.saveWorld(world)).resolves.toBeUndefined();
     expect(localStorage.getItem('cozy_save_world-2')).toBe(JSON.stringify(world));
+  });
+});
+
+describe('PersistenceManager.loadWorld', () => {
+  it('loads a save that omits stamina with stamina 100', async () => {
+    const saved = {
+      id: 'old-stamina',
+      player: { name: 'Ben', level: 2 },
+      farmPlots: [{ id: 'plot-1' }],
+      buildings: [{ id: 'barn-1', type: 'barn' }],
+    };
+    localStorage.setItem('cozy_save_old-stamina', JSON.stringify(saved));
+
+    const manager = new PersistenceManager();
+    const loaded = await manager.loadWorld('old-stamina');
+
+    expect(loaded).not.toBeNull();
+    expect((loaded?.player as { stamina?: number }).stamina).toBe(100);
+    expect(loaded?.buildings).toEqual([{ id: 'barn-1', type: 'barn' }]);
+    expect(loaded?.farmPlots).toEqual([{ id: 'plot-1' }]);
+  });
+
+  it('loads a save that omits buildings with buildings []', async () => {
+    const saved = {
+      id: 'old-buildings',
+      player: { name: 'Ada', level: 3, stamina: 40 },
+      farmPlots: [{ id: 'plot-2' }],
+    };
+    localStorage.setItem('cozy_save_old-buildings', JSON.stringify(saved));
+
+    const manager = new PersistenceManager();
+    const loaded = await manager.loadWorld('old-buildings');
+
+    expect(loaded?.buildings).toEqual([]);
+    expect((loaded?.player as { stamina?: number }).stamina).toBe(40);
+    expect(loaded?.farmPlots).toEqual([{ id: 'plot-2' }]);
+  });
+
+  it('returns null when the saved JSON is corrupted', async () => {
+    localStorage.setItem('cozy_save_corrupt', '{not json');
+    const manager = new PersistenceManager();
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(manager.loadWorld('corrupt')).resolves.toBeNull();
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 });
