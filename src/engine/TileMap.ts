@@ -67,22 +67,25 @@ export class TileMap {
   }
 
   /**
-   * Generate elevation using simplex noise simulation
+   * Generate elevation: a radial hill plus deterministic value noise.
+   * The hash replaces sin/cos so tile borders do not repeat every ~63 tiles.
    */
   private generateElevation(x: number, y: number): number {
-    // Simple elevation generation - can be replaced with proper noise
     const centerX = this.config.width / 2;
     const centerY = this.config.height / 2;
     const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
     const maxDistance = Math.sqrt(Math.pow(centerX, 2) + Math.pow(centerY, 2));
-    
+
     // Create a gentle hill in the center
     const baseElevation = Math.max(0, 1 - (distance / maxDistance)) * 3;
-    
-    // Add some randomness
-    const noise = (Math.sin(x * 0.1) + Math.cos(y * 0.1)) * 0.5;
-    
-    return baseElevation + noise;
+
+    const hash = (n: number) => {
+      n = Math.sin(n) * 43758.5453;
+      return n - Math.floor(n);
+    };
+    const noise = (hash(x * 127.1 + y * 311.7) * 2 - 1) * 0.5;
+
+    return Math.max(0, baseElevation + noise);
   }
 
   /**
