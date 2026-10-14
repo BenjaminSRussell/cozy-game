@@ -1,4 +1,5 @@
 import { Vector3D, Vector2D, SpriteAsset } from '../types/game';
+import { lerp } from '../utils/math';
 
 /**
  * 2.5D Renderer for Cozy Haven
@@ -119,8 +120,8 @@ export class Renderer2D5 {
     const centerX = this.canvas.width / 2;
     const centerY = this.canvas.height / 2;
 
-    this.camera.x += (targetWorld.x - this.camera.x) * smoothing;
-    this.camera.y += (targetWorld.y - this.camera.y) * smoothing;
+    this.camera.x = lerp(this.camera.x, targetWorld.x, smoothing);
+    this.camera.y = lerp(this.camera.y, targetWorld.y, smoothing);
   }
 
   /**

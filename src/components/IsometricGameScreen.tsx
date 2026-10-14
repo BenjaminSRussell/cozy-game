@@ -17,6 +17,7 @@ import { CozyIconButton } from './CozyIconButton';
 import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModal';
 import { DialogueBox, type DialogueRequest } from './DialogueBox';
 import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
+import { lerp } from '../utils/math';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -123,8 +124,8 @@ export function stepPlayerVelocity(
   const speed = player.exhausted ? EXHAUSTED_SPEED : WALK_SPEED;
   const targetVx = (inputX - inputY) * speed;
   const targetVy = (inputX + inputY) * (speed * 0.5);
-  player.vx += (targetVx - player.vx) * VELOCITY_LERP;
-  player.vy += (targetVy - player.vy) * VELOCITY_LERP;
+  player.vx = lerp(player.vx, targetVx, VELOCITY_LERP);
+  player.vy = lerp(player.vy, targetVy, VELOCITY_LERP);
   return player;
 }
 

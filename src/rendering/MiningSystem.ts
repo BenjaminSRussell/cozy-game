@@ -1,3 +1,5 @@
+import { lerp } from '../utils/math';
+
 /**
  * Enhanced Mining System for 2.5D Isometric World
  * 
@@ -426,8 +428,8 @@ export class MiningSystem {
     
     for (let i = 0; i < oreCount; i++) {
       const progress = Math.random();
-      const x = tunnel.startX + (tunnel.endX - tunnel.startX) * progress;
-      const y = tunnel.startY + (tunnel.endY - tunnel.startY) * progress;
+      const x = lerp(tunnel.startX, tunnel.endX, progress);
+      const y = lerp(tunnel.startY, tunnel.endY, progress);
       const depth = Math.abs(tunnel.startZ);
 
       const oreType = this.selectOreType(depth);

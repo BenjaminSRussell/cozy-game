@@ -1,3 +1,5 @@
+import { lerp } from '../utils/math';
+
 /**
  * Interactive Building System with Animated Elements
  * 
@@ -487,7 +489,7 @@ export class InteractiveBuildingSystem {
     return {
       transform: this.interpolateTransform(currentKeyframe.transform || '', nextKeyframe.transform || '', keyframeProgress),
       opacity: currentKeyframe.opacity && nextKeyframe.opacity
-        ? currentKeyframe.opacity + (nextKeyframe.opacity - currentKeyframe.opacity) * keyframeProgress
+        ? lerp(currentKeyframe.opacity, nextKeyframe.opacity, keyframeProgress)
         : 1,
       filter: currentKeyframe.filter || nextKeyframe.filter || 'none'
     };

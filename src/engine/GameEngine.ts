@@ -1,6 +1,7 @@
 import { Renderer2D5, Camera, GameCanvas } from './Renderer2D5';
 import { useGameStore } from '../store/gameStore';
 import { Vector2D, Vector3D } from '../types/game';
+import { lerp } from '../utils/math';
 
 /**
  * Core Game Engine for Cozy Haven
@@ -347,8 +348,8 @@ export class GameEngine {
     const targetX = this.cameraTarget.x;
     const targetY = this.cameraTarget.y;
 
-    camera.x += (targetX - camera.x) * this.cameraLerpSpeed;
-    camera.y += (targetY - camera.y) * this.cameraLerpSpeed;
+    camera.x = lerp(camera.x, targetX, this.cameraLerpSpeed);
+    camera.y = lerp(camera.y, targetY, this.cameraLerpSpeed);
   }
 
   /**
