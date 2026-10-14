@@ -10,15 +10,21 @@ export interface CropVoxel {
   x: number;
   y: number;
   z: number;
-  cropType: 'wheat' | 'carrot' | 'tomato' | 'corn' | 'potato' | 'pumpkin' | 'strawberry';
+  cropType: 'wheat' | 'carrot' | 'tomato' | 'corn' | 'potato' | 'pumpkin' | 'strawberry' | 'blueberry' | 'cranberry';
   stage: CropStage;
   health: number; // 0-100
   waterLevel: number; // 0-100
-  growth: number; // 0-100 (progress to next stage)
+  growth: number; // 0-100 (progress to next stage, or to the next regrowth day)
   plantedTime: number;
   lastWatered: number;
   height: number; // Visual height in voxels
   quality: 'poor' | 'normal' | 'good' | 'excellent';
+  /** Days between harvests. 0 removes the plant on harvest. */
+  regrowthDays: number;
+  /** Stage the plant returns to after a multi-harvest (mature bush). */
+  regrowthStage: CropStage;
+  /** Days remaining until the next harvest. 0 means not in a regrowth cycle. */
+  daysUntilNextHarvest: number;
 }
 
 export interface CropConfig {
@@ -46,9 +52,16 @@ export interface CropConfig {
     mature: number;
     harvestable: number;
   };
+  /** Days to the next harvest after picking. 0 means the plant is removed. */
+  regrowthDays: number;
+  /** Stage restored on harvest when regrowthDays > 0. */
+  regrowthStage: CropStage;
 }
 
 export class CropSystem {
+  /** Frame delta that counts as one day while a multi-harvest crop regrows. */
+  static readonly REGROWTH_DAY_MS = 60_000;
+
   private crops: Map<string, CropVoxel> = new Map();
   private cropConfigs: Map<string, CropConfig> = new Map();
   private currentTime: number = Date.now();
@@ -86,7 +99,9 @@ export class CropSystem {
           growing: 3,
           mature: 4,
           harvestable: 5
-        }
+        },
+        regrowthDays: 0,
+        regrowthStage: CropStage.MATURE
       },
       {
         type: 'carrot',
@@ -112,7 +127,9 @@ export class CropSystem {
           growing: 2,
           mature: 2,
           harvestable: 2
-        }
+        },
+        regrowthDays: 0,
+        regrowthStage: CropStage.MATURE
       },
       {
         type: 'tomato',
@@ -138,7 +155,9 @@ export class CropSystem {
           growing: 3,
           mature: 4,
           harvestable: 4
-        }
+        },
+        regrowthDays: 3,
+        regrowthStage: CropStage.MATURE
       },
       {
         type: 'corn',
@@ -164,7 +183,9 @@ export class CropSystem {
           growing: 4,
           mature: 6,
           harvestable: 6
-        }
+        },
+        regrowthDays: 0,
+        regrowthStage: CropStage.MATURE
       },
       {
         type: 'strawberry',
@@ -190,7 +211,65 @@ export class CropSystem {
           growing: 1,
           mature: 2,
           harvestable: 2
-        }
+        },
+        regrowthDays: 2,
+        regrowthStage: CropStage.MATURE
+      },
+      {
+        type: 'blueberry',
+        name: 'Blueberry',
+        growthStages: 5,
+        growthTime: 160,
+        waterNeed: 2,
+        maxHealth: 70,
+        baseYield: 8,
+        sellValue: 85,
+        seasons: ['spring', 'summer'],
+        colors: {
+          seed: '#E6E6FA',
+          sprouting: '#90EE90',
+          growing: '#228B22',
+          mature: '#6A5ACD',
+          harvestable: '#4169E1',
+          dead: '#8B4513'
+        },
+        voxelHeight: {
+          seed: 1,
+          sprouting: 1,
+          growing: 2,
+          mature: 2,
+          harvestable: 2
+        },
+        regrowthDays: 3,
+        regrowthStage: CropStage.MATURE
+      },
+      {
+        type: 'cranberry',
+        name: 'Cranberry',
+        growthStages: 5,
+        growthTime: 180,
+        waterNeed: 2,
+        maxHealth: 75,
+        baseYield: 8,
+        sellValue: 90,
+        seasons: ['spring', 'summer', 'autumn'],
+        colors: {
+          seed: '#FFE4E1',
+          sprouting: '#90EE90',
+          growing: '#2E8B57',
+          mature: '#CD5C5C',
+          harvestable: '#B22222',
+          dead: '#8B4513'
+        },
+        voxelHeight: {
+          seed: 1,
+          sprouting: 1,
+          growing: 1,
+          mature: 2,
+          harvestable: 2
+        },
+        regrowthDays: 2,
+        regrowthStage: CropStage.MATURE
       }
     ];
 
@@ -226,7 +305,10 @@ export class CropSystem {
       plantedTime: this.currentTime,
       lastWatered: this.currentTime,
       height: config.voxelHeight.seed,
-      quality: 'normal'
+      quality: 'normal',
+      regrowthDays: config.regrowthDays,
+      regrowthStage: config.regrowthStage,
+      daysUntilNextHarvest: 0
     };
 
     this.crops.set(id, crop);
@@ -259,8 +341,21 @@ export class CropSystem {
         this.healCrop(id, 5 * deltaTime / 1000);
       }
 
-      // Update growth
-      if (crop.health > 30 && crop.waterLevel > 30) {
+      // Multi-harvest plants fruit again only while watered, same gate as growth.
+      if (crop.stage !== CropStage.DEAD && crop.daysUntilNextHarvest > 0) {
+        if (crop.health > 30 && crop.waterLevel > 30) {
+          crop.growth += (deltaTime / CropSystem.REGROWTH_DAY_MS) * 100;
+          while (crop.growth >= 100 && crop.daysUntilNextHarvest > 0) {
+            crop.growth -= 100;
+            crop.daysUntilNextHarvest -= 1;
+          }
+          if (crop.daysUntilNextHarvest <= 0) {
+            crop.daysUntilNextHarvest = 0;
+            crop.stage = CropStage.HARVESTABLE;
+            crop.growth = 0;
+          }
+        }
+      } else if (crop.health > 30 && crop.waterLevel > 30 && crop.stage !== CropStage.HARVESTABLE) {
         crop.growth += (deltaTime / 1000) / config.growthTime * 100;
 
         // Check for stage advancement
@@ -287,6 +382,8 @@ export class CropSystem {
   private advanceCropStage(cropId: string): void {
     const crop = this.crops.get(cropId);
     if (!crop) return;
+    // Death comes from health or water, not from growing past harvest.
+    if (crop.stage === CropStage.HARVESTABLE || crop.stage === CropStage.DEAD) return;
 
     const currentStageIndex = Object.values(CropStage).indexOf(crop.stage);
     const nextStageIndex = currentStageIndex + 1;
@@ -392,8 +489,18 @@ export class CropSystem {
     const finalYield = Math.floor(config.baseYield * qualityMultiplier[crop.quality]);
     const finalValue = Math.floor(config.sellValue * qualityMultiplier[crop.quality]);
 
-    // Remove the crop
-    this.crops.delete(cropId);
+    const regrowthDays = crop.regrowthDays > 0 ? crop.regrowthDays : config.regrowthDays;
+    if (regrowthDays > 0) {
+      // Keep the plant (and its plot) so berries and trellis crops fruit again.
+      crop.regrowthDays = regrowthDays;
+      crop.regrowthStage = crop.regrowthStage ?? config.regrowthStage;
+      crop.stage = crop.regrowthStage;
+      crop.daysUntilNextHarvest = regrowthDays;
+      crop.growth = 0;
+      crop.height = this.getStageConfig(crop.cropType, crop.stage)?.height || crop.height;
+    } else {
+      this.crops.delete(cropId);
+    }
 
     return {
       success: true,
