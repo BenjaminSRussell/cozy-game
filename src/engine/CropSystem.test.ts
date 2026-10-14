@@ -30,3 +30,53 @@ describe('AdvancedCropSystem seed day advance', () => {
     expect(crops.getGrowthStage('corn', 2).name).toBe('sprouting');
   });
 });
+
+describe('AdvancedCropSystem corn sway', () => {
+  const crops = new AdvancedCropSystem();
+
+  it('leaves wheat, carrot, and tomato personalities unchanged', () => {
+    expect(crops.getCropPersonality('wheat')).toEqual({
+      type: 'calm',
+      swayAmount: 0.3,
+      bounceHeight: 2,
+      glowIntensity: 0.2,
+      animationSpeed: 0.02,
+      specialEffects: ['gentle_sway', 'wind_response'],
+    });
+    expect(crops.getCropPersonality('carrot')).toEqual({
+      type: 'shy',
+      swayAmount: 0.1,
+      bounceHeight: 1,
+      glowIntensity: 0.4,
+      animationSpeed: 0.015,
+      specialEffects: ['peek_animation', 'growth_spurt'],
+    });
+    expect(crops.getCropPersonality('tomato')).toEqual({
+      type: 'proud',
+      swayAmount: 0.2,
+      bounceHeight: 3,
+      glowIntensity: 0.6,
+      animationSpeed: 0.025,
+      specialEffects: ['ripe_glow', 'weight_bounce'],
+    });
+  });
+
+  it('keeps the corn sprite within half a tile after 10000 animation ticks', () => {
+    expect(crops.getCropPersonality('corn')).toEqual({
+      type: 'energetic',
+      swayAmount: 0.2,
+      bounceHeight: 4,
+      glowIntensity: 0.3,
+      animationSpeed: 0.025,
+      specialEffects: ['dramatic_sway', 'height_growth'],
+    });
+
+    // Harvestable corn is size 1, so its sway is the largest x offset.
+    let farthest = 0;
+    for (let tick = 0; tick <= 10000; tick++) {
+      const offset = crops.calculateAnimation('corn', 5, 100, 100, tick).x;
+      farthest = Math.max(farthest, Math.abs(offset));
+    }
+    expect(farthest).toBeLessThan(0.5);
+  });
+});
