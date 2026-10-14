@@ -293,11 +293,12 @@ interface GameStore {
 
   /**
    * Remove items from inventory
-   * Removes entire stack if quantity reaches 0
+   * Returns false and changes nothing when the item is missing or the stack is smaller than quantity.
+   * Removes the stack when the quantities match, otherwise replaces it with a lower quantity.
    * @param itemId - ID of item to remove
    * @param quantity - Number to remove (default: 1)
    */
-  removeItem: (itemId: string, quantity?: number) => void;
+  removeItem: (itemId: string, quantity?: number) => boolean;
 
   /**
    * Get a specific inventory item by ID
@@ -1150,16 +1151,27 @@ export const useGameStore = create<GameStore>()(
           });
         },
 
-        removeItem: (itemId: string, quantity = 1) => {
+        removeItem: (itemId: string, quantity = 1): boolean => {
+          let removed = false;
           set((state) => {
             if (!state.world) return state;
 
-            const inventory = state.world.player.inventory
-              .map((item) =>
-                item.id === itemId ? { ...item, quantity: Math.max(0, item.quantity - quantity) } : item,
-              )
-              .filter((item) => item.quantity > 0);
+            const previous = state.world.player.inventory;
+            const index = previous.findIndex((entry) => entry.id === itemId);
+            if (index === -1) return state;
 
+            const item = previous[index];
+            if (item.quantity < quantity) return state;
+
+            const inventory = item.quantity === quantity
+              ? previous.filter((_, entryIndex) => entryIndex !== index)
+              : previous.map((entry, entryIndex) =>
+                entryIndex === index
+                  ? { ...entry, quantity: entry.quantity - quantity }
+                  : entry,
+              );
+
+            removed = true;
             return {
               world: {
                 ...state.world,
@@ -1167,6 +1179,7 @@ export const useGameStore = create<GameStore>()(
               },
             };
           });
+          return removed;
         },
 
         getInventoryItem: (itemId: string) => {
