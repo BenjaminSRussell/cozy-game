@@ -61,6 +61,48 @@ export interface CloudSyncStatus {
 }
 
 /**
+ * Copy a value for JSON.stringify, dropping back-edges only.
+ * A building that points at its GameWorld would otherwise throw
+ * "Converting circular structure to JSON". The live object is not mutated,
+ * and a repeated (non-cyclic) reference is still serialized twice.
+ */
+function stripCycles(value: unknown): unknown {
+  const stack = new WeakSet<object>();
+
+  const walk = (current: unknown): unknown => {
+    if (typeof current !== 'object' || current === null) {
+      return current;
+    }
+    if (stack.has(current)) {
+      return undefined;
+    }
+    if (typeof (current as { toJSON?: unknown }).toJSON === 'function') {
+      return current;
+    }
+
+    stack.add(current);
+    try {
+      if (Array.isArray(current)) {
+        return current.map((item) => walk(item));
+      }
+
+      const copy: Record<string, unknown> = {};
+      for (const key of Object.keys(current)) {
+        const next = walk((current as Record<string, unknown>)[key]);
+        if (next !== undefined) {
+          copy[key] = next;
+        }
+      }
+      return copy;
+    } finally {
+      stack.delete(current);
+    }
+  };
+
+  return walk(value);
+}
+
+/**
  * Persistence Manager class
  * Manages all database operations for save/load functionality
  */
@@ -213,7 +255,7 @@ export class PersistenceManager {
     if (!this.db) return;
 
     try {
-      const jsonData = JSON.stringify(world);
+      const jsonData = JSON.stringify(stripCycles(world));
       const timestamp = Date.now();
 
       await this.db.runAsync(
