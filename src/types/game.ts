@@ -512,6 +512,9 @@ export interface PlayerState {
   experience: number;
   /** Wallet balance (earned from selling crops/ore/wood) */
   coins: number;
+  stamina: number; // current, 0 to maxStamina
+  maxStamina: number;
+  staminaRegenRate: number;
   /** Player's inventory (stacked items) */
   inventory: Item[];
   /** Currently equipped tools */
