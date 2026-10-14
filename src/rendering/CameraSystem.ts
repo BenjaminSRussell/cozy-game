@@ -6,6 +6,7 @@
  */
 
 import { Vector2D, RenderObject } from './RenderPipeline';
+import { lerp } from '../utils/math';
 
 export interface CameraBounds {
   min: Vector2D;
@@ -101,14 +102,14 @@ export class CameraSystem {
     const t = 1 - Math.pow(1 - this.smoothing, deltaTime * 60);
     const dx = this.targetPosition.x - this.position.x;
     const dy = this.targetPosition.y - this.position.y;
-    this.position.x = Math.abs(dx) < 0.5 ? this.targetPosition.x : this.position.x + dx * t;
-    this.position.y = Math.abs(dy) < 0.5 ? this.targetPosition.y : this.position.y + dy * t;
+    this.position.x = Math.abs(dx) < 0.5 ? this.targetPosition.x : lerp(this.position.x, this.targetPosition.x, t);
+    this.position.y = Math.abs(dy) < 0.5 ? this.targetPosition.y : lerp(this.position.y, this.targetPosition.y, t);
 
     const zoomDelta = this.targetZoom - this.zoom;
-    this.zoom = Math.abs(zoomDelta) < 0.001 ? this.targetZoom : this.zoom + zoomDelta * t;
+    this.zoom = Math.abs(zoomDelta) < 0.001 ? this.targetZoom : lerp(this.zoom, this.targetZoom, t);
 
     // Smooth rotation interpolation
-    this.rotation += (this.targetRotation - this.rotation) * this.smoothing;
+    this.rotation = lerp(this.rotation, this.targetRotation, this.smoothing);
 
     // Apply follow target if exists
     if (this.followTarget) {
@@ -249,8 +250,8 @@ export class CameraSystem {
     if (outside) {
       // World-space chase. camera.x is the look-at point, so the follow target
       // is the player's world position (screen pixels only gate the deadzone).
-      camera.x += (player.x - camera.x) * DEADZONE_FOLLOW;
-      camera.y += (player.y - camera.y) * DEADZONE_FOLLOW;
+      camera.x = lerp(camera.x, player.x, DEADZONE_FOLLOW);
+      camera.y = lerp(camera.y, player.y, DEADZONE_FOLLOW);
     }
 
     this.clampViewToFarmMap(camera, farmMap);
@@ -297,8 +298,8 @@ export class CameraSystem {
     };
 
     // Apply smoothing
-    this.targetPosition.x += (desiredPosition.x - this.targetPosition.x) * smoothing;
-    this.targetPosition.y += (desiredPosition.y - this.targetPosition.y) * smoothing;
+    this.targetPosition.x = lerp(this.targetPosition.x, desiredPosition.x, smoothing);
+    this.targetPosition.y = lerp(this.targetPosition.y, desiredPosition.y, smoothing);
   }
 
   /**

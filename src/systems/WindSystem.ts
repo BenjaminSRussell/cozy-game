@@ -1,3 +1,5 @@
+import { lerp } from '../utils/math';
+
 /**
  * Cozy Wind System
  * 
@@ -156,12 +158,12 @@ export class WindSystem {
 
             // Physics
             // Gentler drag
-            p.vx += (wind.x * 0.8 - p.vx) * dt;
-            p.vy += (wind.y * 0.8 - p.vy) * dt;
+            p.vx = lerp(p.vx, wind.x * 0.8, dt);
+            p.vy = lerp(p.vy, wind.y * 0.8, dt);
 
             // Gravity / Lift (Slower float)
             const lift = Math.sin(this.time * 0.5 + p.id) * 0.2;
-            p.vz += (lift - p.vz) * dt;
+            p.vz = lerp(p.vz, lift, dt);
 
             // Move
             p.x += p.vx * dt;

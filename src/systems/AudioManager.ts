@@ -1,3 +1,5 @@
+import { lerp } from '../utils/math';
+
 /**
  * Audio Manager for Cozy Haven
  *
@@ -615,7 +617,7 @@ export class AudioManager {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        audio.volume = startVolume + (targetVolume - startVolume) * progress;
+        audio.volume = lerp(startVolume, targetVolume, progress);
 
         if (progress < 1) {
           requestAnimationFrame(updateVolume);
