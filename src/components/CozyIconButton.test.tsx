@@ -9,11 +9,13 @@ vi.mock('react-native', () => {
         function Host(props: { children?: React.ReactNode } & Record<string, unknown>) {
             const ariaLabel = props['aria-label'];
             const accessibilityLabel = props.accessibilityLabel;
+            const ariaHidden = props['aria-hidden'];
             const attrs: Record<string, unknown> = {};
             if (typeof ariaLabel === 'string') attrs['aria-label'] = ariaLabel;
             if (typeof accessibilityLabel === 'string') {
                 attrs['data-accessibility-label'] = accessibilityLabel;
             }
+            if (ariaHidden === true) attrs['aria-hidden'] = 'true';
             return React.createElement(tag, attrs, props.children);
         };
 
@@ -46,6 +48,8 @@ describe('CozyIconButton accessible name', () => {
         );
         expect(html).toContain('aria-label="Plant Wheat"');
         expect(html).toContain('data-accessibility-label="Plant Wheat"');
+        expect(html).toContain('<text aria-hidden="true">🌾</text>');
+        expect(html).not.toContain('aria-label="🌾"');
     });
 
     it('prefers a custom accessibilityLabel over the visible label', () => {
@@ -60,5 +64,7 @@ describe('CozyIconButton accessible name', () => {
         expect(html).toContain('aria-label="Water the selected crop"');
         expect(html).toContain('data-accessibility-label="Water the selected crop"');
         expect(html).not.toContain('aria-label="Water"');
+        expect(html).toContain('<text aria-hidden="true">💧</text>');
+        expect(html).not.toContain('aria-label="💧"');
     });
 });

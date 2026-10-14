@@ -92,6 +92,8 @@ export const CozyIconButton: React.FC<CozyIconButtonProps> = ({
                     accessible={false}
                     accessibilityElementsHidden
                     importantForAccessibility="no"
+                    // RN Web ignores the native hide props and would expose the glyph.
+                    aria-hidden
                 >
                     {emoji}
                 </Text>
