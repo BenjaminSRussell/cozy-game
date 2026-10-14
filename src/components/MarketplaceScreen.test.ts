@@ -14,10 +14,13 @@ vi.mock('../store/gameStore', () => ({
   useGameStore: () => ({}),
 }));
 
-import { EconomySystem } from '../systems/EconomySystem';
+import { CropSystem } from '../rendering/CropSystem';
+import { demandMultiplierForVolume, EconomySystem } from '../systems/EconomySystem';
 import {
   applySeedQuantity,
   canPurchaseSeeds,
+  DECORATION_OFFERS,
+  FERTILIZER_OFFERS,
   filterSeedPacketsBySeason,
   growthDurationBadge,
   listedSellPrice,
@@ -27,7 +30,14 @@ import {
   SEED_PACKETS,
   SEED_QUANTITY_BUTTONS,
   seedCostTextColor,
+  seedOffersForSeason,
+  seasonalSeedOffers,
   seedTotalCost,
+  skippedSeasonalCropIds,
+  SKIPPED_YEAR_ROUND_ITEMS,
+  STORE_TABS,
+  storeGrowthLabel,
+  walletAfterPurchase,
 } from './MarketplaceScreen';
 
 const CORN_CATALOG_BASE = 5;
@@ -132,5 +142,107 @@ describe('MarketplaceScreen season-filtered seed store', () => {
     expect(canPurchaseSeeds(120, totalCost)).toBe(true);
     expect(seedCostTextColor(119, totalCost)).toBe(SEED_COST_UNAFFORDABLE_COLOR);
     expect(seedCostTextColor(120, totalCost)).toBe(SEED_COST_COLOR);
+  });
+});
+
+describe('MarketplaceScreen general store', () => {
+  it('stocks issue prices only for crops that already have growth data', () => {
+    const crops = new CropSystem();
+    const seasonal = seasonalSeedOffers(crops);
+
+    expect(seasonal.map((offer) => `${offer.cropId}:${offer.stockSeasons[0]}:${offer.buyPrice}`)).toEqual([
+      'strawberry:spring:100',
+      'blueberry:summer:80',
+      'tomato:summer:50',
+      'corn:summer:150',
+      'cranberry:autumn:240',
+    ]);
+    expect(skippedSeasonalCropIds(crops)).toEqual([
+      'parsnip',
+      'potato',
+      'cauliflower',
+      'melon',
+      'pumpkin',
+      'eggplant',
+      'yam',
+    ]);
+
+    for (const cropId of skippedSeasonalCropIds(crops)) {
+      expect(crops.plantCrop(0, 0, cropId)).toBe(false);
+      expect(crops.getCropConfig(cropId)).toBeUndefined();
+    }
+
+    const cranberry = seasonal.find((offer) => offer.cropId === 'cranberry');
+    expect(cranberry?.harvestYield).toBe(crops.getCropConfig('cranberry')?.baseYield);
+    expect(cranberry?.growthDays).toBeUndefined();
+    expect(storeGrowthLabel(cranberry!)).toBe('5 stages');
+    expect(cranberry?.sellValue).toBe(crops.getCropConfig('cranberry')?.sellValue);
+
+    const tomato = seasonal.find((offer) => offer.cropId === 'tomato');
+    expect(tomato?.growthDays).toBe(4);
+    expect(tomato?.harvestYield).toBe(4);
+    expect(storeGrowthLabel(tomato!)).toBe('⚡ 4 Days');
+  });
+
+  it('keeps packet prices except where the issue reprices that season', () => {
+    const summer = seedOffersForSeason('summer');
+    expect(summer.map((offer) => offer.cropId)).toEqual(['wheat', 'carrot', 'blueberry', 'tomato', 'corn']);
+    expect(summer.find((offer) => offer.cropId === 'tomato')?.buyPrice).toBe(50);
+    expect(summer.find((offer) => offer.cropId === 'corn')?.buyPrice).toBe(150);
+    expect(summer.find((offer) => offer.cropId === 'wheat')?.buyPrice).toBe(10);
+    expect(summer.filter((offer) => offer.cropId === 'tomato')).toHaveLength(1);
+
+    const spring = seedOffersForSeason('spring');
+    expect(spring.find((offer) => offer.cropId === 'strawberry')?.buyPrice).toBe(100);
+    expect(spring.find((offer) => offer.cropId === 'tomato')?.buyPrice).toBe(20);
+    expect(spring.find((offer) => offer.cropId === 'corn')?.buyPrice).toBe(25);
+
+    expect(seedOffersForSeason('autumn').find((offer) => offer.cropId === 'cranberry')?.buyPrice).toBe(240);
+    expect(seedOffersForSeason('autumn').some((offer) => offer.cropId === 'corn')).toBe(false);
+    expect(seedOffersForSeason('winter')).toEqual([]);
+    expect(seedOffersForSeason(undefined)).toEqual([]);
+  });
+
+  it('sells existing fertilizer and decorations, and skips missing year-round items', () => {
+    expect(STORE_TABS.map((tab) => tab.label)).toEqual([
+      'Seeds',
+      'Fertilizer',
+      'Decorations',
+      'Sell Items',
+    ]);
+    expect(FERTILIZER_OFFERS.map((offer) => [offer.id, offer.name, offer.buyPrice])).toEqual([
+      ['basic_fertilizer', 'Basic Fertilizer', 30],
+      ['fertilizer_speed', 'Speed-Grow', 20],
+    ]);
+    expect(DECORATION_OFFERS.map((offer) => [offer.id, offer.buyPrice, offer.sellValue])).toEqual([
+      ['bench', 50, 25],
+      ['lamp', 75, 40],
+      ['fountain', 200, 100],
+      ['statue', 150, 75],
+    ]);
+    expect(SKIPPED_YEAR_ROUND_ITEMS).toEqual(['Grass Starter', 'Fruit Tree Saplings']);
+    expect(FERTILIZER_OFFERS.some((offer) => offer.name === 'Grass Starter')).toBe(false);
+    expect(DECORATION_OFFERS.some((offer) => offer.name.includes('Sapling'))).toBe(false);
+  });
+
+  it('previews the player balance after the selected cost', () => {
+    expect(walletAfterPurchase(500, 80)).toBe('Coins: 500g -> 420g');
+    expect(walletAfterPurchase(1000, 0)).toBe('Coins: 1,000g -> 1,000g');
+    expect(walletAfterPurchase(500, 80)).not.toBe('Coins: 1,450g -> 1,250g');
+  });
+
+  it('applies demand once on top of the economy price', () => {
+    const economy = EconomySystem.getInstance();
+    const snapshot = structuredClone(economy.getSaveData());
+    try {
+      const base = economy.getPrice('corn');
+      expect(listedSellPrice('corn', economy)).toBe(base);
+      economy.noteSale('corn', 10);
+      const once = Math.round(base * demandMultiplierForVolume(10));
+      expect(listedSellPrice('corn', economy)).toBe(once);
+      expect(listedSellPrice('corn', economy)).not.toBe(Math.round(once * demandMultiplierForVolume(10)));
+    } finally {
+      economy.loadSaveData(snapshot);
+    }
   });
 });

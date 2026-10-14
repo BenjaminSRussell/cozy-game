@@ -8,6 +8,7 @@
 import { Item, ItemType } from '../types/game';
 import { InventoryManager } from './InventoryManager';
 import { TimeSystem, ShopStock } from './TimeSystem';
+import { demandMultiplierForVolume, DEMAND_WINDOW_DAYS, volumeSoldInWindow } from './EconomySystem';
 
 // ============================================================================
 // ECONOMY SYSTEM TYPES
@@ -78,6 +79,8 @@ export class EconomyManager {
   private shops: Map<string, Shop> = new Map();
   private transactions: Transaction[] = [];
   private priceHistory: Map<string, PriceHistory> = new Map();
+  /** Successful sells, used only to lower a later quote. Quality stays on the item. */
+  private recentSales: { itemId: string; day: number; quantity: number }[] = [];
 
   constructor(inventoryManager: InventoryManager, timeSystem: TimeSystem) {
     this.inventoryManager = inventoryManager;
@@ -313,9 +316,9 @@ export class EconomyManager {
       return false;
     }
 
-    // Calculate sell price
+    // Demand lowers the base sell value. Quality is not applied again here.
     const basePrice = itemSlot.item.sellValue;
-    const finalPrice = Math.floor(basePrice * shop.sellMultiplier * quantity);
+    const finalPrice = this.quoteSellPrice(basePrice, itemId, quantity, shop.sellMultiplier);
 
     // Remove item from player inventory
     const removed = this.inventoryManager.removeItem('player_main', itemId, quantity);
@@ -323,6 +326,8 @@ export class EconomyManager {
       this.recordTransaction('sell', itemId, quantity, 0, 'coins', Date.now(), shopId, false, 'Failed to remove item');
       return false;
     }
+
+    this.noteSale(itemId, quantity);
 
     // Add money to player
     const coins = this.currencies.get('coins');
@@ -337,6 +342,44 @@ export class EconomyManager {
     this.updatePriceHistory(itemId, finalPrice / quantity);
 
     return true;
+  }
+
+  /**
+   * Record a completed sale on a game day. Day defaults to the time system.
+   * Sales older than the demand window are dropped.
+   */
+  public noteSale(itemId: string, quantity: number, day = this.timeSystem.getCurrentTime().day): void {
+    const qty = Math.floor(quantity);
+    if (!itemId || qty <= 0) return;
+    this.recentSales.push({ itemId, day, quantity: qty });
+    const today = this.timeSystem.getCurrentTime().day;
+    this.recentSales = this.recentSales.filter((sale) => today - sale.day < DEMAND_WINDOW_DAYS);
+  }
+
+  public getRecentSoldQuantity(itemId: string, today = this.timeSystem.getCurrentTime().day): number {
+    return volumeSoldInWindow(
+      this.recentSales.filter((sale) => sale.itemId === itemId),
+      today,
+    );
+  }
+
+  /** 1 when nothing of this item sold in the last 7 game days. */
+  public getDemandMultiplier(itemId: string): number {
+    return demandMultiplierForVolume(this.getRecentSoldQuantity(itemId));
+  }
+
+  /**
+   * Shop sell quote. Applies the shop sell multiplier and demand once.
+   * Does not apply a quality multiplier.
+   */
+  public quoteSellPrice(
+    baseSellValue: number,
+    itemId: string,
+    quantity = 1,
+    sellMultiplier = this.shops.get('general_store')?.sellMultiplier ?? 1,
+  ): number {
+    const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+    return Math.floor(baseSellValue * sellMultiplier * this.getDemandMultiplier(itemId) * safeQuantity);
   }
 
   /**
@@ -559,6 +602,7 @@ export class EconomyManager {
     shops: Record<string, Shop>;
     transactions: Transaction[];
     priceHistory: Record<string, PriceHistory>;
+    recentSales: { itemId: string; day: number; quantity: number }[];
   } {
     const currencies: Record<string, Currency> = {};
     const shops: Record<string, Shop> = {};
@@ -581,6 +625,7 @@ export class EconomyManager {
       shops,
       transactions: [...this.transactions],
       priceHistory,
+      recentSales: [...this.recentSales],
     };
   }
 
@@ -592,6 +637,7 @@ export class EconomyManager {
     shops: Record<string, Shop>;
     transactions: Transaction[];
     priceHistory: Record<string, PriceHistory>;
+    recentSales?: { itemId: string; day: number; quantity: number }[];
   }): void {
     this.currencies.clear();
     this.shops.clear();
@@ -610,5 +656,6 @@ export class EconomyManager {
     });
 
     this.transactions = [...data.transactions];
+    this.recentSales = Array.isArray(data.recentSales) ? [...data.recentSales] : [];
   }
 }

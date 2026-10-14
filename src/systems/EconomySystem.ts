@@ -60,6 +60,34 @@ const MARKET_ITEMS: Record<string, MarketItem> = {
     diamond: { id: 'diamond', name: 'Diamond', basePrice: 300, elasticity: 2.0, volatility: 0.8, category: 'luxury' },
 };
 
+/** In-game days of player sales that still move the sell price. */
+export const DEMAND_WINDOW_DAYS = 7;
+
+/**
+ * Multiplier for units already sold in the window.
+ * No sales stay at 1. Each unit trims 2 points, and the price never falls below half.
+ */
+export function demandMultiplierForVolume(volume: number): number {
+    if (!Number.isFinite(volume) || volume <= 0) return 1;
+    const trimmed = 1 - Math.floor(volume) * 0.02;
+    return Math.max(0.5, Math.round(trimmed * 100) / 100);
+}
+
+/** Sum of quantities whose age is 0 .. windowDays-1. Older sales and future days are ignored. */
+export function volumeSoldInWindow(
+    sales: readonly { day: number; quantity: number }[],
+    today: number,
+    windowDays = DEMAND_WINDOW_DAYS,
+): number {
+    let total = 0;
+    for (const sale of sales) {
+        if (!Number.isFinite(sale.quantity) || sale.quantity <= 0) continue;
+        const age = today - sale.day;
+        if (age >= 0 && age < windowDays) total += sale.quantity;
+    }
+    return total;
+}
+
 // ============================================================================
 // SYSTEM CLASS
 // ============================================================================
@@ -73,6 +101,8 @@ export class EconomySystem {
     // Simulation factors
     private day: number = 1;
     private season: Season = 'spring';
+    /** Player sales kept for the demand window. Not applied in getSellableItems. */
+    private sales: { itemId: string; day: number; quantity: number }[] = [];
 
     private constructor() {
         this.state = {
@@ -213,8 +243,10 @@ export class EconomySystem {
      * Immediately affects simulated inventory, potentially crashing the price for next tick.
      */
     public sellItem(itemId: string, quantity: number): number {
-        const price = this.getPrice(itemId);
+        // Price uses sales already on the books. This sale counts toward the next quote.
+        const price = this.getPrice(itemId) * this.getDemandMultiplier(itemId);
         const totalValue = price * quantity;
+        this.noteSale(itemId, quantity);
 
         // Player dumping stock increases market inventory
         if (this.state.inventory[itemId]) {
@@ -226,6 +258,26 @@ export class EconomySystem {
         }
 
         return totalValue;
+    }
+
+    /** Record a completed player sale on the current in-game day. */
+    public noteSale(itemId: string, quantity: number): void {
+        const qty = Math.floor(quantity);
+        if (!itemId || qty <= 0) return;
+        this.sales.push({ itemId, day: this.day, quantity: qty });
+        this.sales = this.sales.filter((sale) => this.day - sale.day < DEMAND_WINDOW_DAYS);
+    }
+
+    public getRecentSoldVolume(itemId: string): number {
+        return volumeSoldInWindow(
+            this.sales.filter((sale) => sale.itemId === itemId),
+            this.day,
+        );
+    }
+
+    /** 1 when the crop was not sold in the window; lower after heavy sales. */
+    public getDemandMultiplier(itemId: string): number {
+        return demandMultiplierForVolume(this.getRecentSoldVolume(itemId));
     }
 
     // --------------------------------------------------------------------------
@@ -277,7 +329,9 @@ export class EconomySystem {
         return {
             inventory: this.state.inventory,
             prices: this.state.prices,
-            history: this.state.history
+            history: this.state.history,
+            sales: this.sales,
+            day: this.day,
         };
     }
 
@@ -286,6 +340,8 @@ export class EconomySystem {
             if (data.inventory) this.state.inventory = data.inventory;
             if (data.prices) this.state.prices = data.prices;
             if (data.history) this.state.history = data.history;
+            if (Array.isArray(data.sales)) this.sales = data.sales;
+            if (typeof data.day === 'number') this.day = data.day;
         }
     }
 }
