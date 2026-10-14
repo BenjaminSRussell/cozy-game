@@ -17,6 +17,8 @@ export interface TimeOfDay {
   totalMinutes: number;
 }
 
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+
 export interface LightingState {
   sunPosition: { x: number; y: number; z: number };
   moonPosition: { x: number; y: number; z: number };
@@ -44,6 +46,7 @@ export interface ShadowCaster {
 
 export class DynamicLightingSystem {
   private currentTime: TimeOfDay = { hour: 6, minute: 0, totalMinutes: 360 };
+  private currentSeason: Season = 'spring';
   private lightingState: LightingState;
   private shadowCasters: Map<string, ShadowCaster> = new Map();
   private stars: Array<{ x: number; y: number; size: number; brightness: number }> = [];
@@ -51,7 +54,7 @@ export class DynamicLightingSystem {
   private timeSpeed = 1; // 1 real minute = 1 game minute
 
   constructor() {
-    this.lightingState = this.calculateLightingState(this.currentTime);
+    this.lightingState = this.calculateLightingState(this.currentTime, this.currentSeason);
     this.generateStars();
     this.generateClouds();
   }
@@ -66,18 +69,29 @@ export class DynamicLightingSystem {
     this.currentTime.minute = Math.floor(this.currentTime.totalMinutes % 60);
 
     // Update lighting state
-    this.lightingState = this.calculateLightingState(this.currentTime);
+    this.lightingState = this.calculateLightingState(this.currentTime, this.currentSeason);
 
     // Update celestial bodies
     this.updateStars();
     this.updateClouds(deltaTime);
   }
 
-  private calculateLightingState(time: TimeOfDay): LightingState {
+  // Get sunrise/sunset times for a season
+  private getSunriseSunset(season: Season): { sunrise: number; sunset: number } {
+    switch (season) {
+      case 'spring': return { sunrise: 6.0, sunset: 19.5 };
+      case 'summer': return { sunrise: 5.5, sunset: 20.5 };
+      case 'autumn': return { sunrise: 6.5, sunset: 18.5 };
+      case 'winter': return { sunrise: 7.5, sunset: 16.5 };
+    }
+  }
+
+  private calculateLightingState(time: TimeOfDay, season: Season): LightingState {
     const hour = time.hour + time.minute / 60;
+    const { sunrise, sunset } = this.getSunriseSunset(season);
     
     // Calculate sun position (0° at sunrise, 180° at sunset)
-    const sunAngle = ((hour - 6) / 12) * Math.PI; // 6 AM to 6 PM
+    const sunAngle = ((hour - sunrise) / (sunset - sunrise)) * Math.PI;
     const sunHeight = Math.sin(sunAngle);
     const sunX = Math.cos(sunAngle);
     
@@ -86,8 +100,8 @@ export class DynamicLightingSystem {
     const moonHeight = Math.sin(moonAngle);
     const moonX = Math.cos(moonAngle);
 
-    // Determine time periods
-    const isNight = hour < 6 || hour > 20;
+    // Determine time periods (based on seasonal sunrise/sunset)
+    const isNight = hour < sunrise || hour > sunset;
     const isGoldenHour = (hour >= 5 && hour <= 7) || (hour >= 17 && hour <= 19);
     const isBlueHour = (hour >= 4 && hour <= 5) || (hour >= 19 && hour <= 20);
 
@@ -238,7 +252,13 @@ export class DynamicLightingSystem {
       minute: Math.max(0, Math.min(59, minute)),
       totalMinutes: hour * 60 + minute
     };
-    this.lightingState = this.calculateLightingState(this.currentTime);
+    this.lightingState = this.calculateLightingState(this.currentTime, this.currentSeason);
+  }
+
+  // Set season used for sunrise and sunset
+  setSeason(season: Season): void {
+    this.currentSeason = season;
+    this.lightingState = this.calculateLightingState(this.currentTime, this.currentSeason);
   }
 
   // Get shadow casters for rendering
