@@ -18,6 +18,188 @@ import { clearNotificationTimer, scheduleNotificationHide, type NotificationTime
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
+/** KeyboardEvent.code values for walk input. Arrows move the player; on-screen buttons still pan the camera. */
+export const MOVEMENT_KEY_CODES = [
+  'KeyW',
+  'KeyA',
+  'KeyS',
+  'KeyD',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+] as const;
+
+export type MovementKeyCode = (typeof MOVEMENT_KEY_CODES)[number];
+export type MovementKeyState = Record<MovementKeyCode, boolean>;
+
+/** Steady walk and exhausted walk, in world units per second. Lerp is the issue's 0.2 smoothing step. */
+const WALK_SPEED = 4.5;
+const EXHAUSTED_SPEED = 2.0;
+const VELOCITY_LERP = 0.2;
+/** Cap a late frame so a backgrounded tab cannot fling the player across the map. */
+const MOVE_DT_CAP_SECONDS = 0.1;
+/** Below this, a released key has stopped. The 0.2 lerp never reaches exact zero. */
+const VELOCITY_STOP_EPSILON = 0.01;
+
+export interface PlayerVelocity {
+  vx: number;
+  vy: number;
+  exhausted?: boolean;
+}
+
+export interface MovementBlock {
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+}
+
+export interface MovementBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+interface StructureFootprint {
+  position: { x: number; y: number };
+  dimensions?: { x: number; y: number };
+  size?: { x: number; y: number };
+}
+
+export function emptyMovementKeys(): MovementKeyState {
+  return {
+    KeyW: false,
+    KeyA: false,
+    KeyS: false,
+    KeyD: false,
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false,
+  };
+}
+
+export function isMovementKey(code: string): code is MovementKeyCode {
+  return (MOVEMENT_KEY_CODES as readonly string[]).includes(code);
+}
+
+/** Record a keydown or keyup. Returns false for every code this handler does not own. */
+export function applyMovementKey(keys: MovementKeyState, code: string, down: boolean): boolean {
+  if (!isMovementKey(code)) return false;
+  keys[code] = down;
+  return true;
+}
+
+/**
+ * Raw cardinal vector. Right/D is +X, left/A is -X, up/W is +Y, down/S is -Y.
+ * Opposing keys cancel. WASD and arrows share an axis instead of stacking.
+ */
+export function movementInputVector(keys: MovementKeyState): { inputX: number; inputY: number } {
+  const inputX = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+  const inputY = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+  return { inputX, inputY };
+}
+
+/** Exhaustion is optional until the debuff exists on the player. A missing flag is a normal walk. */
+export function playerIsExhausted(player: object): boolean {
+  if (!('exhausted' in player)) return false;
+  return (player as { exhausted?: unknown }).exhausted === true;
+}
+
+/**
+ * One smoothing step toward the isometric target.
+ * targetVx = (inputX - inputY) * speed
+ * targetVy = (inputX + inputY) * (speed * 0.5)
+ */
+export function stepPlayerVelocity(
+  player: PlayerVelocity,
+  inputX: number,
+  inputY: number,
+): PlayerVelocity {
+  const speed = player.exhausted ? EXHAUSTED_SPEED : WALK_SPEED;
+  const targetVx = (inputX - inputY) * speed;
+  const targetVy = (inputX + inputY) * (speed * 0.5);
+  player.vx += (targetVx - player.vx) * VELOCITY_LERP;
+  player.vy += (targetVy - player.vy) * VELOCITY_LERP;
+  return player;
+}
+
+/** Snap a released stick to rest so the player does not creep after the lerp falls below the epsilon. */
+export function settleStoppedVelocity(velocity: PlayerVelocity, hasInput: boolean): void {
+  if (hasInput) return;
+  if (Math.hypot(velocity.vx, velocity.vy) >= VELOCITY_STOP_EPSILON) return;
+  velocity.vx = 0;
+  velocity.vy = 0;
+}
+
+export function movementBlocks(world: {
+  buildings?: readonly StructureFootprint[];
+  homeBuildings?: readonly StructureFootprint[];
+  damBuildings?: readonly StructureFootprint[];
+}): MovementBlock[] {
+  const lists = [world.buildings, world.homeBuildings, world.damBuildings];
+  const blocks: MovementBlock[] = [];
+  for (const list of lists) {
+    if (!list) continue;
+    for (const structure of list) {
+      blocks.push({
+        x: structure.position.x,
+        y: structure.position.y,
+        width: structure.dimensions?.x ?? structure.size?.x,
+        height: structure.dimensions?.y ?? structure.size?.y,
+      });
+    }
+  }
+  return blocks;
+}
+
+/** True when the point is inside the map and its tile is not occupied by a structure. */
+export function canOccupy(
+  x: number,
+  y: number,
+  blocks: readonly MovementBlock[],
+  bounds: MovementBounds,
+): boolean {
+  if (x < bounds.minX || y < bounds.minY || x >= bounds.maxX || y >= bounds.maxY) return false;
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
+  return !blocks.some((block) => {
+    const width = Math.max(1, Math.floor(block.width ?? 1));
+    const height = Math.max(1, Math.floor(block.height ?? 1));
+    const ox = Math.floor(block.x);
+    const oy = Math.floor(block.y);
+    return tx >= ox && tx < ox + width && ty >= oy && ty < oy + height;
+  });
+}
+
+/**
+ * Integrate velocity in world units per second, per axis.
+ * A blocked axis stays put so a wall stops that component without cancelling the free one.
+ */
+export function nextPlayerPosition(
+  position: { x: number; y: number; z: number },
+  velocity: { vx: number; vy: number },
+  dt: number,
+  blocks: readonly MovementBlock[],
+  bounds: MovementBounds,
+): { x: number; y: number; z: number } {
+  let x = position.x;
+  let y = position.y;
+  const tryX = position.x + velocity.vx * dt;
+  if (canOccupy(tryX, position.y, blocks, bounds)) x = tryX;
+  const tryY = position.y + velocity.vy * dt;
+  if (canOccupy(x, tryY, blocks, bounds)) y = tryY;
+  return { x, y, z: position.z };
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+}
+
 interface IsometricGameScreenProps {
   onSave: () => void;
 }
@@ -53,6 +235,73 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   useEffect(() => {
     return () => {
       clearNotificationTimer(notificationTimerRef.current);
+    };
+  }, []);
+
+  // Held WASD / arrow keys. Velocity lerps each frame; collision is checked before movePlayer.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const keys = emptyMovementKeys();
+    const motion: PlayerVelocity = { vx: 0, vy: 0 };
+    let frameId = 0;
+    let lastTimestamp = 0;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      if (!applyMovementKey(keys, event.code, true)) return;
+      event.preventDefault();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!applyMovementKey(keys, event.code, false)) return;
+      event.preventDefault();
+    };
+    const onBlur = () => {
+      for (const code of MOVEMENT_KEY_CODES) keys[code] = false;
+    };
+
+    const tick = (timestamp: number) => {
+      const dt = lastTimestamp === 0
+        ? 0
+        : Math.min((timestamp - lastTimestamp) / 1000, MOVE_DT_CAP_SECONDS);
+      lastTimestamp = timestamp;
+
+      const state = useGameStore.getState();
+      const world = state.world;
+      if (world && dt > 0) {
+        const player = world.player;
+        const { inputX, inputY } = movementInputVector(keys);
+        motion.exhausted = playerIsExhausted(player);
+        stepPlayerVelocity(motion, inputX, inputY);
+        settleStoppedVelocity(motion, inputX !== 0 || inputY !== 0);
+
+        if (motion.vx !== 0 || motion.vy !== 0) {
+          const next = nextPlayerPosition(
+            player.position,
+            motion,
+            dt,
+            movementBlocks(world),
+            { minX: 0, minY: 0, maxX: world.mapSize.x, maxY: world.mapSize.y },
+          );
+          if (next.x !== player.position.x || next.y !== player.position.y) {
+            state.movePlayer(next);
+          }
+        }
+      }
+
+      frameId = window.requestAnimationFrame(tick);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    frameId = window.requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      window.cancelAnimationFrame(frameId);
     };
   }, []);
 
@@ -601,6 +850,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         <Text style={styles.instructionTitle}>🎮 How to Play:</Text>
         <Text style={styles.instructionText}>• Click on voxels to interact with them</Text>
         <Text style={styles.instructionText}>• Use arrow buttons to move camera</Text>
+        <Text style={styles.instructionText}>• WASD or arrow keys walk across the farm</Text>
         <Text style={styles.instructionText}>• Select actions then click to place/build</Text>
         <Text style={styles.instructionText}>• Watch your crops grow in beautiful 3D!</Text>
       </View>
