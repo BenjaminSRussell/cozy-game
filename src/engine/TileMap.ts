@@ -47,12 +47,23 @@ export class TileMap {
           position,
           elevation,
           walkable: tileType !== 'water',
-          variant: Math.floor(Math.random() * 4) // 4 visual variants per tile type
+          variant: Math.floor(TileMap.seededRandom(x * 1000 + y)() * 4) // 4 visual variants, stable per tile
         };
         
         this.tiles.set(this.getTileKey(x, y), tile);
       }
     }
+  }
+
+  /**
+   * Same LCG as GameEngine.seededRandom. One call per tile, seeded by position.
+   */
+  private static seededRandom(seed: number): () => number {
+    let s = seed;
+    return () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
   }
 
   /**
