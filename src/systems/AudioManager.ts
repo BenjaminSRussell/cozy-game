@@ -11,7 +11,7 @@ import { lerp } from '../utils/math';
  * - Background music with fade transitions
  * - Ambient layering (birds, wind, insects, etc.)
  * - Sound effects (planting, harvesting, mining, etc.)
- * - Synthesized tool SFX (till, water, chop, rock break, coin) via Web Audio
+ * - Synthesized tool, footstep, and UI cues via Web Audio (no sample files)
  * - Volume control per category (music, SFX, ambient)
  * - Mute/unmute functionality
  *
@@ -74,6 +74,11 @@ export class AudioManager {
 
   /** One generated noise buffer per duration. Swings reuse it instead of decoding a file. */
   private noiseBuffers: Map<number, AudioBuffer> = new Map();
+
+  /** Looping watering-can spray. Stopped by mute, zero SFX volume, or stopWaterLoop. */
+  private waterLoop: AudioBufferSourceNode | null = null;
+  private waterLoopGain: GainNode | null = null;
+  private waterLoopFilter: BiquadFilterNode | null = null;
 
   /** Keeps synthesized SFX silent while HTML audio is muted. */
   private synthesizedMuted = false;
@@ -605,6 +610,136 @@ export class AudioManager {
     this.playTone(ctx, 'sine', 1318, 1318, start + beep, beep, 0.4);
   }
 
+  /** Scythe swish. Highpassed noise falling in pitch. */
+  playScytheSound(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    this.playNoise(ctx, 0.16, ctx.currentTime, 'highpass', 3200, 900, 0.8, 0.3);
+  }
+
+  /** Short crop-pop when a harvest lands in the basket. */
+  playHarvestPop(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    this.playTone(ctx, 'sine', 680, 140, ctx.currentTime, 0.07, 0.45);
+  }
+
+  /** Item pickup, a single sine distinct from the coin chime. */
+  playPickupChime(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    this.playTone(ctx, 'sine', 1568, 1568, ctx.currentTime, 0.09, 0.35);
+  }
+
+  /** Menu open or close click. */
+  playMenuClick(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    this.playTone(ctx, 'square', 2000, 2000, ctx.currentTime, 0.03, 0.25);
+  }
+
+  /** Cash-register coin rattle. Four short ticks, not the two-note chime. */
+  playRegisterRattle(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    const start = ctx.currentTime;
+    for (const offset of [0, 0.045, 0.09, 0.135]) {
+      this.playNoise(ctx, 0.04, start + offset, 'highpass', 1800, 1800, 0.6, 0.28);
+    }
+  }
+
+  /**
+   * One footstep for a ground surface.
+   * Unknown surfaces are ignored. Mute and zero SFX volume stay silent.
+   */
+  playFootstep(surface: string): void {
+    if (!isFootstepSurface(surface)) return;
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    const start = ctx.currentTime;
+    switch (surface) {
+      case 'grass':
+        this.playNoise(ctx, 0.09, start, 'lowpass', 900, 300, 0.6, 0.25);
+        break;
+      case 'dirt':
+        this.playNoise(ctx, 0.11, start, 'lowpass', 500, 140, 0.5, 0.35);
+        break;
+      case 'stone_path':
+        this.playTone(ctx, 'triangle', 1400, 480, start, 0.06, 0.3);
+        this.playNoise(ctx, 0.04, start, 'highpass', 2500, 2500, 0.7, 0.2);
+        break;
+      case 'wood_floor':
+        this.playTone(ctx, 'sine', 180, 90, start, 0.08, 0.35);
+        break;
+      case 'water_puddle':
+        this.playNoise(ctx, 0.12, start, 'bandpass', 600, 1800, 2, 0.3);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Watering-can spray that loops until stopWaterLoop, mute, or zero SFX volume.
+   * A second call while the loop is running does not stack another node.
+   */
+  startWaterLoop(): void {
+    if (this.waterLoop) return;
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    const start = ctx.currentTime;
+    const source = ctx.createBufferSource();
+    source.buffer = this.noiseBuffer(ctx, AudioManager.WATER_SECONDS);
+    source.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.setValueAtTime(1.4, start);
+    filter.frequency.setValueAtTime(1400, start);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(Math.max(0.0001, this.settings.sfxVolume * 0.22), start);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    try {
+      source.start(start);
+    } catch {
+      try { source.disconnect(); } catch { /* already disconnected */ }
+      try { filter.disconnect(); } catch { /* already disconnected */ }
+      try { gain.disconnect(); } catch { /* already disconnected */ }
+      return;
+    }
+    this.waterLoop = source;
+    this.waterLoopFilter = filter;
+    this.waterLoopGain = gain;
+  }
+
+  /** Stop the watering loop once. A second call does not throw. */
+  stopWaterLoop(): void {
+    const source = this.waterLoop;
+    const filter = this.waterLoopFilter;
+    const gain = this.waterLoopGain;
+    this.waterLoop = null;
+    this.waterLoopFilter = null;
+    this.waterLoopGain = null;
+    if (!source) return;
+    try { source.stop(this.audioContext?.currentTime ?? 0); } catch { /* already stopped */ }
+    try { source.disconnect(); } catch { /* already disconnected */ }
+    if (filter) {
+      try { filter.disconnect(); } catch { /* already disconnected */ }
+    }
+    if (gain) {
+      try { gain.disconnect(); } catch { /* already disconnected */ }
+    }
+  }
+
+  /** Resume a context that the browser suspended before the first gesture. */
+  resumePlayback(): void {
+    const ctx = this.audioContext;
+    if (!ctx || ctx.state !== 'suspended') return;
+    const pending = ctx.resume();
+    void pending?.catch(() => undefined);
+  }
+
   /**
    * Fade audio in/out
    */
@@ -656,6 +791,7 @@ export class AudioManager {
    */
   updateVolume(settings: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...settings };
+    if (this.settings.sfxVolume <= 0) this.stopWaterLoop();
 
     // Update current music volume
     if (this.currentTrack) {
@@ -680,6 +816,7 @@ export class AudioManager {
    */
   muteAll(): void {
     this.synthesizedMuted = true;
+    this.stopWaterLoop();
     this.audioElements.forEach((audio) => {
       audio.muted = true;
     });
@@ -695,4 +832,72 @@ export class AudioManager {
       audio.muted = false;
     });
   }
+}
+
+export const FOOTSTEP_SURFACES = ['grass', 'dirt', 'stone_path', 'wood_floor', 'water_puddle'] as const;
+export type FootstepSurface = (typeof FOOTSTEP_SURFACES)[number];
+
+export interface FootstepQuery {
+  x: number;
+  y: number;
+  weather?: string | null;
+  roads?: readonly { position: { x: number; y: number }; grade?: string | null; type?: string | null }[] | null;
+  plots?: readonly { position: { x: number; y: number }; tilled?: boolean | null }[] | null;
+  buildings?: readonly {
+    position: { x: number; y: number };
+    dimensions?: { x: number; y: number } | null;
+    size?: { x: number; y: number } | null;
+  }[] | null;
+}
+
+function isFootstepSurface(surface: string): surface is FootstepSurface {
+  return (FOOTSTEP_SURFACES as readonly string[]).includes(surface);
+}
+
+function sameTile(x: number, y: number, position: { x: number; y: number }): boolean {
+  return Math.floor(position.x) === Math.floor(x) && Math.floor(position.y) === Math.floor(y);
+}
+
+function coversFootprint(
+  x: number,
+  y: number,
+  origin: { x: number; y: number },
+  width: number,
+  height: number,
+): boolean {
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
+  const ox = Math.floor(origin.x);
+  const oy = Math.floor(origin.y);
+  const w = Math.max(1, Math.floor(width));
+  const h = Math.max(1, Math.floor(height));
+  return tx >= ox && tx < ox + w && ty >= oy && ty < oy + h;
+}
+
+/** Ground the player is walking on. Rain on open grass is a puddle; floors and paths win. */
+export function footstepSurfaceAt(query: FootstepQuery): FootstepSurface {
+  const buildings = query.buildings ?? [];
+  for (const building of buildings) {
+    const width = building.dimensions?.x ?? building.size?.x ?? 1;
+    const height = building.dimensions?.y ?? building.size?.y ?? 1;
+    if (coversFootprint(query.x, query.y, building.position, width, height)) return 'wood_floor';
+  }
+
+  const roads = query.roads ?? [];
+  for (const road of roads) {
+    if (!sameTile(query.x, query.y, road.position)) continue;
+    const grade = (road.grade ?? '').toLowerCase();
+    const type = (road.type ?? '').toLowerCase();
+    if (grade === 'paved' || type === 'paved' || grade === 'stone' || type === 'stone') return 'stone_path';
+    return 'dirt';
+  }
+
+  const plots = query.plots ?? [];
+  for (const plot of plots) {
+    if (plot.tilled && sameTile(query.x, query.y, plot.position)) return 'dirt';
+  }
+
+  const weather = (query.weather ?? '').trim().toLowerCase();
+  if (weather === 'rain' || weather === 'rainy' || weather === 'storm' || weather === 'flood') return 'water_puddle';
+  return 'grass';
 }

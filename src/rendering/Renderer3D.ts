@@ -1551,9 +1551,14 @@ export class Renderer3D {
         break;
     }
 
-    // Update Audio System
+    // Seasonal beds follow the environment. The system adds a mute control when the page has none.
     if (this.audioSystem) {
-      this.audioSystem.updateSeason(this.environment.season);
+      this.audioSystem.update({
+        season: this.environment.season,
+        weather: this.environment.weather,
+        hour: this.environment.timeOfDay,
+        indoors: false,
+      });
     }
   }
 
