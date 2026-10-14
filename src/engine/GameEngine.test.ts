@@ -354,6 +354,46 @@ function captureQueuedPlayer(engine: GameEngine): RenderObject | undefined {
   return queued.find((object) => object.id.startsWith('player_'));
 }
 
+function seededRandom(seed: number): () => number {
+  const engine = new GameEngine();
+  const internal = engine as unknown as {
+    seededRandom(seed: number): () => number;
+  };
+  return internal.seededRandom(seed);
+}
+
+describe('GameEngine seededRandom', () => {
+  it('returns a stable float for seed 42', () => {
+    expect(seededRandom(42)()).toBe(0.6011037519201636);
+    expect(seededRandom(42)()).toBe(seededRandom(42)());
+  });
+
+  it('produces the same sequence from two generators with the same seed', () => {
+    const first = seededRandom(42);
+    const second = seededRandom(42);
+    const sequenceA = Array.from({ length: 16 }, () => first());
+    const sequenceB = Array.from({ length: 16 }, () => second());
+    expect(sequenceA).toEqual(sequenceB);
+  });
+
+  it('does not repeat within 1,000,000 draws', () => {
+    const random = seededRandom(42);
+    const start = [random(), random(), random()];
+    let previous = start[2];
+    for (let i = 3; i < 1_000_000; i++) {
+      const value = random();
+      if (previous === start[0] && value === start[1]) {
+        const third = random();
+        expect(third).not.toBe(start[2]);
+        i += 1;
+        previous = third;
+        continue;
+      }
+      previous = value;
+    }
+  });
+});
+
 describe('GameEngine player position', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
