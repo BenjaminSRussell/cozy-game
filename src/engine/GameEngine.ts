@@ -22,7 +22,8 @@ import { Vector3D } from '../types/game';
  * - FPS counter and performance metrics
  *
  * The engine runs on requestAnimationFrame, so a hidden tab pauses the
- * loop. Delta time is capped at 0.1s so returning does not fast-forward.
+ * loop. Frame time is capped at 0.25s and consumed in fixed 1/60s steps
+ * so a late frame cannot fast-forward the simulation.
  */
 
 /**
@@ -117,6 +118,15 @@ export class GameEngine {
   /** requestAnimationFrame id, cancelled by stop() */
   private rafId: number = 0;
 
+  /** Fixed simulation step in seconds (60 Hz). */
+  private readonly FIXED_STEP = 1 / 60;
+
+  /** Leftover frame time not yet consumed by a fixed step, in seconds. */
+  private accumulator = 0;
+
+  /** Remainder of the current step, in [0, 1), for render interpolation. */
+  private interpolationAlpha = 0;
+
   // ========== Randomization for visual variety ==========
 
   /** Seed for terrain generation consistency */
@@ -180,6 +190,7 @@ export class GameEngine {
     this.lastTimestamp = now;
     this.realTimeAtStart = Date.now();
     this.fpsUpdateTime = now;
+    this.accumulator = 0;
 
     this.rafId = requestAnimationFrame(this.loop.bind(this));
   }
@@ -215,21 +226,33 @@ export class GameEngine {
 
   /**
    * Main game loop. `timestamp` comes from requestAnimationFrame, which does not
-   * fire while the tab is hidden.
+   * fire while the tab is hidden. Simulation runs at a fixed 60 Hz; drawing
+   * runs once per frame with the leftover step fraction.
    */
   private loop(timestamp: number): void {
     if (!this.isRunning) return;
 
     // Cap a late frame so a backgrounded tab cannot dump seconds of game time.
-    const deltaTime = Math.min((timestamp - this.lastTimestamp) / 1000, 0.1);
+    const frameTime = Math.min((timestamp - this.lastTimestamp) / 1000, 0.25);
     this.lastTimestamp = timestamp;
+    this.accumulator += frameTime;
+    this.stats.deltaTime = frameTime;
 
-    this.gameTime += deltaTime * this.config.timeScale;
-    this.stats.deltaTime = deltaTime;
-    this.stats.totalElapsedTime = this.gameTime;
+    while (this.accumulator >= this.FIXED_STEP) {
+      this.fixedUpdate(this.FIXED_STEP);
+      this.accumulator -= this.FIXED_STEP;
+    }
 
-    this.update(deltaTime);
-    this.render();
+    const alpha = this.accumulator / this.FIXED_STEP;
+    this.render(alpha);
+
+    // Auto-save periodically. Once per displayed frame, not once per step.
+    if (this.frameCount % 3600 === 0) {
+      const store = useGameStore.getState();
+      if (store.world) {
+        store.saveGame();
+      }
+    }
 
     this.frameCount++;
     if (timestamp - this.fpsUpdateTime >= 1000) {
@@ -247,38 +270,37 @@ export class GameEngine {
   }
 
   /**
-   * Update game state
+   * Advance crop growth, clock, weather, and physics by one fixed step.
+   * Called only from the accumulator, so a long frame cannot apply its whole
+   * delta as a single update.
    */
-  private update(deltaTime: number): void {
+  private fixedUpdate(step: number): void {
+    this.gameTime += step * this.config.timeScale;
+    this.stats.totalElapsedTime = this.gameTime;
+
     const store = useGameStore.getState();
 
     if (!store.world) return;
 
     // Update time progression (minutes per real second * timeScale)
     const minutesPerSecond = 0.1; // 10 real seconds = 1 game minute
-    const gameMinutes = deltaTime * minutesPerSecond * this.config.timeScale;
+    const gameMinutes = step * minutesPerSecond * this.config.timeScale;
     store.advanceTime(gameMinutes);
 
     // Update crop growth
-    store.updateCropGrowth(deltaTime);
+    store.updateCropGrowth(step);
 
     // Update weather events
-    store.updateWeatherEvents(deltaTime);
+    store.updateWeatherEvents(step);
 
     // Update camera if target is set
     if (this.cameraTarget) {
-      this.updateCamera(deltaTime);
+      this.updateCamera(step);
     }
 
     // Physics updates if enabled
     if (this.config.enablePhysics) {
-      this.updatePhysics(deltaTime);
-    }
-
-    // Auto-save periodically
-    if (this.frameCount % 3600 === 0) {
-      // Every ~60 seconds at 60 FPS
-      store.saveGame();
+      this.updatePhysics(step);
     }
   }
 
@@ -319,9 +341,11 @@ export class GameEngine {
   }
 
   /**
-   * Render frame
+   * Draw one frame. `alpha` is the unconsumed fraction of FIXED_STEP and is
+   * only for interpolation; simulation does not run here.
    */
-  private render(): void {
+  private render(alpha: number): void {
+    this.interpolationAlpha = alpha;
     const store = useGameStore.getState();
 
     if (!store.world) return;
@@ -701,6 +725,7 @@ export class GameEngine {
     const debugText = [
       `FPS: ${this.stats.fps}`,
       `DeltaTime: ${this.stats.deltaTime.toFixed(3)}s`,
+      `Alpha: ${this.interpolationAlpha.toFixed(3)}`,
       `Game Time: ${(this.stats.totalElapsedTime / 60).toFixed(1)}m`,
       `Objects: ${this.stats.renderedObjects}`,
       `Memory: ${this.getMemoryUsage()}MB`,
