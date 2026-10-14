@@ -60,7 +60,7 @@ describe('GameEngine requestAnimationFrame loop', () => {
     vi.restoreAllMocks();
   });
 
-  it('never lets deltaTime exceed 0.1s', () => {
+  it('clamps a late frame to 0.25s before the fixed step', () => {
     const frames = installFrames();
     vi.spyOn(performance, 'now').mockReturnValue(1_000);
     const engine = new GameEngine();
@@ -72,9 +72,9 @@ describe('GameEngine requestAnimationFrame loop', () => {
 
     // Five seconds late, as when a hidden tab becomes visible again.
     frames.fire(6_050);
-    expect(engine.getStats().deltaTime).toBeCloseTo(0.1);
-    expect(engine.getStats().deltaTime).toBeLessThanOrEqual(0.1);
-    expect(engine.getGameTime()).toBeCloseTo(0.15);
+    expect(engine.getStats().deltaTime).toBeCloseTo(0.25);
+    expect(engine.getStats().deltaTime).toBeLessThanOrEqual(0.25);
+    expect(engine.getGameTime()).toBeCloseTo(0.3);
 
     engine.stop();
   });
@@ -110,8 +110,94 @@ describe('GameEngine requestAnimationFrame loop', () => {
     engine.stop();
 
     const after = useGameStore.getState().world?.dayTime ?? 0;
-    // A 1s gap is clamped to 0.1s. update() applies 0.1 game minutes per real second.
-    expect(after - before).toBeCloseTo(0.01);
-    expect(engine.getStats().deltaTime).toBeLessThanOrEqual(0.1);
+    // A 1s gap is clamped to 0.25s and consumed in 1/60s steps.
+    // Time progression applies 0.1 game minutes per real second.
+    expect(after - before).toBeCloseTo(0.025);
+    expect(engine.getStats().deltaTime).toBeLessThanOrEqual(0.25);
+  });
+
+  it('runs a 0.1s frame as several 60Hz steps and clamps 0.5s to 0.25s', () => {
+    const frames = installFrames();
+    vi.spyOn(performance, 'now').mockReturnValue(1_000);
+    useGameStore.getState().createNewGame('Tester');
+    const cropSteps: number[] = [];
+    const originalGrowth = useGameStore.getState().updateCropGrowth;
+    useGameStore.setState({
+      updateCropGrowth: (deltaTime: number) => {
+        cropSteps.push(deltaTime);
+        originalGrowth(deltaTime);
+      },
+    });
+
+    const engine = new GameEngine();
+    const stepped: number[] = [];
+    const internal = engine as unknown as { fixedUpdate(step: number): void };
+    const originalStep = internal.fixedUpdate.bind(engine);
+    internal.fixedUpdate = (step: number) => {
+      stepped.push(step);
+      originalStep(step);
+    };
+
+    const step = 1 / 60;
+    try {
+      engine.start();
+      frames.fire(1_000);
+
+      frames.fire(1_100);
+      expect(stepped.length).toBeGreaterThan(1);
+      expect(stepped).toHaveLength(6);
+      expect(stepped.every((value) => value === step)).toBe(true);
+      expect(stepped).not.toContain(0.1);
+      expect(cropSteps).toEqual(stepped);
+      expect(engine.getGameTime()).toBeCloseTo(0.1);
+
+      stepped.length = 0;
+      cropSteps.length = 0;
+      frames.fire(1_600);
+      expect(engine.getStats().deltaTime).toBeCloseTo(0.25);
+      expect(engine.getStats().deltaTime).toBeLessThanOrEqual(0.25);
+      expect(stepped).toHaveLength(15);
+      expect(stepped.every((value) => value === step)).toBe(true);
+      expect(stepped.reduce((sum, value) => sum + value, 0)).toBeCloseTo(0.25);
+      expect(stepped).not.toContain(0.5);
+      expect(stepped).not.toContain(0.25);
+      expect(cropSteps).toEqual(stepped);
+      expect(engine.getGameTime()).toBeCloseTo(0.35);
+    } finally {
+      engine.stop();
+      useGameStore.setState({ updateCropGrowth: originalGrowth });
+    }
+  });
+
+  it('steps twice at 30 FPS and every other frame at 120 FPS', () => {
+    const frames = installFrames();
+    vi.spyOn(performance, 'now').mockReturnValue(0);
+
+    const countSteps = (stamps: number[]) => {
+      const engine = new GameEngine();
+      const counts: number[] = [];
+      const internal = engine as unknown as { fixedUpdate(step: number): void };
+      const originalStep = internal.fixedUpdate.bind(engine);
+      let pending = 0;
+      internal.fixedUpdate = (step: number) => {
+        pending += 1;
+        originalStep(step);
+      };
+      engine.start();
+      for (const stamp of stamps) {
+        pending = 0;
+        frames.fire(stamp);
+        counts.push(pending);
+      }
+      engine.stop();
+      return counts;
+    };
+
+    // One 30 FPS frame from a fresh clock is two 1/60 steps.
+    expect(countSteps([0, 1000 / 30]).slice(1)).toEqual([2]);
+    // 120 FPS frames alternate between zero and one step.
+    expect(countSteps([0, 1000 / 120, 2000 / 120, 3000 / 120, 4000 / 120]).slice(1)).toEqual([
+      0, 1, 0, 1,
+    ]);
   });
 });
