@@ -32,6 +32,7 @@ import {
   Road,
   RoadGrade,
   Vehicle,
+  getQualityMultiplier,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
 import { liveIsometricRenderers } from '../rendering/IsometricRenderer';
@@ -1374,17 +1375,13 @@ export const useGameStore = create<GameStore>()(
             const totalBonus = levelBonus + fertilizerBonus;
 
             let quality: 'normal' | 'silver' | 'gold' | 'iridium' = 'normal';
-            let qualityMultiplier = 1.0;
 
             if (roll < 0.05 + totalBonus / 2 && player.level >= 10) {
               quality = 'iridium';
-              qualityMultiplier = 2.0;
             } else if (roll < 0.15 + totalBonus) {
               quality = 'gold';
-              qualityMultiplier = 1.5;
             } else if (roll < 0.4 + totalBonus) {
               quality = 'silver';
-              qualityMultiplier = 1.25;
             }
 
             // Yield logic - influenced by health
@@ -1396,7 +1393,7 @@ export const useGameStore = create<GameStore>()(
               name: `${crop.type.charAt(0).toUpperCase() + crop.type.slice(1)} (${quality !== 'normal' ? quality : 'Normal'})`,
               type: ItemType.CROP,
               quantity: yieldCount,
-              sellValue: Math.floor(baseValue * qualityMultiplier),
+              sellValue: baseValue,
               spriteId: crop.type,
               rarity: quality === 'iridium' ? 'legendary' : quality === 'gold' ? 'rare' : quality === 'silver' ? 'uncommon' : 'common',
               quality: quality,
@@ -2246,14 +2243,13 @@ export const useGameStore = create<GameStore>()(
             const productType = animal.type === 'chicken' ? 'egg' : animal.type === 'cow' ? 'milk' : 'wool';
             const quality = animal.affection > 800 ? 'gold' : animal.affection > 400 ? 'silver' : 'normal';
             const value = productType === 'egg' ? 25 : productType === 'milk' ? 100 : 150;
-            const multiplier = quality === 'gold' ? 1.5 : quality === 'silver' ? 1.25 : 1.0;
 
             const productItem: Item = {
               id: `${productType}_${Date.now()}`,
               name: `${productType.charAt(0).toUpperCase() + productType.slice(1)} (${quality})`,
               type: ItemType.ANIMAL_PRODUCT,
               quantity: 1,
-              sellValue: Math.floor(value * multiplier),
+              sellValue: value,
               spriteId: productType,
               rarity: quality === 'gold' ? 'rare' : quality === 'silver' ? 'uncommon' : 'common',
               quality: quality as any
@@ -2284,28 +2280,19 @@ export const useGameStore = create<GameStore>()(
           });
         },
         sellInventoryItem: (itemId: string, quantity: number) => {
-          let earnings = 0;
+          const item = get().world?.player.inventory.find((entry) => entry.id === itemId);
+          const removed = get().removeItem(itemId, quantity);
+          if (!item || !removed) return 0;
+
+          const earnings = item.sellValue * getQualityMultiplier(item.quality) * quantity;
           set((state) => {
             if (!state.world) return state;
-
-            const item = state.world.player.inventory.find(i => i.id === itemId);
-            if (!item || item.quantity < quantity) return state;
-
-            earnings = item.sellValue * quantity;
-
-            const inventory = state.world.player.inventory
-              .map((i) =>
-                i.id === itemId ? { ...i, quantity: Math.max(0, i.quantity - quantity) } : i,
-              )
-              .filter((i) => i.quantity > 0);
-
             return {
               world: {
                 ...state.world,
                 player: {
                   ...state.world.player,
                   coins: state.world.player.coins + earnings,
-                  inventory,
                 },
               },
             };
