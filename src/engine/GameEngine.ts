@@ -65,6 +65,7 @@ export interface EngineStats {
 function createHeadlessCanvas(): GameCanvas {
   const canvas = {
     addEventListener() {},
+    removeEventListener() {},
   } as unknown as HTMLCanvasElement;
 
   const context = {
@@ -156,6 +157,15 @@ export class GameEngine {
   /** Map of input event callbacks */
   private inputCallbacks: Map<string, Function> = new Map();
 
+  /** Bound canvas listeners. The same references are added and removed. */
+  private _onTouchStart: (e: TouchEvent) => void;
+  private _onTouchMove: (e: TouchEvent) => void;
+  private _onTouchEnd: (e: TouchEvent) => void;
+  private _onMouseDown: (e: MouseEvent) => void;
+
+  /** True while the four canvas listeners above are attached. */
+  private inputListenersAttached = false;
+
   /**
    * Create Game Engine instance
    * @param canvas - Canvas to draw into. When omitted, the loop still ticks
@@ -173,6 +183,11 @@ export class GameEngine {
       enablePhysics: true,
       ...config,
     };
+
+    this._onTouchStart = this.handleTouchStart.bind(this);
+    this._onTouchMove = this.handleTouchMove.bind(this);
+    this._onTouchEnd = this.handleTouchEnd.bind(this);
+    this._onMouseDown = this.handleMouseDown.bind(this);
 
     this.setupEventListeners();
   }
@@ -192,18 +207,26 @@ export class GameEngine {
     this.fpsUpdateTime = now;
     this.accumulator = 0;
 
+    this.setupEventListeners();
     this.rafId = requestAnimationFrame(this.loop.bind(this));
   }
 
   /**
    * Stop the game loop
    * Halts rendering and updates
-   * Cancels the pending animation frame
+   * Cancels the pending animation frame and drops canvas listeners
    */
   stop(): void {
     this.isRunning = false;
     cancelAnimationFrame(this.rafId);
     this.rafId = 0;
+
+    const canvas = this.canvas.context.canvas;
+    canvas.removeEventListener('touchstart', this._onTouchStart);
+    canvas.removeEventListener('touchmove', this._onTouchMove);
+    canvas.removeEventListener('touchend', this._onTouchEnd);
+    canvas.removeEventListener('mousedown', this._onMouseDown);
+    this.inputListenersAttached = false;
   }
 
   /**
@@ -774,23 +797,14 @@ export class GameEngine {
    * Set up event listeners
    */
   private setupEventListeners(): void {
-    // Touch events
-    this.canvas.context.canvas.addEventListener('touchstart', (e) => {
-      this.handleTouchStart(e);
-    });
+    if (this.inputListenersAttached) return;
 
-    this.canvas.context.canvas.addEventListener('touchmove', (e) => {
-      this.handleTouchMove(e);
-    });
-
-    this.canvas.context.canvas.addEventListener('touchend', (e) => {
-      this.handleTouchEnd(e);
-    });
-
-    // Mouse events (for web/debug)
-    this.canvas.context.canvas.addEventListener('mousedown', (e) => {
-      this.handleMouseDown(e);
-    });
+    const canvas = this.canvas.context.canvas;
+    canvas.addEventListener('touchstart', this._onTouchStart);
+    canvas.addEventListener('touchmove', this._onTouchMove);
+    canvas.addEventListener('touchend', this._onTouchEnd);
+    canvas.addEventListener('mousedown', this._onMouseDown);
+    this.inputListenersAttached = true;
   }
 
   /**

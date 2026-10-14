@@ -28,6 +28,7 @@ vi.hoisted(() => {
 
 import { useGameStore } from '../store/gameStore';
 import { GameEngine } from './GameEngine';
+import type { GameCanvas } from './Renderer2D5';
 
 function installFrames() {
   let pending: ((timestamp: number) => void) | null = null;
@@ -199,5 +200,116 @@ describe('GameEngine requestAnimationFrame loop', () => {
     expect(countSteps([0, 1000 / 120, 2000 / 120, 3000 / 120, 4000 / 120]).slice(1)).toEqual([
       0, 1, 0, 1,
     ]);
+  });
+});
+
+type ListenerCall = { op: 'add' | 'remove'; type: string; handler: EventListener };
+
+function createListenerCanvas() {
+  const attached: { type: string; handler: EventListener }[] = [];
+  const calls: ListenerCall[] = [];
+  const canvas = {
+    addEventListener(type: string, handler: EventListener) {
+      calls.push({ op: 'add', type, handler });
+      attached.push({ type, handler });
+    },
+    removeEventListener(type: string, handler: EventListener) {
+      calls.push({ op: 'remove', type, handler });
+      const index = attached.findIndex((entry) => entry.type === type && entry.handler === handler);
+      if (index >= 0) attached.splice(index, 1);
+    },
+    dispatch(type: string, event: Event) {
+      for (const entry of attached.filter((item) => item.type === type)) {
+        entry.handler(event);
+      }
+    },
+    count(type: string) {
+      return attached.filter((entry) => entry.type === type).length;
+    },
+  };
+  const context = {
+    canvas,
+    save() {},
+    restore() {},
+    fillRect() {},
+    createLinearGradient() {
+      return { addColorStop() {} };
+    },
+  } as unknown as CanvasRenderingContext2D;
+  const gameCanvas: GameCanvas = { context, width: 1, height: 1 };
+  return { canvas, gameCanvas, calls };
+}
+
+describe('GameEngine canvas listeners', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('removes the same handler references on stop and does not double-fire on the next start', () => {
+    installFrames();
+    const { canvas, gameCanvas, calls } = createListenerCanvas();
+    const engine = new GameEngine(gameCanvas);
+    const bound = engine as unknown as {
+      _onTouchStart: (e: TouchEvent) => void;
+      _onTouchMove: (e: TouchEvent) => void;
+      _onTouchEnd: (e: TouchEvent) => void;
+      _onMouseDown: (e: MouseEvent) => void;
+    };
+    const expected: Record<string, EventListener> = {
+      touchstart: bound._onTouchStart as EventListener,
+      touchmove: bound._onTouchMove as EventListener,
+      touchend: bound._onTouchEnd as EventListener,
+      mousedown: bound._onMouseDown as EventListener,
+    };
+
+    let touchStarts = 0;
+    let mouseDowns = 0;
+    engine.onInput('probe', (kind: string) => {
+      if (kind === 'touchstart') touchStarts += 1;
+      if (kind === 'mousedown') mouseDowns += 1;
+    });
+
+    engine.start();
+    for (const type of Object.keys(expected)) {
+      expect(canvas.count(type)).toBe(1);
+      const added = calls.filter((call) => call.op === 'add' && call.type === type);
+      expect(added).toHaveLength(1);
+      expect(added[0].handler).toBe(expected[type]);
+    }
+
+    const touch = { touches: [{ clientX: 4, clientY: 8 }] } as unknown as Event;
+    const mouse = { clientX: 3, clientY: 5 } as unknown as Event;
+    canvas.dispatch('touchstart', touch);
+    canvas.dispatch('mousedown', mouse);
+    expect(touchStarts).toBe(1);
+    expect(mouseDowns).toBe(1);
+
+    engine.stop();
+    for (const type of Object.keys(expected)) {
+      expect(canvas.count(type)).toBe(0);
+      const removed = calls.filter((call) => call.op === 'remove' && call.type === type);
+      expect(removed).toHaveLength(1);
+      expect(removed[0].handler).toBe(expected[type]);
+    }
+
+    engine.start();
+    for (const type of Object.keys(expected)) {
+      expect(canvas.count(type)).toBe(1);
+      const added = calls.filter((call) => call.op === 'add' && call.type === type);
+      expect(added).toHaveLength(2);
+      expect(added[1].handler).toBe(expected[type]);
+    }
+
+    canvas.dispatch('touchstart', touch);
+    canvas.dispatch('mousedown', mouse);
+    expect(touchStarts).toBe(2);
+    expect(mouseDowns).toBe(2);
+
+    engine.start();
+    expect(canvas.count('touchstart')).toBe(1);
+    expect(calls.filter((call) => call.op === 'add' && call.type === 'touchstart')).toHaveLength(2);
+
+    engine.stop();
   });
 });
