@@ -69,12 +69,15 @@ export class CameraSystem {
    * Update camera with smooth interpolation
    */
   public update(deltaTime: number): void {
-    // Smooth position interpolation
-    this.position.x += (this.targetPosition.x - this.position.x) * this.smoothing;
-    this.position.y += (this.targetPosition.y - this.position.y) * this.smoothing;
+    // Linear smoothing never reaches the target. Snap inside a sub-pixel
+    // (zoom: 0.001) so the camera arrives instead of lagging forever.
+    const dx = this.targetPosition.x - this.position.x;
+    const dy = this.targetPosition.y - this.position.y;
+    this.position.x = Math.abs(dx) < 0.5 ? this.targetPosition.x : this.position.x + dx * this.smoothing;
+    this.position.y = Math.abs(dy) < 0.5 ? this.targetPosition.y : this.position.y + dy * this.smoothing;
 
-    // Smooth zoom interpolation
-    this.zoom += (this.targetZoom - this.zoom) * this.smoothing;
+    const zoomDelta = this.targetZoom - this.zoom;
+    this.zoom = Math.abs(zoomDelta) < 0.001 ? this.targetZoom : this.zoom + zoomDelta * this.smoothing;
 
     // Smooth rotation interpolation
     this.rotation += (this.targetRotation - this.rotation) * this.smoothing;
