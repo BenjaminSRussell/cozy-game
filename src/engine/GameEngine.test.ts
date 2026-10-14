@@ -27,8 +27,9 @@ vi.hoisted(() => {
 });
 
 import { useGameStore } from '../store/gameStore';
+import type { Vector3D } from '../types/game';
 import { GameEngine } from './GameEngine';
-import type { GameCanvas } from './Renderer2D5';
+import type { GameCanvas, RenderObject } from './Renderer2D5';
 
 function installFrames() {
   let pending: ((timestamp: number) => void) | null = null;
@@ -311,5 +312,60 @@ describe('GameEngine canvas listeners', () => {
     expect(calls.filter((call) => call.op === 'add' && call.type === 'touchstart')).toHaveLength(2);
 
     engine.stop();
+  });
+});
+
+function captureQueuedPlayer(engine: GameEngine): RenderObject | undefined {
+  const queued: RenderObject[] = [];
+  const internal = engine as unknown as {
+    renderer: { queueRender: (object: RenderObject) => void };
+    queueCharacters(): void;
+  };
+  const spy = vi.spyOn(internal.renderer, 'queueRender').mockImplementation((object: RenderObject) => {
+    queued.push(object);
+  });
+  try {
+    internal.queueCharacters();
+  } finally {
+    spy.mockRestore();
+  }
+  return queued.find((object) => object.id.startsWith('player_'));
+}
+
+describe('GameEngine player position', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('queues a player at (5, 3) and does not throw when position is missing', () => {
+    useGameStore.getState().createNewGame('Tester');
+    useGameStore.getState().movePlayer({ x: 5, y: 3, z: 4 });
+
+    const engine = new GameEngine();
+    expect(captureQueuedPlayer(engine)?.position).toEqual({ x: 5, y: 3, z: 1 });
+
+    const world = useGameStore.getState().world;
+    expect(world).toBeTruthy();
+    if (!world) return;
+
+    const center = { x: world.mapSize.x / 2, y: world.mapSize.y / 2, z: 1 };
+    for (const missing of [undefined, null] as const) {
+      useGameStore.setState({
+        world: {
+          ...useGameStore.getState().world!,
+          player: {
+            ...useGameStore.getState().world!.player,
+            position: missing as unknown as Vector3D,
+          },
+        },
+      });
+
+      let queued: RenderObject | undefined;
+      expect(() => {
+        queued = captureQueuedPlayer(engine);
+      }).not.toThrow();
+      expect(queued?.position).toEqual(center);
+    }
   });
 });

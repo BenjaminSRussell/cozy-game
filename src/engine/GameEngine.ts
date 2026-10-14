@@ -659,22 +659,25 @@ export class GameEngine {
   /**
    * Queue characters and NPCs for rendering
    * Renders player character and any NPCs in the world
-   * Player position is derived from world state
+   * Player x/y come from world.player.position; z stays 1 (above ground).
+   * A missing position falls back to the map center and does not throw.
    */
   private queueCharacters(): void {
     const store = useGameStore.getState();
     if (!store.world) return;
 
-    // Render player character
-    // Player position can be tracked or default to center of farm
-    const playerPosition: Vector3D = {
-      x: store.world.mapSize.x / 2,
-      y: store.world.mapSize.y / 2,
-      z: 1, // Player rendered above ground
-    };
+    const player = store.world.player;
+    const position = player?.position;
+    const playerPosition: Vector3D = position
+      ? { x: position.x, y: position.y, z: 1 }
+      : {
+          x: store.world.mapSize.x / 2,
+          y: store.world.mapSize.y / 2,
+          z: 1,
+        };
 
     this.renderer.queueRender({
-      id: `player_${store.world.player.id}`,
+      id: `player_${player?.id ?? 'player'}`,
       spriteId: 'player', // Default player sprite - can be customized
       position: playerPosition,
       scale: 1.2,
