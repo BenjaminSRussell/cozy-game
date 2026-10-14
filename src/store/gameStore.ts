@@ -318,7 +318,7 @@ interface GameStore {
 
   /**
    * Plant a crop in a farm plot
-   * Only works on empty, tilled plots
+   * Empty plots and dead crops accept a new seed. A living crop is left unchanged.
    * Initializes crop with SEED stage, full water and health
    * @param plotId - ID of the farm plot
    * @param cropType - Type of crop ('wheat', 'carrot', 'tomato', 'corn')
@@ -1215,11 +1215,19 @@ export const useGameStore = create<GameStore>()(
         },
 
         plantCrop: (plotId: string, cropType: string) => {
+          const occupied = get().world?.farmPlots.find((plot) => plot.id === plotId);
+          // Living crops stay. Dead crops are removed and replaced below.
+          if (occupied?.crop && occupied.crop.stage !== CropStage.DEAD) {
+            console.log("This plot already has a crop!");
+            return;
+          }
+
           set((state) => {
             if (!state.world) return state;
 
             const updatedPlots = state.world.farmPlots.map((plot) => {
-              if (plot.id !== plotId || plot.crop) return plot;
+              if (plot.id !== plotId) return plot;
+              if (plot.crop && plot.crop.stage !== CropStage.DEAD) return plot;
 
               const crop: Crop = {
                 id: `crop_${Date.now()}`,
