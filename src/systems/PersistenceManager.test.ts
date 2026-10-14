@@ -188,3 +188,70 @@ describe('PersistenceManager.loadWorld', () => {
     }
   });
 });
+
+describe('PersistenceManager.listSlots', () => {
+  it('returns player name and level from slot metadata without parsing the world blob', async () => {
+    const world = {
+      id: 's1',
+      createdAt: 5,
+      player: { name: 'Ben', level: 5 },
+    } as unknown as GameWorld;
+
+    const writer = new PersistenceManager();
+    await writer.saveWorld(world);
+
+    const metaRaw = localStorage.getItem('cozy_meta_s1');
+    expect(metaRaw).toEqual(expect.any(String));
+    expect(localStorage.getItem('cozy_save_s1')).toBe(JSON.stringify(world));
+    localStorage.setItem('cozy_save_s1', '{not a world');
+
+    const reader = new PersistenceManager();
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      const slots = reader.listSlots();
+      expect(parse).toHaveBeenCalledTimes(1);
+      expect(parse).toHaveBeenCalledWith(metaRaw);
+      expect(slots).toEqual([
+        expect.objectContaining({
+          id: 's1',
+          worldId: 's1',
+          playerName: 'Ben',
+          level: 5,
+          playTime: 0,
+        }),
+      ]);
+    } finally {
+      parse.mockRestore();
+    }
+
+    expect(localStorage.getItem('cozy_save_s1')).toBe('{not a world');
+  });
+
+  it('keeps createdAt from an existing meta record', async () => {
+    const world = {
+      id: 's1',
+      player: { name: 'Ben', level: 5 },
+    } as unknown as GameWorld;
+
+    const manager = new PersistenceManager();
+    await manager.saveWorld(world);
+    const createdAt = manager.listSlots()[0]?.createdAt;
+    expect(createdAt).toEqual(expect.any(Number));
+
+    await manager.saveWorld({
+      ...world,
+      player: { name: 'Ben', level: 8 },
+    } as unknown as GameWorld);
+
+    const slot = manager.listSlots()[0];
+    expect(slot?.createdAt).toBe(createdAt);
+    expect(slot).toMatchObject({
+      id: 's1',
+      worldId: 's1',
+      playerName: 'Ben',
+      level: 8,
+      playTime: 0,
+    });
+    expect(slot?.lastPlayedAt).toBeGreaterThanOrEqual(createdAt as number);
+  });
+});
