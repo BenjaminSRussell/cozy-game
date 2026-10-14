@@ -315,10 +315,47 @@ export class TextureManager {
   }
 
   /**
-   * Get a loaded texture by ID
+   * Get a loaded texture by ID.
+   * An uncached single emoji, or an id that starts with "U+", is drawn onto a
+   * 64×64 canvas, cached, and returned. Any other missing id stays unresolved.
    */
   public getTexture(id: string): LoadedTexture | undefined {
-    return this.textureCache.get(id);
+    const cached = this.textureCache.get(id);
+    if (cached) {
+      return cached;
+    }
+
+    if ([...id].length === 1 || id.startsWith('U+')) {
+      return this.renderEmojiToImage(id);
+    }
+
+    return undefined;
+  }
+
+  private renderEmojiToImage(emoji: string): LoadedTexture {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = `${size * 0.8}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, size / 2, size / 2);
+
+    const image = new Image();
+    image.src = canvas.toDataURL();
+    const texture: LoadedTexture = {
+      id: emoji,
+      image,
+      width: size,
+      height: size,
+      aspectRatio: 1,
+      loadTime: 0,
+      cacheKey: emoji
+    };
+    this.textureCache.set(emoji, texture);
+    return texture;
   }
 
   /**
