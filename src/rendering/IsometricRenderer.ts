@@ -55,6 +55,9 @@ export class IsometricRenderer {
   /** World bounds from the last render(); picks outside this are rejected. */
   private mapSize: { x: number; y: number } | null = null;
   private tileSize = 64; // Increased for better detail
+  /** CSS pixels. ctx.scale(dpr) draws in this space; canvas.width is the backing store. */
+  private cssWidth = 0;
+  private cssHeight = 0;
   private voxelHeight = 16;
   private textureManager: TextureManager;
   private windSystem: WindSystem;
@@ -65,6 +68,15 @@ export class IsometricRenderer {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas context failed');
     this.ctx = ctx;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    this.cssWidth = rect.width;
+    this.cssHeight = rect.height;
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.scale(dpr, dpr);
     this.textureManager = TextureManager.getInstance();
     this.windSystem = WindSystem.getInstance();
 
@@ -90,8 +102,8 @@ export class IsometricRenderer {
     const isoY = (x + y) * (this.tileSize / 4) - (z * this.voxelHeight);
 
     return {
-      screenX: isoX + this.canvas.width / 2 + this.camera.x,
-      screenY: isoY + this.canvas.height / 3 + this.camera.y,
+      screenX: isoX + this.cssWidth / 2 + this.camera.x,
+      screenY: isoY + this.cssHeight / 3 + this.camera.y,
       depth: x + y + z // Simple depth sorting key
     };
   }
@@ -1111,7 +1123,8 @@ export class IsometricRenderer {
    * Main render function
    */
   render(world: GameWorld): void {
-    const { width, height } = this.canvas;
+    const width = this.cssWidth;
+    const height = this.cssHeight;
     this.mapSize = world.mapSize;
 
     // Cache player position for interactive effects
@@ -1154,7 +1167,7 @@ export class IsometricRenderer {
   private drawUI(world: GameWorld): void {
     // Draw info panel
     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    this.ctx.roundRect(10, this.canvas.height - 70, 400, 60, 10);
+    this.ctx.roundRect(10, this.cssHeight - 70, 400, 60, 10);
     this.ctx.fill();
 
     this.ctx.fillStyle = '#FFFFFF';
@@ -1163,24 +1176,24 @@ export class IsometricRenderer {
     this.ctx.fillText(
       `Coins: ${world.player.coins}`,
       30,
-      this.canvas.height - 45
+      this.cssHeight - 45
     );
     this.ctx.fillText(
       `Level: ${world.player.level}`,
       30,
-      this.canvas.height - 20
+      this.cssHeight - 20
     );
 
     // Right side stats
     this.ctx.fillText(
       `Crops: ${world.farmPlots.filter(p => p.crop).length}`,
       200,
-      this.canvas.height - 45
+      this.cssHeight - 45
     );
     this.ctx.fillText(
       `Day: ${world.totalDaysPlayed + 1}`,
       200,
-      this.canvas.height - 20
+      this.cssHeight - 20
     );
 
     // Clock
@@ -1193,7 +1206,7 @@ export class IsometricRenderer {
     this.ctx.fillStyle = '#FFD700';
     this.ctx.font = 'bold 24px monospace';
     this.ctx.textAlign = 'right';
-    this.ctx.fillText(timeString, this.canvas.width - 30, 40);
+    this.ctx.fillText(timeString, this.cssWidth - 30, 40);
   }
 
   /**
@@ -1216,8 +1229,8 @@ export class IsometricRenderer {
    * Returns null outside world.mapSize once render() has cached it.
    */
   screenToVoxel(screenX: number, screenY: number): { x: number; y: number } | null {
-    const relX = screenX - this.canvas.width / 2 - this.camera.x;
-    const relY = screenY - this.canvas.height / 3 - this.camera.y;
+    const relX = screenX - this.cssWidth / 2 - this.camera.x;
+    const relY = screenY - this.cssHeight / 3 - this.camera.y;
 
     // isoX = (x - y) * (tileSize / 2)
     // isoY = (x + y) * (tileSize / 4)
@@ -1245,8 +1258,8 @@ export class IsometricRenderer {
       const iso = this.worldToIsometric(p.x, p.y, p.z);
 
       // Don't draw if off screen
-      if (iso.screenX < -50 || iso.screenX > this.canvas.width + 50 ||
-        iso.screenY < -50 || iso.screenY > this.canvas.height + 50) return;
+      if (iso.screenX < -50 || iso.screenX > this.cssWidth + 50 ||
+        iso.screenY < -50 || iso.screenY > this.cssHeight + 50) return;
 
       this.ctx.save();
       this.ctx.translate(iso.screenX, iso.screenY);
