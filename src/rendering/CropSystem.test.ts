@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CropStage } from '../types/game';
+import { CropStage, type Season } from '../types/game';
+import { TimeSystem } from '../systems/TimeSystem';
 import { CropSystem } from './CropSystem';
 
 const SEASON = 'summer';
@@ -83,5 +84,116 @@ describe('CropSystem multi-harvest regrowth', () => {
     expect(again?.daysUntilNextHarvest).toBe(days);
     expect(again?.x).toBe(1);
     expect(again?.y).toBe(2);
+  });
+});
+
+describe('CropSystem seasonal withering', () => {
+  function crossSeason(from: Season, to: Season) {
+    const time = new TimeSystem();
+    time.setSeasonCalendar(from, 28);
+    const advance = time.advanceSeasonCalendar();
+    expect(advance.seasonChanged).toBe(true);
+    expect(advance.previous).toEqual({ season: from, day: 28 });
+    expect(advance.current).toEqual({ season: to, day: 1 });
+    return advance;
+  }
+
+  it('withers out-of-season crops on summer 28 → autumn 1 and leaves in-season crops', () => {
+    const crops = new CropSystem();
+    expect(crops.plantCrop(0, 0, 'corn')).toBe(true);
+    expect(crops.plantCrop(1, 0, 'strawberry')).toBe(true);
+    expect(crops.plantCrop(2, 0, 'blueberry')).toBe(true);
+    expect(crops.plantCrop(3, 0, 'wheat')).toBe(true);
+    expect(crops.plantCrop(4, 0, 'carrot')).toBe(true);
+    expect(crops.plantCrop(5, 0, 'tomato')).toBe(true);
+    expect(crops.plantCrop(6, 0, 'cranberry')).toBe(true);
+
+    crops.updateCrops(0, 'summer');
+    const advance = crossSeason('summer', 'autumn');
+    crops.updateCrops(0, advance.current.season);
+
+    expect(crops.getCropAt(0, 0)?.stage).toBe(CropStage.DEAD);
+    expect(crops.getCropAt(1, 0)?.stage).toBe(CropStage.DEAD);
+    expect(crops.getCropAt(2, 0)?.stage).toBe(CropStage.DEAD);
+    expect(crops.getCropAt(3, 0)?.stage).toBe(CropStage.SEED);
+    expect(crops.getCropAt(4, 0)?.stage).toBe(CropStage.SEED);
+    expect(crops.getCropAt(5, 0)?.stage).toBe(CropStage.SEED);
+    expect(crops.getCropAt(6, 0)?.stage).toBe(CropStage.SEED);
+
+    const deadHarvest = crops.harvestCrop(0, 0);
+    expect(deadHarvest.success).toBe(false);
+    expect(deadHarvest.yield).toBeUndefined();
+    expect(crops.getCropAt(0, 0)?.stage).toBe(CropStage.DEAD);
+  });
+
+  it('does not wither corn or wheat when spring 28 becomes summer 1', () => {
+    const crops = new CropSystem();
+    expect(crops.plantCrop(0, 0, 'corn')).toBe(true);
+    expect(crops.plantCrop(1, 0, 'wheat')).toBe(true);
+    crops.updateCrops(0, 'spring');
+
+    const advance = crossSeason('spring', 'summer');
+    crops.witherOnSeasonAdvance(advance.current.season);
+
+    expect(crops.getCropAt(0, 0)?.stage).toBe(CropStage.SEED);
+    expect(crops.getCropAt(1, 0)?.stage).toBe(CropStage.SEED);
+  });
+
+  it('withers every current crop on autumn 28 → winter 1, and not wheat on winter 28 → spring 1', () => {
+    const winter = new CropSystem();
+    expect(winter.plantCrop(0, 0, 'wheat')).toBe(true);
+    expect(winter.plantCrop(1, 0, 'cranberry')).toBe(true);
+    winter.updateCrops(0, 'autumn');
+    const toWinter = crossSeason('autumn', 'winter');
+    winter.witherOnSeasonAdvance(toWinter.current.season);
+    expect(winter.getCropAt(0, 0)?.stage).toBe(CropStage.DEAD);
+    expect(winter.getCropAt(1, 0)?.stage).toBe(CropStage.DEAD);
+
+    const spring = new CropSystem();
+    expect(spring.plantCrop(0, 0, 'wheat')).toBe(true);
+    spring.updateCrops(0, 'winter');
+    const toSpring = crossSeason('winter', 'spring');
+    spring.witherOnSeasonAdvance(toSpring.current.season);
+    expect(spring.getCropAt(0, 0)?.stage).toBe(CropStage.SEED);
+  });
+
+  it('does not wither on a day that stays inside the season', () => {
+    const crops = new CropSystem();
+    expect(crops.plantCrop(0, 0, 'corn')).toBe(true);
+    crops.updateCrops(0, 'summer');
+
+    const time = new TimeSystem();
+    time.setSeasonCalendar('summer', 10);
+    const advance = time.advanceSeasonCalendar();
+    expect(advance.seasonChanged).toBe(false);
+    expect(advance.current).toEqual({ season: 'summer', day: 11 });
+    crops.updateCrops(0, advance.current.season);
+    expect(crops.getCropAt(0, 0)?.stage).toBe(CropStage.SEED);
+  });
+
+  it('keeps harvestable wheat across summer 28 → autumn 1', () => {
+    const crops = new CropSystem();
+    expect(crops.plantCrop(1, 0, 'wheat')).toBe(true);
+    growUntilHarvestable(crops, 1, 0);
+
+    const advance = crossSeason('summer', 'autumn');
+    crops.witherOnSeasonAdvance(advance.current.season);
+
+    expect(crops.getCropAt(1, 0)?.stage).toBe(CropStage.HARVESTABLE);
+    expect(crops.harvestCrop(1, 0).success).toBe(true);
+  });
+
+  it('withers harvestable corn on summer 28 → autumn 1 and yields nothing', () => {
+    const crops = new CropSystem();
+    expect(crops.plantCrop(0, 0, 'corn')).toBe(true);
+    growUntilHarvestable(crops, 0, 0);
+
+    const advance = crossSeason('summer', 'autumn');
+    crops.witherOnSeasonAdvance(advance.current.season);
+
+    expect(crops.getCropAt(0, 0)?.stage).toBe(CropStage.DEAD);
+    expect(crops.harvestCrop(0, 0).success).toBe(false);
+    expect(crops.harvestCrop(0, 0).yield).toBeUndefined();
+    expect(crops.getCropAt(0, 0)).not.toBeNull();
   });
 });
