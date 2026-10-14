@@ -1404,15 +1404,7 @@ export const useGameStore = create<GameStore>()(
               return state;
             }
 
-            // Consume durability (water)
-            // Water can concept: durability = amount of water left? Or actual tool durability?
-            // Let's treat durability as "charge" or "condition". For MVP, simple durability.
-            const newDurability = can.durability - 1;
-
-            const updatedTools = {
-              ...tools,
-              [ToolType.WATERING_CAN]: { ...can, durability: Math.max(0, newDurability) }
-            };
+            const worn = consumeToolDurability(state.world.player, can);
 
             const updatedPlots = state.world.farmPlots.map((plot) => {
               if (plot.id !== plotId || !plot.crop) return plot;
@@ -1426,8 +1418,12 @@ export const useGameStore = create<GameStore>()(
               world: {
                 ...state.world,
                 farmPlots: updatedPlots,
-                player: { ...state.world.player, tools: updatedTools }
-              }
+                player: {
+                  ...state.world.player,
+                  tools: worn.tools,
+                  inventory: worn.inventory,
+                },
+              },
             };
           });
         },

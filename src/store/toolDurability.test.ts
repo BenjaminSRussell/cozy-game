@@ -26,7 +26,7 @@ vi.hoisted(() => {
   });
 });
 
-import { ToolTier, ToolType, type Item, type Tool } from '../types/game';
+import { CropStage, ToolTier, ToolType, type Item, type Tool } from '../types/game';
 import { createTool, useGameStore } from './gameStore';
 
 function toolWith(type: ToolType, durability: number): Tool {
@@ -75,6 +75,36 @@ function addTree(id: string) {
             treeType: 'oak',
             health: 100,
             regrowthTime: 1,
+          },
+        ],
+      },
+    };
+  });
+}
+
+function addCropPlot(id: string, waterLevel: number) {
+  useGameStore.setState((state) => {
+    if (!state.world) return state;
+    return {
+      world: {
+        ...state.world,
+        farmPlots: [
+          ...state.world.farmPlots,
+          {
+            id,
+            position: { x: 3, y: 3 },
+            size: { x: 1, y: 1 },
+            tilled: true,
+            tilledAt: 1,
+            crop: {
+              id: `${id}_crop`,
+              type: 'carrot',
+              stage: CropStage.GROWING,
+              position: { x: 3, y: 3 },
+              plantedTime: 1,
+              waterLevel,
+              health: 80,
+            },
           },
         ],
       },
@@ -199,6 +229,48 @@ describe('tool durability break', () => {
     useGameStore.getState().mineOre('ore_notice');
     useGameStore.getState().mineOre('ore_notice');
     expect(log.mock.calls.filter((args) => args[0] === `Your ${pickaxe.name} broke!`)).toHaveLength(1);
+
+    log.mockRestore();
+  });
+
+  it('removes a watering can at 0 and keeps durability 1 after four uses', () => {
+    useGameStore.getState().createNewGame('Farmer');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const hay = useGameStore.getState().world?.player.inventory.find((item) => item.id === 'item_hay_starting');
+
+    const broken = toolWith(ToolType.WATERING_CAN, 1);
+    equip(broken);
+    addCropPlot('plot_can_break', 40);
+    useGameStore.getState().waterCrop('plot_can_break');
+    useGameStore.getState().waterCrop('plot_can_break');
+
+    const watered = useGameStore.getState().world?.farmPlots.find((plot) => plot.id === 'plot_can_break')?.crop;
+    expect(inventoryItem(broken.id)).toBeUndefined();
+    expect(useGameStore.getState().world?.player.tools[ToolType.WATERING_CAN]?.durability).toBe(0);
+    expect(watered?.waterLevel).toBe(Math.min(100, 40 + 30));
+    expect(hay?.quantity).toBe(50);
+    expect(log.mock.calls.filter((args) => args[0] === `Your ${broken.name} broke!`)).toHaveLength(1);
+
+    log.mockClear();
+    const can = toolWith(ToolType.WATERING_CAN, 5);
+    const before = useGameStore.getState().world?.player.inventory;
+    equip(can);
+    addCropPlot('plot_can_wear', 0);
+    for (let swing = 0; swing < 4; swing += 1) {
+      useGameStore.getState().waterCrop('plot_can_wear');
+    }
+
+    expect(inventoryItem(can.id)).toEqual(expect.objectContaining({
+      id: 'tool_watering_can_wood',
+      durability: 1,
+    }));
+    expect(useGameStore.getState().world?.player.tools[ToolType.WATERING_CAN]?.durability).toBe(1);
+    expect(can.durability).toBe(5);
+    expect(useGameStore.getState().world?.player.inventory).not.toBe(before);
+    expect(before?.find((item) => item.id === can.id)).toBeUndefined();
+    expect(useGameStore.getState().world?.farmPlots.find((plot) => plot.id === 'plot_can_wear')?.crop?.waterLevel).toBe(100);
+    expect(log.mock.calls.filter((args) => args[0] === `Your ${can.name} broke!`)).toHaveLength(0);
+    expect(inventoryItem('item_hay_starting')?.quantity).toBe(50);
 
     log.mockRestore();
   });
