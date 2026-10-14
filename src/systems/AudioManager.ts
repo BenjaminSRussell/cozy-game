@@ -9,6 +9,7 @@
  * - Background music with fade transitions
  * - Ambient layering (birds, wind, insects, etc.)
  * - Sound effects (planting, harvesting, mining, etc.)
+ * - Synthesized tool SFX (till, water, chop, rock break, coin) via Web Audio
  * - Volume control per category (music, SFX, ambient)
  * - Mute/unmute functionality
  *
@@ -61,8 +62,19 @@ export class AudioManager {
   /** One manager per page so browsers never allocate a second AudioContext. */
   private static instance: AudioManager | null = null;
 
-  /** Web Audio API context (for future advanced audio processing) */
+  /** Noise lengths warmed at startup and reused by till, water, and rock-break. */
+  private static readonly TILL_SECONDS = 0.16;
+  private static readonly WATER_SECONDS = 0.4;
+  private static readonly MINE_NOISE_SECONDS = 0.08;
+
+  /** Shared Web Audio context for synthesized SFX. Null when the host has none. */
   private audioContext: AudioContext | null = null;
+
+  /** One generated noise buffer per duration. Swings reuse it instead of decoding a file. */
+  private noiseBuffers: Map<number, AudioBuffer> = new Map();
+
+  /** Keeps synthesized SFX silent while HTML audio is muted. */
+  private synthesizedMuted = false;
 
   /** Map of all available audio tracks by ID */
   private tracks: Map<string, AudioTrack> = new Map();
@@ -94,6 +106,10 @@ export class AudioManager {
     const AudioCtx = scope.AudioContext ?? scope.webkitAudioContext;
     if (AudioCtx) {
       this.audioContext = new AudioCtx();
+      // Hosts and test doubles without createBuffer must not throw during construction.
+      if (typeof this.audioContext.createBuffer === 'function') {
+        this.warmNoiseBuffers(this.audioContext);
+      }
     }
   }
 
@@ -404,6 +420,190 @@ export class AudioManager {
   }
 
   /**
+   * Context for a synthesized effect, or null when one cannot start.
+   * Resume is not awaited: scheduling stays on this tick at `currentTime`.
+   */
+  private activeContext(): AudioContext | null {
+    const ctx = this.audioContext;
+    if (!ctx || ctx.state === 'closed' || this.synthesizedMuted || this.settings.sfxVolume <= 0) {
+      return null;
+    }
+    if (ctx.state === 'suspended') {
+      const pending = ctx.resume();
+      void pending?.catch(() => undefined);
+    }
+    return ctx;
+  }
+
+  /** Fill one noise buffer per duration. Later calls reuse it. */
+  private noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
+    const key = Math.round(seconds * 1000);
+    const cached = this.noiseBuffers.get(key);
+    if (cached && cached.sampleRate === ctx.sampleRate) {
+      return cached;
+    }
+    const length = Math.max(1, Math.floor(ctx.sampleRate * seconds));
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    this.noiseBuffers.set(key, buffer);
+    return buffer;
+  }
+
+  /** Prebuild tool-noise buffers so the first swing does not allocate. */
+  private warmNoiseBuffers(ctx: AudioContext): void {
+    this.noiseBuffer(ctx, AudioManager.TILL_SECONDS);
+    this.noiseBuffer(ctx, AudioManager.WATER_SECONDS);
+    this.noiseBuffer(ctx, AudioManager.MINE_NOISE_SECONDS);
+  }
+
+  /** Short gain envelope. Floors stay above 0 because exponential ramps reject 0. */
+  private envelopeGain(ctx: AudioContext, start: number, duration: number, peak: number): GainNode {
+    const gain = ctx.createGain();
+    const level = Math.max(0.0001, this.settings.sfxVolume * peak);
+    const attack = Math.min(0.015, duration * 0.25);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(level, start + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    return gain;
+  }
+
+  private playNoise(
+    ctx: AudioContext,
+    seconds: number,
+    start: number,
+    filterType: BiquadFilterType,
+    fromHz: number,
+    toHz: number,
+    q: number,
+    peak: number,
+  ): void {
+    const source = ctx.createBufferSource();
+    source.buffer = this.noiseBuffer(ctx, seconds);
+    const filter = ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.Q.setValueAtTime(q, start);
+    filter.frequency.setValueAtTime(fromHz, start);
+    if (toHz !== fromHz) {
+      filter.frequency.exponentialRampToValueAtTime(toHz, start + seconds);
+    }
+    const gain = this.envelopeGain(ctx, start, seconds, peak);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    source.start(start);
+    source.stop(start + seconds);
+    source.onended = () => {
+      source.disconnect();
+      filter.disconnect();
+      gain.disconnect();
+    };
+  }
+
+  private playTone(
+    ctx: AudioContext,
+    type: OscillatorType,
+    startHz: number,
+    endHz: number,
+    start: number,
+    duration: number,
+    peak: number,
+  ): void {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(startHz, start);
+    if (endHz !== startHz) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1, endHz), start + duration);
+    }
+    const gain = this.envelopeGain(ctx, start, duration, peak);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration);
+    osc.onended = () => {
+      osc.disconnect();
+      gain.disconnect();
+    };
+  }
+
+  /**
+   * Dirt crunch for tilling.
+   * Noise buffer through a lowpass frequency envelope, started at currentTime.
+   */
+  playTillSound(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    this.playNoise(ctx, AudioManager.TILL_SECONDS, ctx.currentTime, 'lowpass', 1200, 180, 0.7, 0.7);
+  }
+
+  /**
+   * Watering spray.
+   * White noise with a bandpass sweep, started at currentTime.
+   */
+  playWaterSound(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    const start = ctx.currentTime;
+    const seconds = AudioManager.WATER_SECONDS;
+    const source = ctx.createBufferSource();
+    source.buffer = this.noiseBuffer(ctx, seconds);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.setValueAtTime(6, start);
+    filter.frequency.setValueAtTime(480, start);
+    filter.frequency.exponentialRampToValueAtTime(2600, start + seconds * 0.45);
+    filter.frequency.exponentialRampToValueAtTime(700, start + seconds);
+    const gain = this.envelopeGain(ctx, start, seconds, 0.4);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    source.start(start);
+    source.stop(start + seconds);
+    source.onended = () => {
+      source.disconnect();
+      filter.disconnect();
+      gain.disconnect();
+    };
+  }
+
+  /**
+   * Axe hitting wood.
+   * Sine burst with an exponential pitch drop, started at currentTime.
+   */
+  playChopSound(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    this.playTone(ctx, 'sine', 220, 55, ctx.currentTime, 0.12, 0.6);
+  }
+
+  /**
+   * Pickaxe striking stone (rock break).
+   * High-frequency triangle ping plus noise, both started at currentTime.
+   */
+  playMineSound(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    const start = ctx.currentTime;
+    this.playTone(ctx, 'triangle', 1760, 520, start, 0.09, 0.45);
+    this.playNoise(ctx, AudioManager.MINE_NOISE_SECONDS, start, 'highpass', 2000, 2000, 0.8, 0.35);
+  }
+
+  /**
+   * Arcade coin chime for collecting items.
+   * Two sequential sine beeps, 987 Hz then 1318 Hz.
+   */
+  playCoinSound(): void {
+    const ctx = this.activeContext();
+    if (!ctx) return;
+    const start = ctx.currentTime;
+    const beep = 0.08;
+    this.playTone(ctx, 'sine', 987, 987, start, beep, 0.4);
+    this.playTone(ctx, 'sine', 1318, 1318, start + beep, beep, 0.4);
+  }
+
+  /**
    * Fade audio in/out
    */
   private fadeAudio(audio: HTMLAudioElement, targetVolume: number, duration: number): Promise<void> {
@@ -477,6 +677,7 @@ export class AudioManager {
    * Useful for pause menu or silent mode
    */
   muteAll(): void {
+    this.synthesizedMuted = true;
     this.audioElements.forEach((audio) => {
       audio.muted = true;
     });
@@ -487,6 +688,7 @@ export class AudioManager {
    * Restores audio after muteAll()
    */
   unmuteAll(): void {
+    this.synthesizedMuted = false;
     this.audioElements.forEach((audio) => {
       audio.muted = false;
     });
