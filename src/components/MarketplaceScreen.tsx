@@ -46,6 +46,20 @@ interface MarketplaceScreenProps {
 
 import { EconomySystem } from '../systems/EconomySystem';
 
+/**
+ * Current sell price for a market key.
+ * EconomySystem.getPrice returns 0 when the item is not tracked (it does not return null).
+ * Untracked keys fall back to the catalog base price.
+ */
+export function listedSellPrice(
+  itemId: string,
+  economy: { getPrice(itemId: string): number },
+): number {
+  const dynamicPrice = economy.getPrice(itemId);
+  if (dynamicPrice > 0) return dynamicPrice;
+  return MARKET_ITEMS[itemId]?.basePrice ?? 0;
+}
+
 export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, onClose }) => {
   const { world, addCoins, removeItem, getInventoryItem } = useGameStore();
   const [selectedTab, setSelectedTab] = useState<'crops' | 'ore' | 'wood' | 'all'>('all');
@@ -90,7 +104,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
     world.farmPlots.forEach(plot => {
       if (plot.crop && plot.crop.stage === CropStage.HARVESTABLE) {
         const cropId = plot.crop.type.toLowerCase();
-        const currentPrice = economy.getPrice(cropId) || 10; // Fallback if not in registry
+        const currentPrice = listedSellPrice(cropId, economy) || 10;
 
         items.push({
           id: `crop_${plot.id}`,
@@ -109,7 +123,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
     world.player.inventory.forEach(item => {
       if (item.type === ItemType.CROP || item.type === ItemType.ORE || item.type === ItemType.WOOD) {
         const itemId = item.name.toLowerCase();
-        const currentPrice = economy.getPrice(itemId);
+        const currentPrice = listedSellPrice(itemId, economy);
 
         // Only show items that have a market value
         if (currentPrice > 0) {
