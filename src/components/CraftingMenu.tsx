@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image } from 'rea
 import { useGameStore, CRAFTING_RECIPES } from '../store/gameStore';
 import { countCraftingInput, hasCraftingInputs } from '../store/craftingInputs';
 import { ToolType, ToolTier, CraftingRecipe } from '../types/game';
+import { filterCraftingRecipesByLevel, recipesAvailableLabel } from './craftingRecipeFilter';
 
 interface CraftingMenuProps {
     onClose: () => void;
@@ -14,7 +15,10 @@ export const CraftingMenu: React.FC<CraftingMenuProps> = ({ onClose }) => {
     const player = world?.player;
     if (!player) return null;
 
-    const recipes = CRAFTING_RECIPES;
+    const availableRecipes = filterCraftingRecipesByLevel(
+        CRAFTING_RECIPES,
+        world?.player.level,
+    );
 
     const handleCraft = (recipeId: string) => {
         craftItem(recipeId);
@@ -73,8 +77,9 @@ export const CraftingMenu: React.FC<CraftingMenuProps> = ({ onClose }) => {
                 <View style={styles.content}>
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Tool Upgrades</Text>
+                        <Text style={styles.recipeCount}>{recipesAvailableLabel(availableRecipes.length)}</Text>
                         <ScrollView style={styles.list}>
-                            {recipes.map(renderRecipeItem)}
+                            {availableRecipes.map(renderRecipeItem)}
                         </ScrollView>
                     </View>
 
@@ -176,6 +181,11 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#A0522D',
+        marginBottom: 10,
+    },
+    recipeCount: {
+        fontSize: 14,
+        color: '#5D4037',
         marginBottom: 10,
     },
     separator: {
