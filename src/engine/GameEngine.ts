@@ -726,15 +726,13 @@ export class GameEngine {
       5: '_dead',      // DEAD
     };
 
-    const stageSuffix = stageSuffixes[stage] || '';
-    
-    // Return sprite ID with stage suffix
-    // If specific stage sprite doesn't exist, fallback to base crop type
-    const spriteId = `${cropType}${stageSuffix}`;
-    
-    // For now, return base crop type as fallback
-    // In production, check if sprite exists in AssetManager before returning
-    return spriteId;
+    const safeStage = Math.max(0, Math.min(5, Math.floor(stage)));
+    const stageSuffix = stageSuffixes[safeStage];
+    if (stageSuffix === undefined) {
+      return cropType;
+    }
+
+    return `${cropType}${stageSuffix}`;
   }
 
   /**

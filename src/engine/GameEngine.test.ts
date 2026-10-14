@@ -315,6 +315,28 @@ describe('GameEngine canvas listeners', () => {
   });
 });
 
+describe('GameEngine crop sprites', () => {
+  const spriteFor = (cropType: string, stage: number) => {
+    const engine = new GameEngine();
+    const internal = engine as unknown as {
+      getCropSpriteForStage(cropType: string, stage: number): string;
+    };
+    return internal.getCropSpriteForStage(cropType, stage);
+  };
+
+  it('returns wheat_seed when the stage is below 0', () => {
+    expect(spriteFor('wheat', -1)).toBe('wheat_seed');
+  });
+
+  it('returns wheat_dead when the stage is above 5', () => {
+    expect(spriteFor('wheat', 6)).toBe('wheat_dead');
+  });
+
+  it('returns carrot_growing for stage 2', () => {
+    expect(spriteFor('carrot', 2)).toBe('carrot_growing');
+  });
+});
+
 function captureQueuedPlayer(engine: GameEngine): RenderObject | undefined {
   const queued: RenderObject[] = [];
   const internal = engine as unknown as {
