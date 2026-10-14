@@ -1131,12 +1131,15 @@ export const useGameStore = create<GameStore>()(
           set((state) => {
             if (!state.world) return state;
 
-            const existing = state.world.player.inventory.find((i) => i.id === item.id);
-            const inventory = existing
-              ? state.world.player.inventory.map((i) =>
-                i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i,
-              )
-              : [...state.world.player.inventory, item];
+            const previous = state.world.player.inventory;
+            const existingIndex = previous.findIndex((entry) => entry.id === item.id);
+            const inventory = existingIndex === -1
+              ? [...previous, { ...item }]
+              : previous.map((entry, index) =>
+                index === existingIndex
+                  ? { ...entry, quantity: entry.quantity + item.quantity }
+                  : entry,
+              );
 
             return {
               world: {
