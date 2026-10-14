@@ -95,6 +95,46 @@ export function liveIsometricRenderers(): Iterable<IsometricRenderer> {
   return liveRenderers;
 }
 
+export const EXHAUSTED_MESSAGE = 'You are exhausted!';
+export const SWEAT_EMOJI = '💦';
+/** A new bubble starts on this cadence while stamina is empty. */
+export const SWEAT_INTERVAL_MS = 3000;
+export const SWEAT_RISE_PX = 18;
+
+export interface SweatCue {
+  emoji: typeof SWEAT_EMOJI;
+  visible: boolean;
+  /** 0 at the head, 1 at the top of this bubble's float. */
+  rise: number;
+}
+
+/** Empty stamina, or the flag sleep clears. A missing flag is not exhaustion. */
+export function playerIsExhausted(player: object): boolean {
+  if ('isExhausted' in player && (player as { isExhausted?: unknown }).isExhausted === true) return true;
+  if ('stamina' in player) {
+    const stamina = (player as { stamina?: unknown }).stamina;
+    if (typeof stamina === 'number' && stamina <= 0) return true;
+  }
+  if ('exhausted' in player && (player as { exhausted?: unknown }).exhausted === true) return true;
+  return false;
+}
+
+/** One sweat bubble every 3 seconds. Hidden until the player is exhausted. */
+export function sweatCue(nowMs: number, exhausted: boolean): SweatCue {
+  if (!exhausted || !Number.isFinite(nowMs)) {
+    return { emoji: SWEAT_EMOJI, visible: false, rise: 0 };
+  }
+  const phase = ((nowMs % SWEAT_INTERVAL_MS) + SWEAT_INTERVAL_MS) % SWEAT_INTERVAL_MS;
+  return { emoji: SWEAT_EMOJI, visible: true, rise: phase / SWEAT_INTERVAL_MS };
+}
+
+/** Screen Y of the bubble above `headY`. Null when the cue is hidden. */
+export function sweatScreenY(headY: number, nowMs: number, exhausted: boolean): number | null {
+  const cue = sweatCue(nowMs, exhausted);
+  if (!cue.visible) return null;
+  return headY - 10 - cue.rise * SWEAT_RISE_PX;
+}
+
 export class IsometricRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -997,6 +1037,18 @@ export class IsometricRenderer {
     this.ctx.restore();
   }
 
+  /** 💦 above the head. A new bubble starts every 3 seconds while exhausted. */
+  private drawSweatCue(x: number, headY: number, player: object): void {
+    const y = sweatScreenY(headY, Date.now(), playerIsExhausted(player));
+    if (y === null) return;
+    this.ctx.save();
+    this.ctx.font = '16px "Segoe UI", system-ui, sans-serif';
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'bottom';
+    this.ctx.fillText(SWEAT_EMOJI, x, y);
+    this.ctx.restore();
+  }
+
   private drawPlayer(iso: IsometricPoint, voxel: Voxel): void {
     const player = voxel.playerState;
     if (!player) return;
@@ -1035,6 +1087,8 @@ export class IsometricRenderer {
     this.ctx.beginPath();
     this.ctx.arc(iso.screenX, anchorY - 34 + bob, 6, Math.PI, 0);
     this.ctx.fill();
+
+    this.drawSweatCue(iso.screenX, anchorY - 40 + bob, player);
 
     // Arms / Tools
     if (isWorking && action !== 'idle' && action !== 'walk') {
@@ -1174,6 +1228,9 @@ export class IsometricRenderer {
       }
 
       this.ctx.restore();
+      if (voxel.playerState) {
+        this.drawSweatCue(iso.screenX, iso.screenY - height * 0.55, voxel.playerState);
+      }
     } else {
       // Fallback: draw placeholder box
       const color = type === 'tractor' ? '#D32F2F' : '#1976D2'; // Red tractor, Blue truck

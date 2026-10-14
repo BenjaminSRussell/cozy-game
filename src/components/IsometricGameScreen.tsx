@@ -8,7 +8,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useGameStore } from '../store/gameStore';
 import { CropStage, Season, ToolType } from '../types/game';
-import { IsometricRenderer } from '../rendering/IsometricRenderer';
+import {
+  EXHAUSTED_MESSAGE,
+  IsometricRenderer,
+  playerIsExhausted,
+} from '../rendering/IsometricRenderer';
 import { TextureManager } from '../rendering/TextureManager';
 import { AssetManager } from '../systems/AssetManager';
 import { CraftingMenu } from './CraftingMenu';
@@ -18,6 +22,16 @@ import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModa
 import { DialogueBox, type DialogueRequest } from './DialogueBox';
 import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
 import { lerp } from '../utils/math';
+
+export {
+  EXHAUSTED_MESSAGE,
+  playerIsExhausted,
+  sweatCue,
+  SWEAT_EMOJI,
+  SWEAT_INTERVAL_MS,
+  SWEAT_RISE_PX,
+  sweatScreenY,
+} from '../rendering/IsometricRenderer';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -36,9 +50,10 @@ export const MOVEMENT_KEY_CODES = [
 export type MovementKeyCode = (typeof MOVEMENT_KEY_CODES)[number];
 export type MovementKeyState = Record<MovementKeyCode, boolean>;
 
-/** Steady walk and exhausted walk, in world units per second. Lerp is the issue's 0.2 smoothing step. */
-const WALK_SPEED = 4.5;
-const EXHAUSTED_SPEED = 2.0;
+/** Steady walk. Empty stamina uses half. The 0.2 step is the existing smoothing, not a new lerp. */
+export const WALK_SPEED = 4.5;
+export const EXHAUSTED_SPEED_MULTIPLIER = 0.5;
+export const EXHAUSTED_SPEED = WALK_SPEED * EXHAUSTED_SPEED_MULTIPLIER;
 const VELOCITY_LERP = 0.2;
 /** Cap a late frame so a backgrounded tab cannot fling the player across the map. */
 const MOVE_DT_CAP_SECONDS = 0.1;
@@ -103,12 +118,6 @@ export function movementInputVector(keys: MovementKeyState): { inputX: number; i
   const inputX = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   const inputY = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
   return { inputX, inputY };
-}
-
-/** Exhaustion is optional until the debuff exists on the player. A missing flag is a normal walk. */
-export function playerIsExhausted(player: object): boolean {
-  if (!('exhausted' in player)) return false;
-  return (player as { exhausted?: unknown }).exhausted === true;
 }
 
 /**
@@ -868,6 +877,14 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     );
   };
 
+  const refuseExhausted = (): boolean => {
+    const player = useGameStore.getState().world?.player;
+    if (!player || !playerIsExhausted(player)) return false;
+    showNotification(EXHAUSTED_MESSAGE);
+    useGameStore.getState().syncExhaustion();
+    return true;
+  };
+
   useEffect(() => {
     return () => {
       clearNotificationTimer(notificationTimerRef.current);
@@ -938,6 +955,13 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
             state.movePlayer(next);
           }
         }
+      }
+
+      // Redraw while exhausted so the sweat bubble keeps floating between moves.
+      if (world && playerIsExhausted(world.player)) {
+        state.syncExhaustion();
+        const latest = useGameStore.getState().world;
+        if (latest) rendererRef.current?.render(latest);
       }
 
       frameId = window.requestAnimationFrame(tick);
@@ -1148,6 +1172,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       addExperience(10);
       setSelectedAction(null);
     } else if (selectedAction === 'water' && plot.crop) {
+      if (refuseExhausted()) return;
       if (!checkTool(ToolType.WATERING_CAN)) return;
       waterCrop(plot.id);
       showNotification('💧 Watered crop!');
@@ -1247,6 +1272,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       setSelectedAction(null);
     } else if (selectedAction === 'plant') {
       // Plant action on empty soil -> Till
+      if (refuseExhausted()) return;
       if (!checkTool(ToolType.HOE)) return;
       createFarmPlot({ x: voxel.x, y: voxel.y });
       showNotification('📍 Tilled soil!');
@@ -1254,6 +1280,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   };
 
   const handleMining = () => {
+    if (refuseExhausted()) return;
     if (!world || world.oreDeposits.length === 0) {
       showNotification('❌ No ore deposits found!');
       return;
