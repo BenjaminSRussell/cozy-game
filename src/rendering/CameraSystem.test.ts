@@ -119,3 +119,61 @@ describe('CameraSystem zoom limits', () => {
     expect(targetZoomOf(camera)).toBe(0.5);
   });
 });
+
+function shakeOf(camera: CameraSystem): { currentTime: number } | undefined {
+  return (camera as unknown as { shake?: { currentTime: number } }).shake;
+}
+
+describe('CameraSystem shake', () => {
+  it('offsets the camera during a 0.5s shake and clears it afterwards', () => {
+    const camera = new CameraSystem(800, 600);
+    camera.startShake(10, 0.5, 20);
+
+    const dt = 0.1;
+    for (let elapsed = 0; elapsed + dt < 0.5; elapsed += dt) {
+      camera.update(dt);
+      const time = elapsed + dt;
+      const decay = 1 - time / 0.5;
+      const offsetX = Math.sin(time * 20) * 10 * decay;
+      const offsetY = Math.cos(time * 20 * 1.3) * 10 * decay;
+      expect(offsetX).not.toBe(0);
+      expect(offsetY).not.toBe(0);
+      // Stationary follow origin is (0, 0); the public position is only the offset.
+      expect(camera.position.x).toBeCloseTo(offsetX, 8);
+      expect(camera.position.y).toBeCloseTo(offsetY, 8);
+      expect(shakeOf(camera)).toBeDefined();
+    }
+
+    camera.update(dt);
+    expect(shakeOf(camera)).toBeUndefined();
+    expect(camera.position).toEqual({ x: 0, y: 0 });
+  });
+
+  it('keeps the follow lerp on the unshaken position', () => {
+    const shaken = new CameraSystem(800, 600);
+    const calm = new CameraSystem(800, 600);
+    shaken.moveTo({ x: 240, y: -80 });
+    calm.moveTo({ x: 240, y: -80 });
+    shaken.startShake(10, 0.5, 20);
+
+    const dt = 0.1;
+    for (let elapsed = 0; elapsed + dt < 0.5; elapsed += dt) {
+      shaken.update(dt);
+      calm.update(dt);
+      expect(shaken.position.x).not.toBe(calm.position.x);
+      expect(shaken.position.y).not.toBe(calm.position.y);
+      expect(shakeOf(shaken)).toBeDefined();
+    }
+
+    shaken.update(dt);
+    calm.update(dt);
+    expect(shakeOf(shaken)).toBeUndefined();
+    expect(shaken.position.x).toBeCloseTo(calm.position.x, 6);
+    expect(shaken.position.y).toBeCloseTo(calm.position.y, 6);
+
+    step(shaken, 1000);
+    step(calm, 1000);
+    expect(shaken.position).toEqual({ x: 240, y: -80 });
+    expect(calm.position).toEqual({ x: 240, y: -80 });
+  });
+});

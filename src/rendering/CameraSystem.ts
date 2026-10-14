@@ -46,6 +46,8 @@ export class CameraSystem {
   private targetRotation: number;
   private followTarget?: CameraFollowTarget;
   private shake?: CameraShake;
+  // Last frame's shake, removed before the follow lerp so it is not the new origin.
+  private shakeOffset: Vector2D = { x: 0, y: 0 };
   private smoothing: number = 0.1;
   // 0.5 keeps 64px tiles at least 32px. 3× is already very close.
   private minZoom: number = 0.5;
@@ -70,6 +72,13 @@ export class CameraSystem {
    * Update camera with smooth interpolation
    */
   public update(deltaTime: number): void {
+    // Shake is a temporary displacement. Drop it before the follow lerp so
+    // the shaken position is not treated as the new origin.
+    this.position.x -= this.shakeOffset.x;
+    this.position.y -= this.shakeOffset.y;
+    this.shakeOffset.x = 0;
+    this.shakeOffset.y = 0;
+
     // smoothing 0.1 is one 60 FPS frame. Scale it by deltaTime so a fast
     // machine does not cover more ground per second than a slow one.
     // Snap inside a sub-pixel (zoom: 0.001) so the camera still arrives.
@@ -105,6 +114,9 @@ export class CameraSystem {
   public setPosition(position: Vector2D): void {
     this.position = { ...position };
     this.targetPosition = { ...position };
+    // Absolute placement. Do not subtract a stale shake offset next frame.
+    this.shakeOffset.x = 0;
+    this.shakeOffset.y = 0;
   }
 
   /**
@@ -217,25 +229,19 @@ export class CameraSystem {
     if (!this.shake) return;
 
     this.shake.currentTime += deltaTime;
-
     if (this.shake.currentTime >= this.shake.duration) {
       this.shake = undefined;
       return;
     }
 
-    // Calculate shake offset
     const progress = this.shake.currentTime / this.shake.duration;
-    const fadeOut = 1 - progress;
-    const shakeAmount = this.shake.intensity * fadeOut;
-    
-    const shakeOffset = {
-      x: Math.sin(this.shake.currentTime * this.shake.frequency * 0.1) * shakeAmount,
-      y: Math.cos(this.shake.currentTime * this.shake.frequency * 0.15) * shakeAmount
-    };
-
-    // Apply shake to position
-    this.position.x += shakeOffset.x;
-    this.position.y += shakeOffset.y;
+    const decay = 1 - progress;
+    const offsetX = Math.sin(this.shake.currentTime * this.shake.frequency) * this.shake.intensity * decay;
+    const offsetY = Math.cos(this.shake.currentTime * this.shake.frequency * 1.3) * this.shake.intensity * decay;
+    this.position.x += offsetX;
+    this.position.y += offsetY;
+    this.shakeOffset.x = offsetX;
+    this.shakeOffset.y = offsetY;
   }
 
   /**
@@ -462,5 +468,7 @@ export class CameraSystem {
     this.targetRotation = 0;
     this.followTarget = undefined;
     this.shake = undefined;
+    this.shakeOffset.x = 0;
+    this.shakeOffset.y = 0;
   }
 }
