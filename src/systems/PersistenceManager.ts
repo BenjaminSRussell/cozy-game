@@ -88,6 +88,7 @@ function stripCycles(value: unknown): unknown {
 }
 
 const WORLD_PREFIX = 'cozy_save_';
+const META_PREFIX = 'cozy_meta_';
 const SLOTS_KEY = 'cozy_slots';
 const SETTING_PREFIX = 'cozy_setting_';
 const DEVICE_KEY = 'cozy_device_id';
@@ -171,6 +172,33 @@ function store(): KeyValueStore {
 
 function worldKey(worldId: string): string {
   return `${WORLD_PREFIX}${worldId}`;
+}
+
+function metaKey(slotId: string): string {
+  return `${META_PREFIX}${slotId}`;
+}
+
+/** Metadata written by this manager. Rejects corrupt or partial records. */
+function parseSaveSlot(raw: string): SaveSlot | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    const slot = parsed as SaveSlot;
+    if (typeof slot.id !== 'string' || typeof slot.worldId !== 'string') {
+      return null;
+    }
+    return slot;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredSlot(slotId: string): SaveSlot | null {
+  const raw = store().getItem(metaKey(slotId));
+  if (!raw) return null;
+  return parseSaveSlot(raw);
 }
 
 function readImportText(source: string): string {
@@ -304,6 +332,7 @@ export class PersistenceManager {
   /**
    * Save game world to localStorage
    * Serializes GameWorld to JSON after dropping circular references.
+   * Also writes cozy_meta_${world.id} so the save list does not load the world.
    * The live world object is not mutated.
    * @param world - Complete GameWorld object to persist
    */
@@ -312,6 +341,7 @@ export class PersistenceManager {
       const jsonData = JSON.stringify(stripCycles(world));
       const timestamp = Date.now();
       store().setItem(worldKey(world.id), jsonData);
+      this.writeSlotMeta(world, timestamp);
 
       const slot = this.saveSlots.get(world.id);
       if (slot) {
@@ -323,6 +353,49 @@ export class PersistenceManager {
     } catch (error) {
       console.error('Failed to save world:', error);
     }
+  }
+
+  /**
+   * Write cozy_meta_${world.id} beside the world blob.
+   * createdAt is kept when that meta record already exists.
+   * playTime is 0 because PlayerState does not declare that field yet.
+   */
+  private writeSlotMeta(world: GameWorld, now: number): void {
+    const slotId = world.id;
+    const existing = readStoredSlot(slotId);
+    const player = world.player;
+    const meta: SaveSlot = {
+      id: slotId,
+      worldId: world.id,
+      playerName: player?.name ?? '',
+      createdAt: existing?.createdAt ?? now,
+      lastPlayedAt: now,
+      playTime: 0,
+      level: player?.level ?? 0,
+    };
+    store().setItem(metaKey(slotId), JSON.stringify(meta));
+  }
+
+  /**
+   * List save slots from cozy_meta_* keys.
+   * Does not read or parse cozy_save_* world blobs.
+   * @returns SaveSlot metadata sorted by lastPlayedAt descending
+   */
+  listSlots(): SaveSlot[] {
+    const slots: SaveSlot[] = [];
+    const saved = store();
+    for (const key of saved.keys()) {
+      if (!key.startsWith(META_PREFIX)) continue;
+      const raw = saved.getItem(key);
+      if (!raw) continue;
+      const slot = parseSaveSlot(raw);
+      if (slot) slots.push(slot);
+    }
+    return slots.sort((a, b) => {
+      const left = typeof a.lastPlayedAt === 'number' ? a.lastPlayedAt : 0;
+      const right = typeof b.lastPlayedAt === 'number' ? b.lastPlayedAt : 0;
+      return right - left;
+    });
   }
 
   /**
@@ -426,7 +499,9 @@ export class PersistenceManager {
     try {
       this.saveSlots.delete(worldId);
       this.persistSlots();
-      store().removeItem(worldKey(worldId));
+      const saved = store();
+      saved.removeItem(worldKey(worldId));
+      saved.removeItem(metaKey(worldId));
     } catch (error) {
       console.error('Failed to delete save slot:', error);
     }
@@ -595,7 +670,7 @@ export class PersistenceManager {
     try {
       const saved = store();
       for (const key of saved.keys()) {
-        if (key.startsWith(WORLD_PREFIX)) {
+        if (key.startsWith(WORLD_PREFIX) || key.startsWith(META_PREFIX)) {
           saved.removeItem(key);
         }
       }
