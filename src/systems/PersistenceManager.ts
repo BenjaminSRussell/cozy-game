@@ -32,6 +32,38 @@ export interface SaveSlot {
   thumbnail?: string;
 }
 
+/** Fixed local save slots. Metadata lives under cozy_slot_1 … cozy_slot_3. */
+export const LOCAL_SAVE_SLOT_COUNT = 3;
+
+export type LocalSaveSlotId = 1 | 2 | 3;
+
+/**
+ * One of the three local slots.
+ * Fields are omitted when the save does not have them.
+ * Thumbnail is omitted when there is no image, so the card stays blank.
+ */
+export interface LocalSaveSlot {
+  slotId: LocalSaveSlotId;
+  worldId?: string;
+  farmName?: string;
+  playerName?: string;
+  date?: string;
+  gold?: number;
+  playTimeMinutes?: number;
+  thumbnailDataUrl?: string;
+}
+
+/** Text and thumbnail the slot card can show. Missing facts are absent. */
+export interface LocalSlotCardContent {
+  occupied: boolean;
+  title: string;
+  playerName?: string;
+  dateLabel?: string;
+  goldLabel?: string;
+  playTimeLabel?: string;
+  thumbnailDataUrl?: string;
+}
+
 /**
  * Cloud synchronization status
  * Tracks ongoing sync operations and last sync result
@@ -90,8 +122,13 @@ function stripCycles(value: unknown): unknown {
 const WORLD_PREFIX = 'cozy_save_';
 const META_PREFIX = 'cozy_meta_';
 const SLOTS_KEY = 'cozy_slots';
+/** Numbered slot metadata. Not a prefix of cozy_slots, and not cozy_meta_. */
+const LOCAL_SLOT_PREFIX = 'cozy_slot_';
 const SETTING_PREFIX = 'cozy_setting_';
 const DEVICE_KEY = 'cozy_device_id';
+/** Same 28-day season length the clock uses. Not imported, so this file stays storage-only. */
+const DAYS_PER_SEASON = 28;
+const SEASONS_PER_YEAR = 4;
 
 interface WebStorage {
   getItem(key: string): string | null;
@@ -199,6 +236,219 @@ function readStoredSlot(slotId: string): SaveSlot | null {
   const raw = store().getItem(metaKey(slotId));
   if (!raw) return null;
   return parseSaveSlot(raw);
+}
+
+export function isLocalSaveSlotId(slotId: number): slotId is LocalSaveSlotId {
+  return slotId === 1 || slotId === 2 || slotId === 3;
+}
+
+function localSlotKey(slotId: LocalSaveSlotId): string {
+  return `${LOCAL_SLOT_PREFIX}${slotId}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function titleCaseWord(value: string): string {
+  const lower = value.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+/** Calendar label from fields the world actually stores. An explicit date string wins. */
+function formatWorldDate(world: Record<string, unknown>): string | undefined {
+  const explicit = readOptionalString(world.date);
+  if (explicit) return explicit;
+  const season = readOptionalString(world.season);
+  const total = readOptionalNumber(world.totalDaysPlayed);
+  if (!season && total === undefined) return undefined;
+  const seasonLabel = season ? titleCaseWord(season) : undefined;
+  if (total === undefined) return seasonLabel;
+  const days = Math.max(0, Math.floor(total));
+  const day = (days % DAYS_PER_SEASON) + 1;
+  const year = Math.floor(days / (DAYS_PER_SEASON * SEASONS_PER_YEAR)) + 1;
+  if (seasonLabel) return `Year ${year}, ${seasonLabel} ${day}`;
+  return `Year ${year}, Day ${day}`;
+}
+
+/** `playTime` is seconds. `stats.total_play_time` is milliseconds and is only a fallback. */
+function playTimeMinutesFromPlayer(player: Record<string, unknown> | null): number | undefined {
+  if (!player) return undefined;
+  const seconds = readOptionalNumber(player.playTime);
+  if (seconds !== undefined) return Math.max(0, Math.floor(seconds / 60));
+  const stats = asRecord(player.stats);
+  const milliseconds = stats ? readOptionalNumber(stats.total_play_time) : undefined;
+  if (milliseconds === undefined) return undefined;
+  return Math.max(0, Math.floor(milliseconds / 60000));
+}
+
+interface WorldSummary {
+  farmName?: string;
+  playerName?: string;
+  date?: string;
+  gold?: number;
+  playTimeMinutes?: number;
+  thumbnailDataUrl?: string;
+}
+
+function summaryFromRecord(world: Record<string, unknown>): WorldSummary {
+  const player = asRecord(world.player);
+  const farmName = readOptionalString(world.farmName);
+  const playerName = player ? readOptionalString(player.name) : undefined;
+  const gold = player ? readOptionalNumber(player.coins) : undefined;
+  const playTimeMinutes = playTimeMinutesFromPlayer(player);
+  const date = formatWorldDate(world);
+  const thumbnailDataUrl =
+    readOptionalString(world.thumbnailDataUrl) ?? readOptionalString(world.thumbnail);
+  return {
+    ...(farmName ? { farmName } : {}),
+    ...(playerName ? { playerName } : {}),
+    ...(date ? { date } : {}),
+    ...(gold !== undefined ? { gold } : {}),
+    ...(playTimeMinutes !== undefined ? { playTimeMinutes } : {}),
+    ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
+  };
+}
+
+function readStoredWorldSummary(worldId: string): WorldSummary {
+  try {
+    const raw = store().getItem(worldKey(worldId));
+    if (!raw) return {};
+    const parsed = asRecord(JSON.parse(raw) as unknown);
+    if (!parsed) return {};
+    return summaryFromRecord(parsed);
+  } catch {
+    return {};
+  }
+}
+
+function summaryFromWorld(world: GameWorld): WorldSummary {
+  return summaryFromRecord(world as unknown as Record<string, unknown>);
+}
+
+function parseLocalSaveSlot(raw: string, slotId: LocalSaveSlotId): LocalSaveSlot | null {
+  try {
+    const parsed = asRecord(JSON.parse(raw) as unknown);
+    if (!parsed) return null;
+    const worldId = readOptionalString(parsed.worldId);
+    const farmName = readOptionalString(parsed.farmName);
+    const playerName = readOptionalString(parsed.playerName);
+    const date = readOptionalString(parsed.date);
+    const gold = readOptionalNumber(parsed.gold);
+    const playRaw = readOptionalNumber(parsed.playTimeMinutes);
+    const playTimeMinutes = playRaw !== undefined && playRaw >= 0 ? playRaw : undefined;
+    const thumbnailDataUrl = readOptionalString(parsed.thumbnailDataUrl);
+    if (
+      !worldId &&
+      !farmName &&
+      !playerName &&
+      !date &&
+      gold === undefined &&
+      playTimeMinutes === undefined &&
+      !thumbnailDataUrl
+    ) {
+      return null;
+    }
+    return {
+      slotId,
+      ...(worldId ? { worldId } : {}),
+      ...(farmName ? { farmName } : {}),
+      ...(playerName ? { playerName } : {}),
+      ...(date ? { date } : {}),
+      ...(gold !== undefined ? { gold } : {}),
+      ...(playTimeMinutes !== undefined ? { playTimeMinutes } : {}),
+      ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readLocalSlot(slotId: LocalSaveSlotId): LocalSaveSlot | null {
+  const raw = store().getItem(localSlotKey(slotId));
+  if (!raw) return null;
+  return parseLocalSaveSlot(raw, slotId);
+}
+
+/** Prefer the world blob for facts it has. Keep slot-only name and thumbnail when the blob lacks them. */
+function overlaySummary(slot: LocalSaveSlot): LocalSaveSlot {
+  if (!slot.worldId) return slot;
+  const summary = readStoredWorldSummary(slot.worldId);
+  const farmName = summary.farmName ?? slot.farmName;
+  const playerName = summary.playerName ?? slot.playerName;
+  const date = summary.date ?? slot.date;
+  const gold = summary.gold !== undefined ? summary.gold : slot.gold;
+  const playTimeMinutes =
+    summary.playTimeMinutes !== undefined ? summary.playTimeMinutes : slot.playTimeMinutes;
+  const thumbnailDataUrl = slot.thumbnailDataUrl ?? summary.thumbnailDataUrl;
+  return {
+    slotId: slot.slotId,
+    ...(slot.worldId ? { worldId: slot.worldId } : {}),
+    ...(farmName ? { farmName } : {}),
+    ...(playerName ? { playerName } : {}),
+    ...(date ? { date } : {}),
+    ...(gold !== undefined ? { gold } : {}),
+    ...(playTimeMinutes !== undefined ? { playTimeMinutes } : {}),
+    ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
+  };
+}
+
+function buildLocalSlot(
+  slotId: LocalSaveSlotId,
+  world: GameWorld,
+  previous: LocalSaveSlot | null,
+  options?: { farmName?: string; thumbnailDataUrl?: string },
+): LocalSaveSlot {
+  const summary = summaryFromWorld(world);
+  const sameWorld = previous?.worldId != null && previous.worldId === world.id;
+  const farmName =
+    readOptionalString(options?.farmName) ?? summary.farmName ?? (sameWorld ? previous?.farmName : undefined);
+  const thumbnailDataUrl =
+    readOptionalString(options?.thumbnailDataUrl) ??
+    summary.thumbnailDataUrl ??
+    (sameWorld ? previous?.thumbnailDataUrl : undefined);
+  return {
+    slotId,
+    worldId: world.id,
+    ...(farmName ? { farmName } : {}),
+    ...(summary.playerName ? { playerName: summary.playerName } : {}),
+    ...(summary.date ? { date: summary.date } : {}),
+    ...(summary.gold !== undefined ? { gold: summary.gold } : {}),
+    ...(summary.playTimeMinutes !== undefined ? { playTimeMinutes: summary.playTimeMinutes } : {}),
+    ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
+  };
+}
+
+export function localSlotCardContent(slot: LocalSaveSlot | null): LocalSlotCardContent {
+  if (!slot) {
+    return { occupied: false, title: 'Empty Slot' };
+  }
+  const title = slot.farmName || slot.playerName || 'Save';
+  const playerName =
+    slot.farmName && slot.playerName && slot.playerName !== slot.farmName ? slot.playerName : undefined;
+  return {
+    occupied: true,
+    title,
+    ...(playerName ? { playerName } : {}),
+    ...(slot.date ? { dateLabel: `Date: ${slot.date}` } : {}),
+    ...(slot.gold !== undefined ? { goldLabel: `Gold: ${slot.gold}` } : {}),
+    ...(slot.playTimeMinutes !== undefined
+      ? { playTimeLabel: `Play time: ${slot.playTimeMinutes} min` }
+      : {}),
+    ...(slot.thumbnailDataUrl ? { thumbnailDataUrl: slot.thumbnailDataUrl } : {}),
+  };
 }
 
 function readImportText(source: string): string {
@@ -491,6 +741,111 @@ export class PersistenceManager {
   }
 
   /**
+   * Three local slots from cozy_slot_1 … cozy_slot_3.
+   * Does not create, rewrite, or delete cozy_save_* / cozy_meta_* keys.
+   */
+  listLocalSlots(): Array<LocalSaveSlot | null> {
+    const slots: Array<LocalSaveSlot | null> = [];
+    for (let slotId = 1; slotId <= LOCAL_SAVE_SLOT_COUNT; slotId += 1) {
+      const stored = readLocalSlot(slotId as LocalSaveSlotId);
+      slots.push(stored ? overlaySummary(stored) : null);
+    }
+    return slots;
+  }
+
+  /**
+   * Save the world under cozy_save_${id} and cozy_meta_${id}, and write cozy_slot_n.
+   * A thumbnail passed here stays on the slot key. It is not written into the world blob.
+   */
+  async saveLocalSlot(
+    slotId: number,
+    world: GameWorld,
+    options?: { farmName?: string; thumbnailDataUrl?: string },
+  ): Promise<LocalSaveSlot | null> {
+    if (!isLocalSaveSlotId(slotId)) return null;
+    try {
+      await this.saveWorld(world);
+      const slot = buildLocalSlot(slotId, world, readLocalSlot(slotId), options);
+      store().setItem(localSlotKey(slotId), JSON.stringify(slot));
+      return slot;
+    } catch (error) {
+      console.error('Failed to save local slot:', error);
+      return null;
+    }
+  }
+
+  /** Load the world id stored on cozy_slot_n. Missing and out-of-range slots return null. */
+  async loadLocalSlot(slotId: number): Promise<GameWorld | null> {
+    if (!isLocalSaveSlotId(slotId)) return null;
+    const slot = readLocalSlot(slotId);
+    if (!slot?.worldId) return null;
+    return this.loadWorld(slot.worldId);
+  }
+
+  /**
+   * Remove cozy_slot_n.
+   * The world keys are removed only when no other numbered slot still points at that world.
+   */
+  async deleteLocalSlot(slotId: number): Promise<void> {
+    if (!isLocalSaveSlotId(slotId)) return;
+    try {
+      const slot = readLocalSlot(slotId);
+      store().removeItem(localSlotKey(slotId));
+      if (!slot?.worldId) return;
+      const stillUsed = ([1, 2, 3] as const).some((other) => {
+        if (other === slotId) return false;
+        return readLocalSlot(other)?.worldId === slot.worldId;
+      });
+      if (stillUsed) return;
+      await this.deleteSaveSlot(slot.worldId);
+    } catch (error) {
+      console.error('Failed to delete local slot:', error);
+    }
+  }
+
+  /**
+   * Fill empty numbered slots from cozy_meta_* saves that are not already in a slot.
+   * Writes cozy_slot_n only. Does not remove or rewrite cozy_save_* or cozy_meta_*.
+   */
+  async materializeSlotCards(): Promise<Array<LocalSaveSlot | null>> {
+    const cards = this.listLocalSlots();
+    const used = new Set<string>();
+    for (const card of cards) {
+      if (card?.worldId) used.add(card.worldId);
+    }
+    const legacy = this.listSlots().filter((slot) => slot.worldId && !used.has(slot.worldId));
+    let legacyIndex = 0;
+    for (let index = 0; index < cards.length && legacyIndex < legacy.length; index += 1) {
+      if (cards[index]) continue;
+      const meta = legacy[legacyIndex];
+      legacyIndex += 1;
+      const slotId = (index + 1) as LocalSaveSlotId;
+      const summary = readStoredWorldSummary(meta.worldId);
+      const playerName = summary.playerName ?? readOptionalString(meta.playerName);
+      const playTimeMinutes =
+        summary.playTimeMinutes !== undefined
+          ? summary.playTimeMinutes
+          : typeof meta.playTime === 'number' && meta.playTime > 0
+            ? meta.playTime
+            : undefined;
+      const slot: LocalSaveSlot = {
+        slotId,
+        worldId: meta.worldId,
+        ...(summary.farmName ? { farmName: summary.farmName } : {}),
+        ...(playerName ? { playerName } : {}),
+        ...(summary.date ? { date: summary.date } : {}),
+        ...(summary.gold !== undefined ? { gold: summary.gold } : {}),
+        ...(playTimeMinutes !== undefined ? { playTimeMinutes } : {}),
+        ...(summary.thumbnailDataUrl ? { thumbnailDataUrl: summary.thumbnailDataUrl } : {}),
+      };
+      store().setItem(localSlotKey(slotId), JSON.stringify(slot));
+      cards[index] = overlaySummary(slot);
+      used.add(meta.worldId);
+    }
+    return cards;
+  }
+
+  /**
    * Delete a save slot and associated game world
    * Removes both the save slot metadata and the complete world data
    * @param worldId - ID of the world/save to delete
@@ -670,7 +1025,11 @@ export class PersistenceManager {
     try {
       const saved = store();
       for (const key of saved.keys()) {
-        if (key.startsWith(WORLD_PREFIX) || key.startsWith(META_PREFIX)) {
+        if (
+          key.startsWith(WORLD_PREFIX) ||
+          key.startsWith(META_PREFIX) ||
+          key.startsWith(LOCAL_SLOT_PREFIX)
+        ) {
           saved.removeItem(key);
         }
       }

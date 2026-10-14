@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useGameStore } from './src/store/gameStore';
-import { PersistenceManager } from './src/systems/PersistenceManager';
+import {
+  PersistenceManager,
+  isLocalSaveSlotId,
+  localSlotCardContent,
+  type LocalSaveSlot,
+  type LocalSaveSlotId,
+} from './src/systems/PersistenceManager';
 import { AudioManager } from './src/systems/AudioManager';
 import { GameEngine } from './src/engine/GameEngine';
 import { IsometricGameScreen } from './src/components/IsometricGameScreen';
@@ -22,6 +28,10 @@ interface GameAppState {
   hasGame: boolean;
   /** Whether the player has started or loaded a game */
   gameStarted: boolean;
+  /** Load Game screen with the three local slots */
+  showSlots: boolean;
+  /** Slot cards aligned to cozy_slot_1 … cozy_slot_3 */
+  slotCards: Array<LocalSaveSlot | null>;
 }
 
 /**
@@ -29,7 +39,7 @@ interface GameAppState {
  *
  * Core responsibilities:
  * - Initialize AudioManager for background music playback
- * - Initialize PersistenceManager for SQLite save/load functionality
+ * - Initialize PersistenceManager for local save/load
  * - Manage application state (loading → menu → gameplay)
  * - Start GameEngine when play begins. Time, crops, and physics tick there
  *   on requestAnimationFrame, not on a React setInterval.
@@ -38,6 +48,114 @@ interface GameAppState {
  *
  * @returns React component containing the complete application UI
  */
+
+const BLANK_SLOTS: Array<LocalSaveSlot | null> = [null, null, null];
+
+export interface SaveSlotScreenProps {
+  slots: Array<LocalSaveSlot | null>;
+  onNewGame: (slotId: LocalSaveSlotId) => void;
+  onLoad: (slotId: LocalSaveSlotId) => void;
+  onDelete: (slotId: LocalSaveSlotId) => void;
+  onBack: () => void;
+}
+
+/**
+ * Three save cards. Delete only calls onDelete from the confirm control.
+ * A card with no thumbnailDataUrl leaves the preview blank.
+ */
+export function SaveSlotScreen({ slots, onNewGame, onLoad, onDelete, onBack }: SaveSlotScreenProps) {
+  const [pendingDeleteSlot, setPendingDeleteSlot] = useState<LocalSaveSlotId | null>(null);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.menuContainer}>
+        <Text style={styles.title}>Load Game</Text>
+        <Text style={styles.subtitle}>Three save slots on this device</Text>
+
+        {([1, 2, 3] as const).map((slotId) => {
+          const content = localSlotCardContent(slots[slotId - 1] ?? null);
+          return (
+            <View key={slotId} style={styles.slotCard}>
+              <Text style={styles.slotHeading}>{`Slot ${slotId}`}</Text>
+              <View style={styles.thumbnail}>
+                {content.thumbnailDataUrl ? (
+                  <Image
+                    source={{ uri: content.thumbnailDataUrl }}
+                    style={styles.thumbnailImage}
+                    accessibilityLabel={`Save thumbnail ${slotId}`}
+                  />
+                ) : null}
+              </View>
+              <Text style={styles.slotTitle}>{content.title}</Text>
+              {content.playerName ? <Text style={styles.slotMeta}>{content.playerName}</Text> : null}
+              {content.dateLabel ? <Text style={styles.slotMeta}>{content.dateLabel}</Text> : null}
+              {content.goldLabel ? <Text style={styles.slotMeta}>{content.goldLabel}</Text> : null}
+              {content.playTimeLabel ? <Text style={styles.slotMeta}>{content.playTimeLabel}</Text> : null}
+              {content.occupied ? (
+                <View style={styles.slotActions}>
+                  <TouchableOpacity
+                    style={styles.slotButton}
+                    accessibilityLabel={`Load slot ${slotId}`}
+                    onPress={() => onLoad(slotId)}
+                  >
+                    <Text style={styles.buttonText}>Load</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.slotButton, styles.deleteButton]}
+                    accessibilityLabel={`Delete slot ${slotId}`}
+                    onPress={() => setPendingDeleteSlot(slotId)}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.slotButton}
+                  accessibilityLabel={`New game slot ${slotId}`}
+                  onPress={() => onNewGame(slotId)}
+                >
+                  <Text style={styles.buttonText}>New Game</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })}
+
+        <TouchableOpacity style={[styles.button, styles.secondaryButton]} accessibilityLabel="Back" onPress={onBack}>
+          <Text style={styles.buttonText}>Back</Text>
+        </TouchableOpacity>
+      </View>
+
+      {pendingDeleteSlot != null && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete this save?</Text>
+            <Text style={styles.slotMeta}>This cannot be undone.</Text>
+            <TouchableOpacity
+              style={[styles.button, styles.dangerButton]}
+              accessibilityLabel="Delete Save"
+              onPress={() => {
+                const slotId = pendingDeleteSlot;
+                setPendingDeleteSlot(null);
+                onDelete(slotId);
+              }}
+            >
+              <Text style={styles.buttonText}>Delete Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              accessibilityLabel="Cancel delete"
+              onPress={() => setPendingDeleteSlot(null)}
+            >
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function App() {
   const [state, setState] = useState<GameAppState>({
     isLoading: true,
@@ -46,12 +164,14 @@ export default function App() {
     loadingAsset: '',
     hasGame: false,
     gameStarted: false,
+    showSlots: false,
+    slotCards: BLANK_SLOTS,
   });
 
   const persistenceRef = useRef<PersistenceManager | null>(null);
   const audioRef = useRef<AudioManager | null>(null);
   const assetLoaderRef = useRef<AssetLoader | null>(null);
-  const gameStoreRef = useRef(useGameStore());
+  const activeSlotRef = useRef<LocalSaveSlotId | null>(null);
 
   /**
    * Initialize systems
@@ -121,16 +241,19 @@ export default function App() {
           // economy.advanceDay('spring'); 
         }
 
-        // Check for existing saves
-        const saveSlots = await persistence.getSaveSlots();
-        const hasExistingSave = saveSlots.length > 0;
+        // Numbered slots, plus any cozy_meta_* saves copied into empty slots.
+        // Copying does not remove cozy_save_* or cozy_meta_*.
+        const slotCards = await persistence.materializeSlotCards();
+        const hasExistingSave =
+          slotCards.some((card) => !!card?.worldId) || persistence.listSlots().length > 0;
 
         setState(prev => ({
           ...prev,
           loadingProgress: 100,
           loadingStage: 'Ready!',
           loadingAsset: 'Starting...',
-          hasGame: hasExistingSave
+          hasGame: hasExistingSave,
+          slotCards,
         }));
 
         // Delay slightly to let the 100% animation play
@@ -144,6 +267,8 @@ export default function App() {
           loadingAsset: 'Failed to load',
           hasGame: false,
           gameStarted: false,
+          showSlots: false,
+          slotCards: BLANK_SLOTS,
         });
       }
     };
@@ -173,41 +298,81 @@ export default function App() {
     };
   }, [state.gameStarted]);
 
-  /**
-   * Start new game
-   */
-  const handleNewGame = () => {
-    const store = gameStoreRef.current;
-    store.createNewGame('Player');
-
-    // Add initial farm plots
-    store.createFarmPlot({ x: 10, y: 10 });
-    store.createFarmPlot({ x: 10, y: 30 });
-    store.createFarmPlot({ x: 10, y: 50 });
-
-    setState({ ...state, hasGame: true, gameStarted: true });
+  const rememberLegacySlot = async (worldId: string) => {
+    if (!persistenceRef.current) return;
+    const existingSlots = await persistenceRef.current.getSaveSlots();
+    if (!existingSlots.some((slot) => slot.worldId === worldId)) {
+      const world = useGameStore.getState().world;
+      if (world && world.id === worldId) {
+        await persistenceRef.current.createSaveSlot(world);
+      }
+    }
   };
 
   /**
-   * Load saved game
-   * Loads the most recent save slot from PersistenceManager
-   * Updates game store with loaded world data
+   * Start a new game in one numbered slot and write it immediately.
    */
-  const handleLoadGame = async () => {
+  const startInSlot = async (slotId: LocalSaveSlotId) => {
+    useGameStore.getState().createNewGame('Player');
+    useGameStore.getState().createFarmPlot({ x: 10, y: 10 });
+    useGameStore.getState().createFarmPlot({ x: 10, y: 30 });
+    useGameStore.getState().createFarmPlot({ x: 10, y: 50 });
+
+    const world = useGameStore.getState().world;
+    if (world && persistenceRef.current) {
+      await persistenceRef.current.saveLocalSlot(slotId, world);
+      await rememberLegacySlot(world.id);
+    }
+
+    activeSlotRef.current = slotId;
+    setState((prev) => ({
+      ...prev,
+      hasGame: true,
+      gameStarted: true,
+      showSlots: false,
+    }));
+  };
+
+  /**
+   * Start new game in the first empty slot. A full set opens the slot screen.
+   */
+  const handleNewGame = async () => {
+    const cards = persistenceRef.current?.listLocalSlots() ?? BLANK_SLOTS;
+    const emptyIndex = cards.findIndex((card) => !localSlotCardContent(card).occupied);
+    if (emptyIndex < 0 || !isLocalSaveSlotId(emptyIndex + 1)) {
+      setState((prev) => ({ ...prev, showSlots: true, slotCards: cards }));
+      return;
+    }
+    await startInSlot((emptyIndex + 1) as LocalSaveSlotId);
+  };
+
+  const openSlots = async () => {
+    const slotCards = persistenceRef.current
+      ? await persistenceRef.current.materializeSlotCards()
+      : BLANK_SLOTS;
+    setState((prev) => ({ ...prev, showSlots: true, slotCards }));
+  };
+
+  /**
+   * Load one numbered slot. The world is read from cozy_save_${worldId}.
+   */
+  const handleLoadSlot = async (slotId: LocalSaveSlotId) => {
     if (!persistenceRef.current) return;
 
     try {
-      const saveSlots = await persistenceRef.current.getSaveSlots();
-      if (saveSlots.length > 0) {
-        const world = await persistenceRef.current.loadWorld(saveSlots[0].worldId);
-        if (world) {
-          const store = gameStoreRef.current;
-          // Use store's loadGame method if it had one, but for now directly set world
-          // In future, store.loadGame() could handle this
-          store.world = world;
-          setState({ ...state, hasGame: true, gameStarted: true });
-        }
+      const world = await persistenceRef.current.loadLocalSlot(slotId);
+      if (!world) {
+        alert('Failed to load saved game. Please try again.');
+        return;
       }
+      useGameStore.setState({ world });
+      activeSlotRef.current = slotId;
+      setState((prev) => ({
+        ...prev,
+        hasGame: true,
+        gameStarted: true,
+        showSlots: false,
+      }));
     } catch (error) {
       console.error('Failed to load game:', error);
       alert('Failed to load saved game. Please try again.');
@@ -215,33 +380,64 @@ export default function App() {
   };
 
   /**
-   * Save game
-   * Saves current game state to PersistenceManager
-   * Also creates/updates save slot metadata
+   * Save game into the active numbered slot.
+   * Also keeps the legacy cozy_save_ / cozy_meta_ records written by saveWorld.
    */
   const handleSaveGame = async () => {
-    const store = gameStoreRef.current;
-    if (!store.world || !persistenceRef.current) return;
+    if (!persistenceRef.current) return;
 
     try {
-      // Update store timestamp first
-      await store.saveGame();
+      await useGameStore.getState().saveGame();
+      const world = useGameStore.getState().world;
+      if (!world) return;
 
-      // Save to PersistenceManager
-      await persistenceRef.current.saveWorld(store.world);
-
-      // Ensure save slot exists
-      const existingSlots = await persistenceRef.current.getSaveSlots();
-      const hasSlot = existingSlots.some(slot => slot.worldId === store.world!.id);
-      if (!hasSlot) {
-        await persistenceRef.current.createSaveSlot(store.world);
+      const persistence = persistenceRef.current;
+      let slotId = activeSlotRef.current;
+      const cards = persistence.listLocalSlots();
+      if (slotId == null || !isLocalSaveSlotId(slotId)) {
+        const match = cards.findIndex((card) => card?.worldId === world.id);
+        if (match >= 0) {
+          slotId = (match + 1) as LocalSaveSlotId;
+        } else {
+          const empty = cards.findIndex((card) => !localSlotCardContent(card).occupied);
+          slotId = empty >= 0 && isLocalSaveSlotId(empty + 1) ? ((empty + 1) as LocalSaveSlotId) : null;
+        }
       }
 
+      if (slotId != null && isLocalSaveSlotId(slotId)) {
+        await persistence.saveLocalSlot(slotId, world);
+        activeSlotRef.current = slotId;
+      } else {
+        await persistence.saveWorld(world);
+      }
+      await rememberLegacySlot(world.id);
+
+      const slotCards = persistence.listLocalSlots();
+      setState((prev) => ({
+        ...prev,
+        hasGame: true,
+        slotCards,
+      }));
       alert('Game saved!');
     } catch (error) {
       console.error('Failed to save game:', error);
       alert('Failed to save game. Please try again.');
     }
+  };
+
+  const handleDeleteSlot = async (slotId: LocalSaveSlotId) => {
+    const persistence = persistenceRef.current;
+    if (!persistence) return;
+    await persistence.deleteLocalSlot(slotId);
+    if (activeSlotRef.current === slotId) {
+      activeSlotRef.current = null;
+    }
+    const slotCards = persistence.listLocalSlots();
+    setState((prev) => ({
+      ...prev,
+      slotCards,
+      hasGame: slotCards.some((card) => !!card?.worldId) || persistence.listSlots().length > 0,
+    }));
   };
 
   if (state.isLoading) {
@@ -259,6 +455,24 @@ export default function App() {
     return <IsometricGameScreen onSave={handleSaveGame} />;
   }
 
+  if (state.showSlots) {
+    return (
+      <SaveSlotScreen
+        slots={state.slotCards}
+        onNewGame={(slotId) => {
+          void startInSlot(slotId);
+        }}
+        onLoad={(slotId) => {
+          void handleLoadSlot(slotId);
+        }}
+        onDelete={(slotId) => {
+          void handleDeleteSlot(slotId);
+        }}
+        onBack={() => setState((prev) => ({ ...prev, showSlots: false }))}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.menuContainer}>
@@ -268,15 +482,13 @@ export default function App() {
           Plant crops, build your farm, and enjoy a relaxing life in the countryside.
         </Text>
 
-        <TouchableOpacity style={styles.button} onPress={handleNewGame}>
+        <TouchableOpacity style={styles.button} onPress={() => { void handleNewGame(); }}>
           <Text style={styles.buttonText}>🎮 New Game</Text>
         </TouchableOpacity>
 
-        {state.hasGame && (
-          <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={handleLoadGame}>
-            <Text style={styles.buttonText}>📂 Load Game</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => { void openSlots(); }}>
+          <Text style={styles.buttonText}>📂 Load Game</Text>
+        </TouchableOpacity>
 
         <View style={styles.infoContainer}>
           <Text style={styles.infoTitle}>How to Play:</Text>
@@ -365,5 +577,91 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#654321',
     marginVertical: 4,
+  },
+  slotCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#F0E6D2',
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 8,
+  },
+  slotHeading: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#A0826D',
+    marginBottom: 8,
+  },
+  thumbnail: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: '#E7D7C1',
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    width: 72,
+    height: 72,
+  },
+  slotTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#8B4513',
+    marginBottom: 4,
+  },
+  slotMeta: {
+    fontSize: 14,
+    color: '#654321',
+    marginVertical: 2,
+  },
+  slotActions: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  slotButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#D4A574',
+    marginRight: 8,
+    marginTop: 8,
+  },
+  deleteButton: {
+    backgroundColor: '#F0E6D2',
+    borderWidth: 1,
+    borderColor: '#C62828',
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#C62828',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: '#FFF8DC',
+    borderRadius: 12,
+    padding: 20,
+    minWidth: 260,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#8B4513',
+    marginBottom: 8,
+  },
+  dangerButton: {
+    backgroundColor: '#C62828',
   },
 });
