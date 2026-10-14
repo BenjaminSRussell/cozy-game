@@ -427,3 +427,261 @@ describe('IsometricRenderer hoveredTile', () => {
     expect(diamonds).toHaveLength(1);
   });
 });
+
+interface DepthQueueItem {
+  kind: string;
+  gridX: number;
+  gridY: number;
+  zLayer: number;
+  depth: number;
+}
+
+/** World with a background tree, the player, and buildings in front of the player. */
+function depthWorld() {
+  return {
+    mapSize: { x: 10, y: 10 },
+    farmPlots: [
+      {
+        id: 'plot-1',
+        position: { x: 1, y: 0 },
+        size: { x: 1, y: 1 },
+        tilled: true,
+        crop: {
+          id: 'crop-1',
+          type: 'wheat',
+          stage: 0,
+          position: { x: 1, y: 0 },
+          plantedTime: 0,
+          waterLevel: 50,
+          health: 100,
+        },
+      },
+    ],
+    buildings: [
+      {
+        id: 'coop',
+        type: 'coop',
+        position: { x: 3, y: 1, z: 0 },
+        rotation: 0,
+        unlocked: true,
+        level: 1,
+        spriteId: 'coop',
+      },
+      {
+        id: 'barn',
+        type: 'barn',
+        position: { x: 4, y: 2, z: 0 },
+        rotation: 0,
+        unlocked: true,
+        level: 1,
+        spriteId: 'barn',
+      },
+    ],
+    oreDeposits: [
+      {
+        id: 'ore-1',
+        position: { x: 2, y: 2, z: 0 },
+        oreType: 'copper',
+        quantity: 1,
+        durability: 100,
+      },
+    ],
+    woodSources: [
+      {
+        id: 'tree-back',
+        position: { x: 0, y: 0 },
+        treeType: 'oak',
+        health: 100,
+        regrowthTime: 1,
+        fruitStage: 0,
+      },
+      {
+        id: 'tree-front',
+        position: { x: 5, y: 5 },
+        treeType: 'oak',
+        health: 100,
+        regrowthTime: 1,
+        fruitStage: 3,
+        fruitType: 'apple',
+      },
+      {
+        id: 'stump',
+        position: { x: 6, y: 6 },
+        treeType: 'oak',
+        health: 0,
+        regrowthTime: 1,
+      },
+    ],
+    animals: [
+      {
+        id: 'hen',
+        type: 'chicken',
+        name: 'Hen',
+        buildingId: 'coop',
+        hunger: 80,
+        affection: 1,
+        lastFedDay: 0,
+        hasProduct: false,
+        position: { x: 2, y: 0 },
+        rotation: 0,
+      },
+    ],
+    roads: [
+      {
+        id: 'road-1',
+        type: 'dirt',
+        grade: 'gravel',
+        lanes: 1,
+        position: { x: 1, y: 1 },
+        connections: 0,
+      },
+    ],
+    vehicles: [
+      {
+        id: 'truck-1',
+        type: 'truck',
+        position: { x: 4, y: 4, z: 1 },
+        rotation: 0,
+        speed: 0,
+      },
+    ],
+    grassGrowth: {},
+    player: {
+      position: { x: 3, y: 1, z: 0 },
+      coins: 0,
+      level: 1,
+      mountedVehicleId: undefined,
+      animation: { action: 'idle', isPlaying: false },
+    },
+  } as never;
+}
+
+function depthCanvas(): HTMLCanvasElement {
+  const ctx = {
+    scale: () => {},
+    save: () => {},
+    restore: () => {},
+    clearRect: () => {},
+    createLinearGradient: () => ({ addColorStop: () => {} }),
+    fillRect: () => {},
+    fillStyle: '',
+  };
+  return {
+    width: 800,
+    height: 600,
+    style: {},
+    getContext: () => ctx,
+    getBoundingClientRect: () => ({ width: 800, height: 600 }),
+  } as unknown as HTMLCanvasElement;
+}
+
+describe('IsometricRenderer depth queue', () => {
+  const proto = IsometricRenderer.prototype as unknown as {
+    buildVoxelWorld: (world: unknown) => void;
+    drawQueued: (item: DepthQueueItem) => void;
+    drawTerrainTile: () => void;
+    drawCrop: () => void;
+    drawBuilding: () => void;
+    drawAnimal: () => void;
+    drawOre: () => void;
+    drawPlayer: () => void;
+    drawRoad: () => void;
+    drawVehicle: () => void;
+    drawTreeLayer: () => void;
+    drawWindParticles: () => void;
+    drawUI: () => void;
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sorts by (gridX + gridY) * 1000 + zLayer so the player is behind a building and in front of a background tree', () => {
+    const draws: string[] = [];
+    const originalDrawQueued = proto.drawQueued;
+    vi.spyOn(proto, 'drawQueued').mockImplementation(function (this: unknown, item: DepthQueueItem) {
+      draws.push(`${item.kind}@${item.gridX},${item.gridY}`);
+      originalDrawQueued.call(this, item);
+    });
+    vi.spyOn(proto, 'drawTerrainTile').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawCrop').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawBuilding').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawAnimal').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawOre').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawPlayer').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawRoad').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawVehicle').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawTreeLayer').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawWindParticles').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawUI').mockImplementation(() => {});
+    const buildVoxelWorld = vi.spyOn(proto, 'buildVoxelWorld');
+
+    const renderer = new IsometricRenderer(depthCanvas());
+    expect((renderer as unknown as { tileSize: number }).tileSize).toBe(TILE_SIZE);
+    renderer.render(depthWorld());
+
+    const queue = (renderer as unknown as { renderQueue: DepthQueueItem[] }).renderQueue;
+    const at = (kind: string, x: number, y: number) =>
+      queue.findIndex((item) => item.kind === kind && item.gridX === x && item.gridY === y);
+
+    expect(queue.filter((item) => item.kind === 'terrainDecal')).toHaveLength(900);
+    expect(queue.filter((item) => item.kind === 'crop')).toHaveLength(1);
+    expect(queue.filter((item) => item.kind === 'building')).toHaveLength(2);
+    expect(queue.filter((item) => item.kind === 'player')).toHaveLength(1);
+    expect(queue.filter((item) => item.kind === 'animal')).toHaveLength(1);
+    expect(queue.filter((item) => item.kind === 'treeTrunk')).toHaveLength(2);
+    expect(queue.filter((item) => item.kind === 'treeTop')).toHaveLength(2);
+    expect(queue.filter((item) => item.kind === 'road')).toHaveLength(1);
+    expect(queue.filter((item) => item.kind === 'ore')).toHaveLength(1);
+    expect(queue.filter((item) => item.kind === 'vehicle')).toHaveLength(1);
+    expect(queue.some((item) => item.gridX === 6 && item.gridY === 6 && item.kind !== 'terrainDecal')).toBe(false);
+
+    for (const item of queue) {
+      expect(item.depth).toBe((item.gridX + item.gridY) * 1000 + item.zLayer);
+    }
+    for (let i = 1; i < queue.length; i++) {
+      expect(queue[i].depth).toBeGreaterThanOrEqual(queue[i - 1].depth);
+    }
+
+    const backTrunk = at('treeTrunk', 0, 0);
+    const backTop = at('treeTop', 0, 0);
+    const ownGround = at('terrainDecal', 3, 1);
+    const player = at('player', 3, 1);
+    const sameBuilding = at('building', 3, 1);
+    const frontBuilding = at('building', 4, 2);
+    const frontTrunk = at('treeTrunk', 5, 5);
+    const frontTop = at('treeTop', 5, 5);
+    const nearerGround = at('terrainDecal', 4, 1);
+
+    expect(backTrunk).toBeGreaterThanOrEqual(0);
+    expect(backTop).toBeGreaterThan(backTrunk);
+    expect(ownGround).toBeLessThan(player);
+    expect(player).toBeGreaterThan(backTop);
+    expect(sameBuilding).toBeGreaterThan(player);
+    expect(frontBuilding).toBeGreaterThan(sameBuilding);
+    expect(frontTrunk).toBeGreaterThan(player);
+    expect(frontTop).toBeGreaterThan(frontTrunk);
+    expect(nearerGround).toBeGreaterThan(player);
+    expect(queue[backTop].zLayer).toBeLessThan(1000);
+    expect(queue[player].zLayer).toBeGreaterThan(queue[ownGround].zLayer);
+    expect(queue[sameBuilding].zLayer).toBeGreaterThan(queue[player].zLayer);
+    expect(queue[backTop].zLayer).toBeGreaterThan(queue[backTrunk].zLayer);
+
+    const actors = [
+      'treeTrunk@0,0',
+      'treeTop@0,0',
+      'player@3,1',
+      'building@3,1',
+      'building@4,2',
+      'treeTrunk@5,5',
+      'treeTop@5,5',
+    ];
+    const actorDraws = draws.filter((label) => actors.includes(label));
+    expect(actorDraws).toEqual(actors);
+
+    renderer.render(depthWorld());
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
+    const again = (renderer as unknown as { renderQueue: DepthQueueItem[] }).renderQueue;
+    expect(again.map((item) => item.depth)).toEqual(queue.map((item) => item.depth));
+  });
+});
