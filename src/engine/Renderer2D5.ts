@@ -31,6 +31,37 @@ export interface GameCanvas {
   height: number;
 }
 
+/**
+ * Insertion-sort `items` by a screen-Y key computed once per object.
+ * Equal keys keep their original order, matching a stable ascending sort.
+ * Returns the number of key comparisons.
+ */
+export function insertionSortByScreenY<T>(items: T[], screenY: (item: T) => number): number {
+  const keys = items.map(screenY);
+  let comparisons = 0;
+
+  for (let i = 1; i < items.length; i++) {
+    const item = items[i];
+    const key = keys[i];
+    let j = i - 1;
+
+    while (j >= 0) {
+      comparisons += 1;
+      if (!(keys[j] > key)) {
+        break;
+      }
+      items[j + 1] = items[j];
+      keys[j + 1] = keys[j];
+      j -= 1;
+    }
+
+    items[j + 1] = item;
+    keys[j + 1] = key;
+  }
+
+  return comparisons;
+}
+
 export class Renderer2D5 {
   private canvas: GameCanvas;
   private camera: Camera;
@@ -114,16 +145,12 @@ export class Renderer2D5 {
   }
 
   /**
-   * Y-sort queue for proper depth rendering
-   * Objects higher up screen (lower y) render first
+   * Y-sort queue for proper depth rendering.
+   * Objects higher up the screen (lower y) render first.
+   * Insertion sort stays linear when that order is already correct.
    */
   private sortRenderQueue(): void {
-    this.renderQueue.sort((a, b) => {
-      // Y-sorting for 2.5D depth illusion
-      const aScreenY = this.worldToScreen(a.position).y;
-      const bScreenY = this.worldToScreen(b.position).y;
-      return aScreenY - bScreenY;
-    });
+    insertionSortByScreenY(this.renderQueue, (object) => this.worldToScreen(object.position).y);
   }
 
   /**
