@@ -45,16 +45,32 @@ vi.mock('react-native', () => ({
 }));
 
 import {
+  JOYSTICK_INNER_RADIUS,
+  JOYSTICK_OUTER_RADIUS,
+  JOYSTICK_TAP_SLOP,
   MOVEMENT_KEY_CODES,
+  applyJoystickPlacement,
   applyMovementKey,
   canOccupy,
   emptyMovementKeys,
+  findTouch,
+  idleJoystickGesture,
+  joystickFloatPosition,
+  joystickPointFromEvent,
+  joystickRestPosition,
+  joystickTouchEnd,
+  joystickTouchMove,
+  joystickTouchStart,
+  locomotionInput,
   movementBlocks,
   movementInputVector,
   nextPlayerPosition,
   playerIsExhausted,
+  readJoystick,
   settleStoppedVelocity,
   stepPlayerVelocity,
+  touchStartsOnLeftHalf,
+  type JoystickGesture,
   type MovementKeyState,
   type PlayerVelocity,
 } from './IsometricGameScreen';
@@ -185,5 +201,152 @@ describe('WASD and arrow movement', () => {
     );
     expect(offMap.x).toBe(99.5);
     expect(offMap.y).toBe(50);
+  });
+});
+
+describe('floating touch joystick', () => {
+  it('uses a 60px outer ring and a 25px nub parked at the bottom-left', () => {
+    expect(JOYSTICK_OUTER_RADIUS).toBe(60);
+    expect(JOYSTICK_INNER_RADIUS).toBe(25);
+    expect(joystickRestPosition()).toEqual({ left: 16, bottom: 16 });
+    expect(joystickFloatPosition(40, 500)).toEqual({ left: -20, top: 440 });
+
+    const ring = { style: { left: '', top: '', bottom: '' } };
+    const nub = { style: { transform: '' } };
+    const resting = idleJoystickGesture();
+    applyJoystickPlacement(ring, nub, resting);
+    expect(ring.style).toEqual({ left: '16px', top: 'auto', bottom: '16px' });
+    expect(nub.style.transform).toBe('translate(0px, 0px)');
+
+    const floating: JoystickGesture = {
+      ...resting,
+      activeId: 1,
+      originX: 40,
+      originY: 500,
+      dx: 0,
+      dy: 1,
+      magnitude: 1,
+      angle: Math.PI / 2,
+      nubX: 0,
+      nubY: -60,
+      dragged: true,
+    };
+    applyJoystickPlacement(ring, nub, floating);
+    expect(ring.style).toEqual({ left: '-20px', top: '440px', bottom: 'auto' });
+    expect(nub.style.transform).toBe('translate(0px, -60px)');
+  });
+
+  it('normalizes angle and magnitude into a stick vector no longer than 1', () => {
+    const right = readJoystick(100, 100, 160, 100);
+    expect(right.magnitude).toBeCloseTo(1);
+    expect(right.angle).toBeCloseTo(0);
+    expect(right.dx).toBeCloseTo(1);
+    expect(right.dy).toBeCloseTo(0);
+    expect(right.nubX).toBeCloseTo(60);
+    expect(right.nubY).toBeCloseTo(0);
+
+    const up = readJoystick(10, 80, 10, 20);
+    expect(up.magnitude).toBeCloseTo(1);
+    expect(up.angle).toBeCloseTo(Math.PI / 2);
+    expect(up.dx).toBeCloseTo(0);
+    expect(up.dy).toBeCloseTo(1);
+    expect(up.nubY).toBeCloseTo(-60);
+
+    const downRight = readJoystick(0, 0, 60, 60);
+    expect(downRight.magnitude).toBeCloseTo(1);
+    expect(Math.hypot(downRight.dx, downRight.dy)).toBeCloseTo(1);
+    expect(downRight.dx).toBeCloseTo(Math.SQRT1_2);
+    expect(downRight.dy).toBeCloseTo(-Math.SQRT1_2);
+    expect(Math.hypot(downRight.nubX, downRight.nubY)).toBeCloseTo(JOYSTICK_OUTER_RADIUS);
+
+    const halfUp = readJoystick(0, 0, 0, -30);
+    expect(halfUp.magnitude).toBeCloseTo(0.5);
+    expect(halfUp.dy).toBeCloseTo(0.5);
+    expect(halfUp.dx).toBeCloseTo(0);
+    expect(halfUp.nubY).toBeCloseTo(-30);
+
+    const pastTheRing = readJoystick(0, 0, 300, 0);
+    expect(pastTheRing.magnitude).toBe(1);
+    expect(pastTheRing.dx).toBeCloseTo(1);
+    expect(pastTheRing.nubX).toBeCloseTo(JOYSTICK_OUTER_RADIUS);
+
+    expect(readJoystick(5, 5, 5, 5)).toEqual({
+      dx: 0, dy: 0, magnitude: 0, angle: 0, nubX: 0, nubY: 0,
+    });
+    expect(readJoystick(0, 0, 10, 0, 0).magnitude).toBe(0);
+  });
+
+  it('starts only on the left half, follows that finger, and clears on release', () => {
+    expect(touchStartsOnLeftHalf(0, 800)).toBe(true);
+    expect(touchStartsOnLeftHalf(399.9, 800)).toBe(true);
+    expect(touchStartsOnLeftHalf(400, 800)).toBe(false);
+    expect(touchStartsOnLeftHalf(10, 0)).toBe(false);
+
+    let gesture = joystickTouchStart(
+      idleJoystickGesture(),
+      { x: 700, y: 400, identifier: 1 },
+      800,
+    );
+    expect(gesture.activeId).toBeNull();
+
+    gesture = joystickTouchStart(gesture, { x: 40, y: 500, identifier: 2 }, 800);
+    expect(gesture).toMatchObject({ activeId: 2, originX: 40, originY: 500, dx: 0, dy: 0 });
+    const held = gesture;
+
+    expect(joystickTouchStart(held, { x: 30, y: 30, identifier: 3 }, 800)).toBe(held);
+
+    const nudge = joystickTouchMove(held, { x: 40 + JOYSTICK_TAP_SLOP, y: 500, identifier: 2 });
+    expect(nudge.dragged).toBe(false);
+    expect(nudge.dx).toBeCloseTo(JOYSTICK_TAP_SLOP / JOYSTICK_OUTER_RADIUS);
+
+    gesture = joystickTouchMove(nudge, { x: 40, y: 440, identifier: 2 });
+    expect(gesture.dragged).toBe(true);
+    expect(gesture.dy).toBeCloseTo(1);
+    expect(gesture.dx).toBeCloseTo(0);
+    expect(gesture.nubY).toBeCloseTo(-60);
+
+    expect(joystickTouchMove(gesture, { x: 10, y: 10, identifier: 9 })).toBe(gesture);
+    expect(joystickTouchEnd(gesture, 9)).toBe(gesture);
+
+    gesture = joystickTouchEnd(gesture, 2);
+    expect(gesture).toEqual(idleJoystickGesture());
+  });
+
+  it('reads client or page coordinates and keeps keyboard movement when the stick is centered', () => {
+    expect(findTouch([{ pageX: 12, pageY: 34, identifier: 3 }])).toEqual({
+      x: 12, y: 34, identifier: 3,
+    });
+    expect(findTouch([
+      { clientX: 1, clientY: 1, identifier: 1 },
+      { clientX: 8, clientY: 9, identifier: 4 },
+    ], 4)).toEqual({ x: 8, y: 9, identifier: 4 });
+    expect(findTouch([], 1)).toBeNull();
+    expect(joystickPointFromEvent({
+      nativeEvent: { pageX: 15, pageY: 25, identifier: 6 },
+    }, 'touches')).toEqual({ x: 15, y: 25, identifier: 6 });
+    expect(joystickPointFromEvent({
+      changedTouches: [{ clientX: 4, clientY: 5, identifier: 2 }],
+    }, 'changedTouches', 2)?.x).toBe(4);
+
+    expect(locomotionInput(0, 1, { dx: 0, dy: 0 })).toEqual({ inputX: 0, inputY: 1 });
+    expect(locomotionInput(-1, 1, { dx: 0, dy: 0 })).toEqual({ inputX: -1, inputY: 1 });
+
+    const stick = readJoystick(100, 100, 160, 100);
+    expect(locomotionInput(1, 0, stick)).toEqual({ inputX: stick.dx, inputY: stick.dy });
+
+    const walking: PlayerVelocity = { vx: 0, vy: 0 };
+    const fromKeys: PlayerVelocity = { vx: 0, vy: 0 };
+    const stickInput = locomotionInput(0, 0, readJoystick(0, 0, 30, 0));
+    stepPlayerVelocity(walking, stickInput.inputX, stickInput.inputY);
+    stepPlayerVelocity(fromKeys, 1, 0);
+    expect(walking.vx).toBeCloseTo(0.45);
+    expect(walking.vy).toBeCloseTo(0.225);
+    expect(walking.vx).toBeLessThan(fromKeys.vx);
+
+    const keyboard: PlayerVelocity = { vx: 0, vy: 0 };
+    const keysOnly = locomotionInput(1, 0, { dx: 0, dy: 0 });
+    stepPlayerVelocity(keyboard, keysOnly.inputX, keysOnly.inputY);
+    expect(keyboard.vx).toBeCloseTo(0.9);
+    expect(keyboard.vy).toBeCloseTo(0.45);
   });
 });
