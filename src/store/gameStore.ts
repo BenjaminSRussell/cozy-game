@@ -3081,6 +3081,22 @@ export const useGameStore = create<GameStore>()(
           set((state) => {
             if (!state.world) return state;
 
+            // Tiles are optional. A present tile blocks only when walkable is false.
+            // Building footprints compare the floored building cell to the exact destination.
+            const targetTile = (state.world as GameWorld & {
+              tiles?: ReadonlyArray<{ position: Vector2D; walkable?: boolean }> | null;
+            }).tiles?.find(
+              (tile) => tile.position.x === position.x && tile.position.y === position.y,
+            );
+            if (targetTile && !targetTile.walkable) return state;
+
+            const blocked = state.world.buildings.some(
+              (building) =>
+                Math.floor(building.position.x) === position.x
+                && Math.floor(building.position.y) === position.y,
+            );
+            if (blocked) return state;
+
             if (state.world.player.mountedVehicleId) {
               // Move vehicle instead
               const vehicleId = state.world.player.mountedVehicleId;
