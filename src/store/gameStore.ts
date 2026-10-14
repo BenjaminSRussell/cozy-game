@@ -812,6 +812,9 @@ const createInitialWorld = (playerName: string): GameWorld => {
       level: 1,
       experience: 0,
       coins: 3000, // Starting currency for testing ranching
+      stamina: 100,
+      maxStamina: 100,
+      staminaRegenRate: 0,
       inventory: [
         {
           id: 'item_hay_starting',
