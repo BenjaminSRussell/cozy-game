@@ -2,6 +2,22 @@ import React, { act, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoadingScreen } from './LoadingScreen';
 
+type A11yNode = {
+  kind: string;
+  accessibilityRole?: unknown;
+  accessibilityValue?: unknown;
+  accessibilityLabel?: unknown;
+  accessible?: unknown;
+  accessibilityElementsHidden?: unknown;
+  importantForAccessibility?: unknown;
+  ariaHidden?: unknown;
+  text?: string;
+};
+
+const { a11yNodes } = vi.hoisted(() => ({
+  a11yNodes: [] as A11yNode[],
+}));
+
 type Root = {
   render(children: ReactNode): void;
   unmount(): void;
@@ -13,8 +29,29 @@ const { createRoot } = require('react-dom/client') as {
 
 vi.mock('react-native', () => {
   const { createElement, Fragment } = require('react') as typeof import('react');
-  const passthrough = ({ children }: { children?: React.ReactNode }) =>
-    createElement(Fragment, null, children);
+
+  function textOf(children: unknown): string {
+    if (typeof children === 'string' || typeof children === 'number') return String(children);
+    if (Array.isArray(children)) return children.map((child) => textOf(child)).join('');
+    return '';
+  }
+
+  const record = (kind: string) =>
+    (props: { children?: React.ReactNode } & Record<string, unknown>) => {
+      a11yNodes.push({
+        kind,
+        accessibilityRole: props.accessibilityRole,
+        accessibilityValue: props.accessibilityValue,
+        accessibilityLabel: props.accessibilityLabel,
+        accessible: props.accessible,
+        accessibilityElementsHidden: props.accessibilityElementsHidden,
+        importantForAccessibility: props.importantForAccessibility,
+        ariaHidden: props['aria-hidden'],
+        text: textOf(props.children),
+      });
+      return createElement(Fragment, null, props.children);
+    };
+
   class Value {
     constructor(public value: number) {}
     interpolate(): number {
@@ -22,12 +59,12 @@ vi.mock('react-native', () => {
     }
   }
   return {
-    View: passthrough,
-    Text: passthrough,
+    View: record('View'),
+    Text: record('Text'),
     StyleSheet: { create: (styles: unknown) => styles },
     Animated: {
       Value,
-      View: passthrough,
+      View: record('Animated.View'),
       timing: () => ({ start: () => undefined }),
     },
     Dimensions: { get: () => ({ width: 390, height: 844 }) },
@@ -189,6 +226,7 @@ describe('LoadingScreen minimum display time', () => {
   let root: Root;
 
   beforeEach(() => {
+    a11yNodes.length = 0;
     vi.useFakeTimers();
     const body = installDom();
     const container = (globalThis as { document: { createElement: (tag: string) => DomNode } }).document.createElement(
@@ -233,5 +271,58 @@ describe('LoadingScreen minimum display time', () => {
 
     await renderScreen(root, 100, onLoadingComplete);
     expect(onLoadingComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes a progressbar and keeps particles out of the accessibility tree', async () => {
+    await act(async () => {
+      root.render(
+        <LoadingScreen
+          progress={42.6}
+          currentAsset="Wheat"
+          stage="Sowing the fields"
+        />
+      );
+    });
+
+    const bars = a11yNodes.filter((node) => node.accessibilityRole === 'progressbar');
+    expect(bars).toHaveLength(1);
+    expect(bars[0]).toMatchObject({
+      kind: 'View',
+      accessible: true,
+      accessibilityLabel: 'Sowing the fields',
+      accessibilityValue: { min: 0, max: 100, now: 43 },
+    });
+    expect(bars[0]?.accessibilityElementsHidden).not.toBe(true);
+
+    const stageText = a11yNodes.filter(
+      (node) => node.kind === 'Text' && node.text === 'Sowing the fields'
+    );
+    expect(stageText).toHaveLength(1);
+    expect(stageText[0]?.accessibilityElementsHidden).not.toBe(true);
+
+    const particles = a11yNodes.filter(
+      (node) => node.kind === 'Animated.View' && node.accessibilityElementsHidden === true
+    );
+    expect(particles).toHaveLength(20);
+    for (const particle of particles) {
+      expect(particle.accessible).toBe(false);
+      expect(particle.importantForAccessibility).toBe('no');
+      expect(particle.ariaHidden).toBe(true);
+      expect(particle.accessibilityRole).toBeUndefined();
+      expect(particle.accessibilityLabel).toBeUndefined();
+      expect(particle.text).toBe('');
+    }
+
+    const particleField = a11yNodes.filter(
+      (node) =>
+        node.kind === 'View' &&
+        node.importantForAccessibility === 'no-hide-descendants'
+    );
+    expect(particleField).toHaveLength(1);
+    expect(particleField[0]).toMatchObject({
+      accessible: false,
+      accessibilityElementsHidden: true,
+      ariaHidden: true,
+    });
   });
 });

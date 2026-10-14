@@ -84,11 +84,21 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      {/* Animated Background */}
-      <View style={styles.background}>
+      {/* Decorative only. Hide the whole field so particles are not announced. */}
+      <View
+        style={styles.background}
+        accessible={false}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        aria-hidden
+      >
         {[...Array(20)].map((_, i) => (
           <Animated.View
             key={i}
+            accessible={false}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+            aria-hidden
             style={[
               styles.backgroundParticle,
               {
@@ -126,7 +136,13 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
           <Text style={styles.progressText}>{Math.round(progress)}%</Text>
 
           {/* Main Progress Bar */}
-          <View style={styles.progressBar}>
+          <View
+            style={styles.progressBar}
+            accessible
+            accessibilityRole="progressbar"
+            accessibilityValue={{ min: 0, max: 100, now: Math.round(progress) }}
+            accessibilityLabel={stage}
+          >
             <Animated.View
               style={[
                 styles.progressFill,
