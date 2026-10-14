@@ -230,8 +230,8 @@ export interface FarmPlot {
   tilledAt?: number;
   /** Type of fertilizer applied to this plot */
   fertilizerType?: 'speed' | 'quality' | 'water';
-  /** Active crop growing in this plot */
-  crop?: Crop;
+  /** Active crop growing in this plot; null once harvested */
+  crop?: Crop | null;
 }
 
 // ============================================================================
