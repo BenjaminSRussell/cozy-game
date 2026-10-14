@@ -139,6 +139,8 @@ export class Layer {
 }
 
 export class LayerSystem {
+  private static readonly MAX_LAYERS = 10;
+
   private layers: Map<string, Layer> = new Map();
   private pipeline: RenderPipeline;
   private camera: CameraSystem;
@@ -273,6 +275,21 @@ export class LayerSystem {
   }
 
   public createLayer(config: LayerConfig): Layer {
+    const existing = this.layers.get(config.id);
+    if (existing) {
+      existing.config = config;
+      existing.stats.effectCount = config.effects.length;
+      existing.dirty = true;
+      this.updateRenderOrder();
+      return existing;
+    }
+
+    if (this.layers.size >= LayerSystem.MAX_LAYERS) {
+      throw new Error(
+        `Layer index ${this.layers.size} exceeds max (${LayerSystem.MAX_LAYERS})`
+      );
+    }
+
     const layer = new Layer(config);
     this.layers.set(config.id, layer);
     this.updateRenderOrder();
