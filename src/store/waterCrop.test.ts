@@ -26,16 +26,16 @@ vi.hoisted(() => {
   });
 });
 
-import { CropStage, type Crop, type FarmPlot } from '../types/game';
+import { CropStage, ToolType, type Crop, type FarmPlot } from '../types/game';
 import { useGameStore } from './gameStore';
 
 const plotId = 'plot_water_test';
 
-function cropAt(waterLevel: number): Crop {
+function cropAt(waterLevel: number, stage: CropStage = CropStage.GROWING): Crop {
   return {
     id: 'crop_water_test',
     type: 'carrot',
-    stage: CropStage.GROWING,
+    stage,
     position: { x: 5, y: 6 },
     plantedTime: 1,
     waterLevel,
@@ -43,18 +43,30 @@ function cropAt(waterLevel: number): Crop {
   };
 }
 
-function setPlot(waterLevel: number) {
+function setPlot(waterLevel: number, stage: CropStage = CropStage.GROWING) {
   const plot: FarmPlot = {
     id: plotId,
     position: { x: 5, y: 6 },
     size: { x: 1, y: 1 },
     tilled: true,
     tilledAt: 1,
-    crop: cropAt(waterLevel),
+    crop: cropAt(waterLevel, stage),
   };
   useGameStore.setState((state) => {
     if (!state.world) return state;
     return { world: { ...state.world, farmPlots: [plot] } };
+  });
+}
+
+function setStamina(stamina: number) {
+  useGameStore.setState((state) => {
+    if (!state.world) return state;
+    return {
+      world: {
+        ...state.world,
+        player: { ...state.world.player, stamina },
+      },
+    };
   });
 }
 
@@ -87,5 +99,39 @@ describe('waterCrop', () => {
 
     expect(plotCrop()?.waterLevel).toBe(100);
     expect(plotCrop()?.waterLevel).not.toBe(110);
+  });
+
+  it('waters a living stage 2 crop and leaves stamina unchanged', () => {
+    useGameStore.getState().createNewGame('Waterer');
+    setStamina(64);
+    setPlot(50, CropStage.GROWING);
+    const before = plotCrop();
+    expect(before?.stage).toBe(2);
+
+    useGameStore.getState().waterCrop(plotId);
+
+    const after = plotCrop();
+    expect(after?.waterLevel).toBe(Math.min(100, 50 + 30));
+    expect(after).toEqual({ ...before, waterLevel: 80 });
+    expect(useGameStore.getState().world?.player.stamina).toBe(64);
+  });
+
+  it('returns silently for a dead crop without changing stamina or waterLevel', () => {
+    useGameStore.getState().createNewGame('Waterer');
+    setStamina(64);
+    setPlot(40, CropStage.DEAD);
+    const before = plotCrop();
+    const canBefore = useGameStore.getState().world?.player.tools[ToolType.WATERING_CAN]?.durability;
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    useGameStore.getState().waterCrop(plotId);
+
+    expect(plotCrop()).toBe(before);
+    expect(plotCrop()?.waterLevel).toBe(40);
+    expect(plotCrop()?.stage).toBe(CropStage.DEAD);
+    expect(useGameStore.getState().world?.player.stamina).toBe(64);
+    expect(useGameStore.getState().world?.player.tools[ToolType.WATERING_CAN]?.durability).toBe(canBefore);
+    expect(log).not.toHaveBeenCalled();
+    log.mockRestore();
   });
 });
