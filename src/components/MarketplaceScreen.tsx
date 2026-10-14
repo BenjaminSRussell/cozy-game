@@ -317,7 +317,7 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
               }
             } else {
               // Remove from inventory
-              removeItem(item.id, item.quantity);
+              if (!removeItem(item.id, item.quantity)) return;
             }
 
             // Perform the sale within the economy to affect supply/prices
