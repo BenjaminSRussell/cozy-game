@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const MIN_LOADING_DISPLAY_MS = 600;
 
 export interface LoadingScreenProps {
   progress: number; // 0-100
@@ -28,9 +29,14 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   onLoadingComplete
 }) => {
   const [currentTip, setCurrentTip] = useState(0);
+  // Fast loads finish in a few frames. Hold the screen so it does not flash.
+  const [minTimePassed, setMinTimePassed] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const particleAnim = useRef(new Animated.Value(0)).current;
+  const onCompleteRef = useRef(onLoadingComplete);
+  const didCompleteRef = useRef(false);
+  onCompleteRef.current = onLoadingComplete;
 
   const loadingTips = [
     "🌱 Did you know? Crops grow faster when watered regularly!",
@@ -54,18 +60,18 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     }).start();
   }, [progress]);
 
-  // Handle completion
   useEffect(() => {
-    if (progress >= 100) {
-      setTimeout(() => {
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 800,
-          useNativeDriver: true,
-        }).start(onLoadingComplete);
-      }, 500);
-    }
-  }, [progress]);
+    const t = setTimeout(() => setMinTimePassed(true), MIN_LOADING_DISPLAY_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Dismiss only once both the assets and the minimum display time are done.
+  // A load that already outlasted the minimum dismisses on this commit, with no extra wait.
+  useEffect(() => {
+    if (progress < 100 || !minTimePassed || didCompleteRef.current) return;
+    didCompleteRef.current = true;
+    onCompleteRef.current?.();
+  }, [progress, minTimePassed]);
 
   // Initial fade-in animation
   useEffect(() => {
