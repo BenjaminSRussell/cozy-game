@@ -237,6 +237,10 @@ export interface Crop {
   qualityPreference?: 'silver' | 'gold' | 'iridium';
   /** Whether the parent plot has fertilizer applied */
   fertilizerType?: 'speed' | 'quality' | 'water';
+  /** Days the crop has been in the ground. A seed just planted is 0. */
+  currentDaysGrown?: number;
+  /** Fertilizer copied from the soil tile at planting. */
+  fertilizer?: 'speed' | 'quality' | 'water';
 }
 
 /**

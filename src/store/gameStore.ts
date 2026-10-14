@@ -384,6 +384,18 @@ interface GameStore {
   plantCrop: (plotId: string, cropType: string) => void;
 
   /**
+   * Plant one seed packet on a soil tile.
+   * Untilled or occupied tiles return without spending a seed.
+   * A season outside that seed's crop data toasts and does not spend a seed.
+   * removeItem spends one seed; a false return does not plant.
+   * The sprout starts at stage 0 with currentDaysGrown 0 and the tile's fertilizer.
+   * @param tileX - Tile column
+   * @param tileY - Tile row
+   * @param seedItemId - Inventory id of the seed packet
+   */
+  plantSeed: (tileX: number, tileY: number, seedItemId: string) => void;
+
+  /**
    * Harvest a mature crop
    * Only works if crop stage is HARVESTABLE
    * Adds harvested items to inventory and clears plot
@@ -974,6 +986,48 @@ function withMountState(vehicle: Vehicle, isMounted: boolean, mountedBy: string 
   return next;
 }
 
+/** Soil cell carried on the world. movePlayer reads the same optional tiles list. */
+type SoilTile = {
+  position: Vector2D;
+  state?: string;
+  type?: string;
+  walkable?: boolean;
+  fertilizer?: Crop['fertilizer'];
+  crop?: Crop | null;
+};
+
+type WorldWithTiles = GameWorld & { tiles?: readonly SoilTile[] | null };
+
+function readSoilTiles(world: GameWorld): readonly SoilTile[] | undefined {
+  const tiles = (world as WorldWithTiles).tiles;
+  if (!Array.isArray(tiles)) return undefined;
+  return tiles;
+}
+
+function isTilledSoil(tile: SoilTile): boolean {
+  const soil = tile.state ?? tile.type;
+  return soil === 'tilled_dry' || soil === 'tilled_wet';
+}
+
+/**
+ * Crop id and seasons for seed packets that already exist.
+ * Same ids and seasons as SEED_PACKETS and the rendering CropSystem configs.
+ */
+function seedCropData(seedItemId: string): { type: string; seasons: readonly Season[] } | undefined {
+  switch (seedItemId) {
+    case 'wheat_seeds':
+      return { type: 'wheat', seasons: ['spring', 'summer', 'autumn'] };
+    case 'carrot_seeds':
+      return { type: 'carrot', seasons: ['spring', 'summer', 'autumn'] };
+    case 'tomato_seeds':
+      return { type: 'tomato', seasons: ['spring', 'summer', 'autumn'] };
+    case 'corn_seeds':
+      return { type: 'corn', seasons: ['spring', 'summer'] };
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Cozy Haven Game Store Hook
  *
@@ -1354,6 +1408,56 @@ export const useGameStore = create<GameStore>()(
             });
 
             return { world: { ...state.world, farmPlots: updatedPlots } };
+          });
+        },
+
+        plantSeed: (tileX: number, tileY: number, seedItemId: string) => {
+          const world = get().world;
+          if (!world) return;
+
+          const tiles = readSoilTiles(world);
+          const tile = tiles?.find((entry) => entry.position.x === tileX && entry.position.y === tileY);
+          if (!tile || !isTilledSoil(tile) || tile.crop) return;
+
+          const currentSeason = world.season;
+          const cropData = seedCropData(seedItemId);
+          if (!cropData) return;
+          if (!cropData.seasons.includes(currentSeason)) {
+            showNotification('Cannot plant in this season!');
+            return;
+          }
+
+          if (!get().removeItem(seedItemId, 1)) return;
+
+          const planted: Crop = {
+            id: `crop_${tileX}_${tileY}_${Date.now()}`,
+            type: cropData.type,
+            stage: CropStage.SEED,
+            position: { x: tileX, y: tileY },
+            plantedTime: Date.now(),
+            waterLevel: 100,
+            health: 100,
+            currentDaysGrown: 0,
+            fertilizer: tile.fertilizer,
+          };
+
+          set((state) => {
+            if (!state.world) return state;
+            const currentTiles = readSoilTiles(state.world);
+            if (!currentTiles) return state;
+
+            let placed = false;
+            const nextTiles = currentTiles.map((entry) => {
+              if (placed) return entry;
+              if (entry.position.x !== tileX || entry.position.y !== tileY) return entry;
+              if (!isTilledSoil(entry) || entry.crop) return entry;
+              placed = true;
+              return { ...entry, crop: planted };
+            });
+            if (!placed) return state;
+
+            const nextWorld: WorldWithTiles = { ...state.world, tiles: nextTiles };
+            return { world: nextWorld };
           });
         },
 
