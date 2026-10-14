@@ -1243,7 +1243,8 @@ export const useGameStore = create<GameStore>()(
             if (!state.world) return state;
 
             const plot = state.world.farmPlots.find((p) => p.id === plotId);
-            if (!plot || !plot.crop || plot.crop.stage !== CropStage.HARVESTABLE) return state;
+            if (!plot || plot.crop === null || plot.crop === undefined) return state;
+            if (plot.crop.stage !== CropStage.HARVESTABLE) return state;
 
             const player = state.world.player;
             const crop = plot.crop;
@@ -1293,10 +1294,6 @@ export const useGameStore = create<GameStore>()(
               quality: quality,
             };
 
-            const updatedPlots = state.world.farmPlots.map((p) =>
-              p.id === plotId ? { ...p, crop: undefined, fertilizerType: undefined } : p,
-            );
-
             // Add item to inventory (stacking logic check)
             let newInventory = [...player.inventory];
             const existingIndex = newInventory.findIndex(i => i.id === harvestedItem.id);
@@ -1309,6 +1306,10 @@ export const useGameStore = create<GameStore>()(
             } else {
               newInventory.push(harvestedItem);
             }
+
+            const updatedPlots = state.world.farmPlots.map((p) =>
+              p.id === plotId ? { ...p, crop: null, fertilizerType: undefined } : p,
+            );
 
             return {
               world: {
