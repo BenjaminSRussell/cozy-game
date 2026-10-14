@@ -44,6 +44,11 @@ export const createTool = (
 ): Tool => {
   const toolType = type as ToolType;
   const toolTier = tier as ToolTier;
+  /**
+   * Tool durability by tier. Gold is a soft metal with low durability and high efficiency.
+   * Wood 50: utility starter. Stone 100: first upgrade. Iron 250: professional.
+   * Gold 100: magic efficiency. Diamond 1000: endgame.
+   */
   const baseDurability = {
     [ToolTier.WOOD]: 50,
     [ToolTier.STONE]: 100,
@@ -52,6 +57,11 @@ export const createTool = (
     [ToolTier.DIAMOND]: 1000,
   }[toolTier];
 
+  /**
+   * Efficiency multiplier affects actions per second.
+   * Wood 1.0, Stone 1.2, Iron 1.5, Gold 2.0, Diamond 3.0.
+   * Gold's 2.0 efficiency is intentional between Iron 1.5 and Diamond 3.0.
+   */
   const efficiency = {
     [ToolTier.WOOD]: 1.0,
     [ToolTier.STONE]: 1.2,
