@@ -267,6 +267,12 @@ interface GameStore {
   /** User-configurable game settings (audio volumes, graphics quality, etc.) */
   settings: GameSettings;
 
+  /**
+   * Next suffix for `vehicle_${type}_${n}` ids.
+   * Also stamped on the world so the cozy_save blob keeps the sequence.
+   */
+  nextVehicleId: number;
+
   // ============================================================================
   // WORLD ACTIONS - Game creation, loading, and persistence
   // ============================================================================
@@ -841,7 +847,7 @@ const createInitialWorld = (playerName: string): GameWorld => {
     [ToolType.SCYTHE]: createTool(ToolType.SCYTHE, ToolTier.WOOD),
   };
 
-  return {
+  return stampNextVehicleId({
     id: `world_${Date.now()}`,
     createdAt: Date.now(),
     lastPlayedAt: Date.now(),
@@ -921,8 +927,33 @@ const createInitialWorld = (playerName: string): GameWorld => {
     activeWeatherEvents: [],
     damBuildings: [],
     lastWeatherEventTime: 0,
-  };
+  }, 0);
 };
+
+/** `cozy_save_*` JSON keeps own fields that are not on GameWorld. */
+type WorldWithVehicleCounter = GameWorld & { nextVehicleId?: number };
+
+function stampNextVehicleId(world: GameWorld, nextVehicleId: number): GameWorld {
+  (world as WorldWithVehicleCounter).nextVehicleId = nextVehicleId;
+  return world;
+}
+
+/**
+ * Next id to issue. Prefers the saved counter, then one past any
+ * `vehicle_${type}_${n}` already in the world, so a load cannot reuse 0.
+ */
+function readNextVehicleId(world: GameWorld | null | undefined): number {
+  if (!world) return 0;
+  const stamped = (world as WorldWithVehicleCounter).nextVehicleId;
+  let next = typeof stamped === 'number' && Number.isFinite(stamped) ? Math.max(0, stamped) : 0;
+  for (const vehicle of world.vehicles ?? []) {
+    const match = /^vehicle_(?:tractor|truck)_(\d+)$/.exec(vehicle.id);
+    if (!match) continue;
+    const after = Number(match[1]) + 1;
+    if (after > next) next = after;
+  }
+  return next;
+}
 
 /**
  * Cozy Haven Game Store Hook
@@ -950,6 +981,7 @@ export const useGameStore = create<GameStore>()(
       (set, get) => ({
         world: null,
         settings: DEFAULT_SETTINGS,
+        nextVehicleId: 0,
 
         // ========================================================================
         // WORLD ACTIONS
@@ -957,7 +989,7 @@ export const useGameStore = create<GameStore>()(
 
         createNewGame: (playerName: string) => {
           const newWorld = createInitialWorld(playerName);
-          set({ world: newWorld });
+          set({ world: newWorld, nextVehicleId: 0 });
         },
 
         loadGame: async (worldId: string) => {
@@ -969,12 +1001,15 @@ export const useGameStore = create<GameStore>()(
         },
 
         saveGame: async () => {
-          const { world } = get();
+          const { world, nextVehicleId } = get();
           if (!world) return;
 
-          // Update timestamp
+          // Update timestamp. Stamp the counter on the world so PersistenceManager
+          // writes it into cozy_save_${worldId} without a new storage key.
           world.lastPlayedAt = Date.now();
-          set({ world });
+          const counter = Math.max(nextVehicleId, readNextVehicleId(world));
+          stampNextVehicleId(world, counter);
+          set({ world, nextVehicleId: counter });
 
           // Note: Actual persistence is handled by PersistenceManager
           // which is called from App.tsx after state update
@@ -3017,19 +3052,27 @@ export const useGameStore = create<GameStore>()(
           set((state) => {
             if (!state.world) return state;
 
+            // Loaded saves keep the counter on the world. Honor that when the
+            // in-memory field was reset so vehicle_tractor_0 is not reused.
+            const nextVehicleId = Math.max(state.nextVehicleId, readNextVehicleId(state.world));
+            const id = `vehicle_${type}_${nextVehicleId}`;
             const newVehicle: Vehicle = {
-              id: `veh_${Date.now()}`,
+              id,
               type,
               position,
               rotation: 90, // Default to West as per user request
               speed: type === 'tractor' ? 2.0 : 3.0, // Multiplier
             };
+            const world: GameWorld = {
+              ...state.world,
+              vehicles: [...state.world.vehicles, newVehicle],
+            };
+            const updated = nextVehicleId + 1;
+            stampNextVehicleId(world, updated);
 
             return {
-              world: {
-                ...state.world,
-                vehicles: [...state.world.vehicles, newVehicle]
-              }
+              nextVehicleId: updated,
+              world,
             };
           });
         },
