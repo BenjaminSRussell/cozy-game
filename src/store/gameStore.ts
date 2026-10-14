@@ -955,6 +955,14 @@ function readNextVehicleId(world: GameWorld | null | undefined): number {
   return next;
 }
 
+/** `isMounted` is stored on the vehicle object; Vehicle itself has no field for it. */
+type VehicleWithMount = Vehicle & { isMounted: boolean };
+
+function withMountState(vehicle: Vehicle, isMounted: boolean, mountedBy: string | undefined): Vehicle {
+  const next: VehicleWithMount = { ...vehicle, isMounted, mountedBy };
+  return next;
+}
+
 /**
  * Cozy Haven Game Store Hook
  *
@@ -3083,10 +3091,9 @@ export const useGameStore = create<GameStore>()(
             const vehicle = state.world.vehicles.find(v => v.id === vehicleId);
             if (!vehicle) return state;
 
-            // If already mounted, dismount first? Or error.
-            if (state.world.player.mountedVehicleId) return state;
-
-            const updatedVehicle = { ...vehicle, mountedBy: state.world.player.id };
+            // A second mount must release the current vehicle or it stays ridden with no player.
+            const currentId = state.world.player.mountedVehicleId;
+            const playerId = state.world.player.id;
 
             return {
               world: {
@@ -3097,7 +3104,15 @@ export const useGameStore = create<GameStore>()(
                   // Snap player to vehicle pos
                   position: vehicle.position
                 },
-                vehicles: state.world.vehicles.map(v => v.id === vehicleId ? updatedVehicle : v)
+                vehicles: state.world.vehicles.map(v => {
+                  if (currentId && v.id === currentId && v.id !== vehicleId) {
+                    return withMountState(v, false, undefined);
+                  }
+                  if (v.id === vehicleId) {
+                    return withMountState(v, true, playerId);
+                  }
+                  return v;
+                })
               }
             };
           });
@@ -3117,7 +3132,7 @@ export const useGameStore = create<GameStore>()(
                   mountedVehicleId: undefined,
                   // Find safe spot to dismount? For now same spot.
                 },
-                vehicles: state.world.vehicles.map(v => v.id === vehicleId ? { ...v, mountedBy: undefined } : v)
+                vehicles: state.world.vehicles.map(v => v.id === vehicleId ? withMountState(v, false, undefined) : v)
               }
             };
           });
