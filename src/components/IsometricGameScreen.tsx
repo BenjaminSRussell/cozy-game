@@ -14,6 +14,7 @@ import { AssetManager } from '../systems/AssetManager';
 import { CraftingMenu } from './CraftingMenu';
 import { theme } from '../styles/theme';
 import { CozyIconButton } from './CozyIconButton';
+import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModal';
 import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -831,7 +832,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const {
     world, plantCrop, harvestCrop, waterCrop, createFarmPlot, addCoins, addExperience,
     placeBuilding, createOreDeposit, mineOre,
-    buildRoad, upgradeRoad, spawnVehicle, mountVehicle, dismountVehicle, movePlayer, applyFertilizer
+    buildRoad, upgradeRoad, spawnVehicle, mountVehicle, dismountVehicle, movePlayer, applyFertilizer,
+    advanceTime,
   } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<IsometricRenderer | null>(null);
@@ -1272,6 +1274,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       setCameraOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
     }
   };
+
+  const shipping = useEndOfDayShipping(world, advanceTime);
 
   if (!world) {
     return (
@@ -1795,6 +1799,11 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           </button>
         ))}
       </div>
+      <ShippingSummaryModal
+        visible={shipping.open}
+        rows={shipping.rows}
+        onContinue={shipping.onContinue}
+      />
     </JoystickTouchRoot>
   );
 };

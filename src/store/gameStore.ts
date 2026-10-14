@@ -32,6 +32,7 @@ import {
   Road,
   RoadGrade,
   Vehicle,
+  ShippedTodayEntry,
   getQualityMultiplier,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
@@ -662,14 +663,17 @@ interface GameStore {
   // ============================================================================
 
   /**
-   * Sell harvestable crops from farm plots
+   * Sell harvestable crops from farm plots.
+   * Each crop sold appends one shippedToday row. Row gold sums to the coins added.
    * @param plotIds - Array of plot IDs to harvest and sell
    * @returns Total coins earned from selling crops
    */
   sellHarvestableCrops: (plotIds: string[]) => number;
 
   /**
-   * Sell items from inventory
+   * Sell items from inventory.
+   * On success, appends one shippedToday row whose gold equals the coins added.
+   * A failed removal returns 0 and appends nothing.
    * @param itemId - ID of item to sell
    * @param quantity - Quantity to sell
    * @returns Total coins earned from selling items
@@ -877,6 +881,7 @@ const createInitialWorld = (playerName: string): GameWorld => {
     season: 'spring',
     dayTime: 360, // 6 AM
     totalDaysPlayed: 0,
+    shippedToday: [],
     player: {
       id: `player_${Date.now()}`,
       name: playerName,
@@ -1009,6 +1014,15 @@ function isTilledSoil(tile: SoilTile): boolean {
   return soil === 'tilled_dry' || soil === 'tilled_wet';
 }
 
+function nextShippedToday(
+  world: GameWorld,
+  rows: readonly ShippedTodayEntry[],
+): ShippedTodayEntry[] {
+  const previous = Array.isArray(world.shippedToday) ? world.shippedToday : [];
+  if (rows.length === 0) return previous;
+  return [...previous, ...rows];
+}
+
 /**
  * Crop id and seasons for seed packets that already exist.
  * Same ids and seasons as SEED_PACKETS and the rendering CropSystem configs.
@@ -1106,6 +1120,8 @@ export const useGameStore = create<GameStore>()(
             const newDaysPlayed = state.world.totalDaysPlayed + daysAdvanced;
             if (newDaysPlayed > state.world.totalDaysPlayed) {
               updatedWorld.totalDaysPlayed = newDaysPlayed;
+              // The tally belongs to the day that just ended. Same-day advances keep it.
+              updatedWorld.shippedToday = [];
 
               // NEW DAY LOGIC
               get().advanceNature(); // Simulate nature growth
@@ -2227,10 +2243,17 @@ export const useGameStore = create<GameStore>()(
 
             // Simple fixed prices (1 buck per item)
             const pricePerCrop = 1;
+            const batch: ShippedTodayEntry[] = [];
+            let batchGold = 0;
 
             const updatedPlots = state.world.farmPlots.map(plot => {
               if (plotIds.includes(plot.id) && plot.crop && plot.crop.stage === CropStage.HARVESTABLE) {
-                totalEarnings += pricePerCrop;
+                batchGold += pricePerCrop;
+                batch.push({
+                  name: plot.crop.type,
+                  quantity: 1,
+                  gold: pricePerCrop,
+                });
 
                 return {
                   ...plot,
@@ -2242,14 +2265,19 @@ export const useGameStore = create<GameStore>()(
               return plot;
             });
 
+            totalEarnings += batchGold;
+
             return {
               world: {
                 ...state.world,
                 player: {
                   ...state.world.player,
-                  coins: state.world.player.coins + totalEarnings,
+                  coins: state.world.player.coins + batchGold,
                 },
                 farmPlots: updatedPlots,
+                shippedToday: batch.length > 0
+                  ? nextShippedToday(state.world, batch)
+                  : state.world.shippedToday,
               },
             };
           });
@@ -2404,6 +2432,9 @@ export const useGameStore = create<GameStore>()(
             return {
               world: {
                 ...state.world,
+                shippedToday: nextShippedToday(state.world, [
+                  { name: item.name, quantity, gold: earnings },
+                ]),
                 player: {
                   ...state.world.player,
                   coins: state.world.player.coins + earnings,

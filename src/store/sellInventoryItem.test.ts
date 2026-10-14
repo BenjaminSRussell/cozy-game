@@ -26,7 +26,8 @@ vi.hoisted(() => {
   });
 });
 
-import { CropStage, getQualityMultiplier, ItemType, type Animal, type Item } from '../types/game';
+import { minutesUntilNextSunrise } from '../components/shippingSummary';
+import { CropStage, getQualityMultiplier, ItemType, type Animal, type Item, type ShippedTodayEntry } from '../types/game';
 import { useGameStore } from './gameStore';
 
 function wheat(quantity: number, quality?: Item['quality'], sellValue = 10): Item {
@@ -203,5 +204,188 @@ describe('quality applied once from harvest and collection', () => {
     expect(earned).toBe(125);
     expect(earned).not.toBe(156.25);
     expect(useGameStore.getState().world?.player.coins).toBe(coinsBefore + 125);
+  });
+});
+
+function shippedToday(): ShippedTodayEntry[] {
+  return useGameStore.getState().world?.shippedToday ?? [];
+}
+
+describe('shippedToday ledger', () => {
+  it('records one row and adds that gold to coins once', () => {
+    useGameStore.getState().createNewGame('Seller');
+    setInventory([wheat(4, 'gold', 10)]);
+    const coinsBefore = useGameStore.getState().world?.player.coins ?? 0;
+
+    const earned = useGameStore.getState().sellInventoryItem('wheat', 4);
+
+    const rows = shippedToday();
+    expect(rows).toEqual([{ name: 'Wheat', quantity: 4, gold: 15 * 4 }]);
+    expect(earned).toBe(15 * 4);
+    expect(earned).not.toBe(10 * 1.5 * 1.5 * 4);
+    expect(rows).toHaveLength(1);
+    expect(useGameStore.getState().world?.player.coins).toBe(coinsBefore + rows[0].gold);
+    expect(useGameStore.getState().world?.player.coins).toBe(coinsBefore + earned);
+  });
+
+  it('records silver milk once at 125', () => {
+    useGameStore.getState().createNewGame('Seller');
+    setInventory([{
+      id: 'milk',
+      name: 'Milk (silver)',
+      type: ItemType.ANIMAL_PRODUCT,
+      quantity: 1,
+      sellValue: 100,
+      spriteId: 'milk',
+      rarity: 'uncommon',
+      quality: 'silver',
+    }]);
+    const coinsBefore = useGameStore.getState().world?.player.coins ?? 0;
+
+    const earned = useGameStore.getState().sellInventoryItem('milk', 1);
+    const rows = shippedToday();
+
+    expect(rows).toEqual([{ name: 'Milk (silver)', quantity: 1, gold: 125 }]);
+    expect(earned).toBe(125);
+    expect(useGameStore.getState().world?.player.coins).toBe(coinsBefore + 125);
+  });
+
+  it('appends nothing when removeItem fails', () => {
+    useGameStore.getState().createNewGame('Seller');
+    const existing: ShippedTodayEntry = { name: 'Hay', quantity: 1, gold: 5 };
+    useGameStore.setState((state) => {
+      if (!state.world) return state;
+      return { world: { ...state.world, shippedToday: [existing] } };
+    });
+    setInventory([wheat(1, 'gold', 10)]);
+    const coinsBefore = useGameStore.getState().world?.player.coins ?? 0;
+
+    const earned = useGameStore.getState().sellInventoryItem('wheat', 5);
+
+    expect(earned).toBe(0);
+    expect(useGameStore.getState().world?.player.coins).toBe(coinsBefore);
+    expect(shippedToday()).toEqual([existing]);
+  });
+
+  it('records harvest sales once and skips crops that did not sell', () => {
+    useGameStore.getState().createNewGame('Seller');
+    const coinsBefore = useGameStore.getState().world?.player.coins ?? 0;
+    useGameStore.setState((state) => {
+      if (!state.world) return state;
+      return {
+        world: {
+          ...state.world,
+          farmPlots: [
+            {
+              id: 'plot_wheat',
+              position: { x: 1, y: 1 },
+              size: { x: 1, y: 1 },
+              tilled: true,
+              crop: {
+                id: 'crop_wheat',
+                type: 'wheat',
+                stage: CropStage.HARVESTABLE,
+                position: { x: 1, y: 1 },
+                plantedTime: 1,
+                waterLevel: 100,
+                health: 100,
+              },
+            },
+            {
+              id: 'plot_tomato',
+              position: { x: 2, y: 1 },
+              size: { x: 1, y: 1 },
+              tilled: true,
+              crop: {
+                id: 'crop_tomato',
+                type: 'tomato',
+                stage: CropStage.HARVESTABLE,
+                position: { x: 2, y: 1 },
+                plantedTime: 1,
+                waterLevel: 100,
+                health: 100,
+              },
+            },
+            {
+              id: 'plot_growing',
+              position: { x: 3, y: 1 },
+              size: { x: 1, y: 1 },
+              tilled: true,
+              crop: {
+                id: 'crop_growing',
+                type: 'corn',
+                stage: CropStage.GROWING,
+                position: { x: 3, y: 1 },
+                plantedTime: 1,
+                waterLevel: 100,
+                health: 100,
+              },
+            },
+          ],
+        },
+      };
+    });
+
+    const earned = useGameStore.getState().sellHarvestableCrops([
+      'plot_wheat',
+      'plot_tomato',
+      'plot_growing',
+    ]);
+    const again = useGameStore.getState().sellHarvestableCrops(['plot_wheat', 'plot_tomato']);
+    const rows = shippedToday();
+    const gold = rows.reduce((sum, row) => sum + row.gold, 0);
+
+    expect(earned).toBe(2);
+    expect(again).toBe(0);
+    expect(rows).toEqual([
+      { name: 'wheat', quantity: 1, gold: 1 },
+      { name: 'tomato', quantity: 1, gold: 1 },
+    ]);
+    expect(gold).toBe(earned);
+    expect(useGameStore.getState().world?.player.coins).toBe(coinsBefore + gold);
+    expect(useGameStore.getState().world?.player.coins).not.toBe(coinsBefore + gold * 2);
+  });
+
+  it('keeps the list through the same day and clears it when the day rolls', () => {
+    useGameStore.getState().createNewGame('Seller');
+    setInventory([wheat(1, 'normal', 10)]);
+    useGameStore.getState().sellInventoryItem('wheat', 1);
+    const season = useGameStore.getState().world?.season;
+    const startDay = useGameStore.getState().world?.totalDaysPlayed ?? 0;
+    const coins = useGameStore.getState().world?.player.coins;
+
+    useGameStore.getState().advanceTime(1079);
+    expect(useGameStore.getState().world?.dayTime).toBe(1439);
+    expect(useGameStore.getState().world?.totalDaysPlayed).toBe(startDay);
+    expect(shippedToday()).toHaveLength(1);
+
+    useGameStore.getState().advanceTime(1);
+    expect(useGameStore.getState().world?.totalDaysPlayed).toBe(startDay + 1);
+    expect(shippedToday()).toEqual([]);
+    expect(useGameStore.getState().world?.season).toBe(season);
+    expect(useGameStore.getState().world?.player.coins).toBe(coins);
+  });
+
+  it('clears the ledger when Continue advances from evening to sunrise', () => {
+    useGameStore.getState().createNewGame('Seller');
+    setInventory([wheat(2, 'gold', 10)]);
+    useGameStore.getState().sellInventoryItem('wheat', 2);
+    expect(shippedToday()).toHaveLength(1);
+
+    useGameStore.setState((state) => {
+      if (!state.world) return state;
+      return { world: { ...state.world, dayTime: 23 * 60 } };
+    });
+    const startDay = useGameStore.getState().world?.totalDaysPlayed ?? 0;
+    const season = useGameStore.getState().world?.season;
+    const minutes = minutesUntilNextSunrise(23 * 60);
+
+    useGameStore.getState().advanceTime(minutes);
+
+    expect(minutes).toBe(420);
+    expect(useGameStore.getState().world?.dayTime).toBe(360);
+    expect(useGameStore.getState().world?.totalDaysPlayed).toBe(startDay + 1);
+    expect(shippedToday()).toEqual([]);
+    expect(useGameStore.getState().world?.season).toBe(season);
   });
 });
