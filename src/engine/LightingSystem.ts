@@ -395,3 +395,154 @@ export class DynamicLightingSystem {
     };
   }
 }
+
+/** Canvas tint for one in-game minute. Alpha 0 is a clear day. */
+export interface AmbientColor {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+  css: string;
+}
+
+export type PlacedLightKind = 'lantern' | 'torch' | 'lamp';
+
+export const PLACED_LIGHT_RADIUS: Record<PlacedLightKind, number> = {
+  lantern: 120,
+  torch: 72,
+  lamp: 96,
+};
+
+export interface PlacedLightSource {
+  kind: PlacedLightKind;
+  radius: number;
+  gridX: number;
+  gridY: number;
+  gridZ: number;
+}
+
+interface LightPlacement {
+  type?: string;
+  spriteId?: string;
+  position?: { x: number; y: number; z?: number };
+}
+
+interface LightPlacementWorld {
+  buildings?: readonly LightPlacement[] | null;
+  homeBuildings?: readonly LightPlacement[] | null;
+}
+
+const MINUTES_PER_DAY = 1440;
+const DAWN_START = 6 * 60;
+const DAY_START = 8 * 60;
+const SUNSET_START = 17 * 60;
+const NIGHT_START = 20 * 60;
+const NIGHT_FULL = 2 * 60;
+
+const CLEAR_TINT = { r: 0, g: 0, b: 0, a: 0 };
+const DAWN_TINT = { r: 255, g: 200, b: 150, a: 0.2 };
+const SUNSET_TINT = { r: 255, g: 120, b: 50, a: 0.25 };
+const NIGHT_TINT = { r: 15, g: 20, b: 60, a: 0.6 };
+
+function ambientCss(color: { r: number; g: number; b: number; a: number }): string {
+  const r = Math.round(color.r);
+  const g = Math.round(color.g);
+  const b = Math.round(color.b);
+  const a = Math.round(color.a * 1000) / 1000;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+function withCss(color: { r: number; g: number; b: number; a: number }): AmbientColor {
+  return { r: color.r, g: color.g, b: color.b, a: color.a, css: ambientCss(color) };
+}
+
+function lerpAmbient(
+  from: { r: number; g: number; b: number; a: number },
+  to: { r: number; g: number; b: number; a: number },
+  t: number
+): { r: number; g: number; b: number; a: number } {
+  return {
+    r: from.r + (to.r - from.r) * t,
+    g: from.g + (to.g - from.g) * t,
+    b: from.b + (to.b - from.b) * t,
+    a: from.a + (to.a - from.a) * t,
+  };
+}
+
+function normalizeMinutes(inGameMinutes: number): number | null {
+  if (!Number.isFinite(inGameMinutes)) return null;
+  const wrapped = inGameMinutes % MINUTES_PER_DAY;
+  return wrapped < 0 ? wrapped + MINUTES_PER_DAY : wrapped;
+}
+
+function lightToken(label: string | null | undefined): PlacedLightKind | null {
+  if (!label) return null;
+  const tokens = label.trim().toLowerCase().replace(/[\s-]+/g, '_').split('_');
+  if (tokens.includes('lantern')) return 'lantern';
+  if (tokens.includes('torch')) return 'torch';
+  if (tokens.includes('lamp')) return 'lamp';
+  return null;
+}
+
+function placementKind(placement: LightPlacement): PlacedLightKind | null {
+  return lightToken(placement.type) ?? lightToken(placement.spriteId);
+}
+
+/**
+ * Four-stage day/night tint for the isometric canvas.
+ * 06:00–08:00 dawn gold fades to clear, 08:00–17:00 stays clear,
+ * 17:00–20:00 warms to amber, and 20:00–02:00 deepens to navy.
+ * Navy then holds until dawn. The result depends only on the clock.
+ */
+export class LightingSystem {
+  static getAmbientColor(inGameMinutes: number): AmbientColor {
+    const minutes = normalizeMinutes(inGameMinutes);
+    if (minutes === null) return withCss(CLEAR_TINT);
+
+    if (minutes >= DAWN_START && minutes < DAY_START) {
+      const t = (minutes - DAWN_START) / (DAY_START - DAWN_START);
+      return withCss(lerpAmbient(DAWN_TINT, CLEAR_TINT, t));
+    }
+    if (minutes >= DAY_START && minutes < SUNSET_START) {
+      return withCss(CLEAR_TINT);
+    }
+    if (minutes >= SUNSET_START && minutes < NIGHT_START) {
+      const t = (minutes - SUNSET_START) / (NIGHT_START - SUNSET_START);
+      return withCss(lerpAmbient(CLEAR_TINT, SUNSET_TINT, t));
+    }
+    if (minutes >= NIGHT_START || minutes < NIGHT_FULL) {
+      const elapsed = minutes >= NIGHT_START
+        ? minutes - NIGHT_START
+        : minutes + (MINUTES_PER_DAY - NIGHT_START);
+      const span = NIGHT_FULL + MINUTES_PER_DAY - NIGHT_START;
+      return withCss(lerpAmbient(SUNSET_TINT, NIGHT_TINT, elapsed / span));
+    }
+    return withCss(NIGHT_TINT);
+  }
+}
+
+/** Lanterns, torches, and lamps already placed on the farm. */
+export function placedLightSources(world: LightPlacementWorld | null | undefined): PlacedLightSource[] {
+  if (!world) return [];
+  const lights: PlacedLightSource[] = [];
+  const groups = [world.buildings, world.homeBuildings];
+  for (const group of groups) {
+    if (!group) continue;
+    for (const placement of group) {
+      const kind = placementKind(placement);
+      const position = placement.position;
+      if (!kind || !position) continue;
+      if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) continue;
+      const z = position.z;
+      const gridZ = typeof z === 'number' && Number.isFinite(z) ? z : 0;
+      lights.push({
+        kind,
+        radius: PLACED_LIGHT_RADIUS[kind],
+        gridX: position.x,
+        gridY: position.y,
+        gridZ,
+      });
+    }
+  }
+  return lights;
+}

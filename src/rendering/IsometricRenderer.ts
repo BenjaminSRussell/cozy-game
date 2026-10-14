@@ -7,6 +7,7 @@
 
 import { GameWorld, CropStage } from '../types/game';
 import { gridToScreen, screenToGrid } from '../engine/TileMap';
+import { LightingSystem, placedLightSources } from '../engine/LightingSystem';
 import { TextureManager } from './TextureManager';
 import { WindSystem, WindVector } from '../systems/WindSystem';
 import { DemoAssets } from '../assets/DemoAssets';
@@ -117,6 +118,8 @@ export class IsometricRenderer {
   hoveredTile: { x: number; y: number } | null = null;
   /** Last world passed to render(); a hover repaint reuses it and does not set worldDirty. */
   private lastWorld: GameWorld | null = null;
+  /** Reused top-layer tint. Cutouts are punched here so the world underneath stays. */
+  private ambientCanvas: HTMLCanvasElement | null = null;
   private boundPointerMove: EventListener;
   private boundPointerLeave: EventListener;
 
@@ -1321,6 +1324,7 @@ export class IsometricRenderer {
     // Draw UI overlay
     this.drawUI(world);
     this.drawHoveredTile();
+    this.drawAmbientFilter(world);
   }
 
   /** Diamond snapped to hoveredTile. Null or off-map draws nothing. */
@@ -1593,9 +1597,115 @@ export class IsometricRenderer {
     }
   }
 
+  /**
+   * Top-layer day/night tint. It follows the clock only: prefers-reduced-motion
+   * does not hide it, and the color does not pulse or flash.
+   */
+  private drawAmbientFilter(world: GameWorld): void {
+    const minutes = world.dayTime;
+    if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return;
+    const color = LightingSystem.getAmbientColor(minutes);
+    if (!(color.a > 0) || this.cssWidth <= 0 || this.cssHeight <= 0) return;
+
+    const lights = this.ambientCutouts(world);
+    const surface = this.ambientSurface(this.cssWidth, this.cssHeight);
+    if (
+      surface &&
+      typeof this.ctx.drawImage === 'function' &&
+      this.paintAmbientLayer(surface.ctx, color.css, lights, surface.canvas.width, surface.canvas.height)
+    ) {
+      this.paintOverlay(() => {
+        this.ctx.drawImage(surface.canvas, 0, 0, this.cssWidth, this.cssHeight);
+      });
+      return;
+    }
+
+    this.paintOverlay(() => {
+      this.ctx.fillStyle = color.css;
+      this.ctx.fillRect(0, 0, this.cssWidth, this.cssHeight);
+    });
+  }
+
+  private ambientCutouts(world: GameWorld): Array<{ x: number; y: number; radius: number }> {
+    const cutouts: Array<{ x: number; y: number; radius: number }> = [];
+    for (const light of placedLightSources(world)) {
+      const iso = this.worldToIsometric(light.gridX, light.gridY, light.gridZ);
+      if (!Number.isFinite(iso.screenX) || !Number.isFinite(iso.screenY) || !(light.radius > 0)) continue;
+      cutouts.push({ x: iso.screenX, y: iso.screenY, radius: light.radius });
+    }
+    return cutouts;
+  }
+
+  private ambientSurface(
+    width: number,
+    height: number
+  ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+    const doc = (globalThis as { document?: Document }).document;
+    if (!doc || typeof doc.createElement !== 'function') return null;
+    if (!this.ambientCanvas) {
+      this.ambientCanvas = doc.createElement('canvas');
+    }
+    const canvas = this.ambientCanvas;
+    canvas.width = Math.max(1, Math.round(width));
+    canvas.height = Math.max(1, Math.round(height));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    return { canvas, ctx };
+  }
+
+  private paintAmbientLayer(
+    layer: CanvasRenderingContext2D,
+    css: string,
+    lights: Array<{ x: number; y: number; radius: number }>,
+    width: number,
+    height: number
+  ): boolean {
+    if (
+      typeof layer.setTransform !== 'function' ||
+      typeof layer.clearRect !== 'function' ||
+      typeof layer.fillRect !== 'function' ||
+      typeof layer.createRadialGradient !== 'function' ||
+      typeof layer.beginPath !== 'function' ||
+      typeof layer.arc !== 'function' ||
+      typeof layer.fill !== 'function'
+    ) {
+      return false;
+    }
+
+    layer.setTransform(1, 0, 0, 1, 0, 0);
+    layer.clearRect(0, 0, width, height);
+    layer.globalCompositeOperation = 'source-over';
+    layer.fillStyle = css;
+    layer.fillRect(0, 0, width, height);
+
+    layer.globalCompositeOperation = 'destination-out';
+    for (const light of lights) {
+      const gradient = layer.createRadialGradient(light.x, light.y, 0, light.x, light.y, light.radius);
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+      gradient.addColorStop(0.55, 'rgba(0, 0, 0, 0.72)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      layer.fillStyle = gradient;
+      layer.beginPath();
+      layer.arc(light.x, light.y, light.radius, 0, Math.PI * 2);
+      layer.fill();
+    }
+    return true;
+  }
+
+  private paintOverlay(draw: () => void): void {
+    const previous = this.ctx.globalCompositeOperation;
+    this.ctx.globalCompositeOperation = 'overlay';
+    try {
+      draw();
+    } finally {
+      this.ctx.globalCompositeOperation = previous;
+    }
+  }
+
   dispose(): void {
     this.canvas.removeEventListener?.('pointermove', this.boundPointerMove);
     this.canvas.removeEventListener?.('pointerleave', this.boundPointerLeave);
     this.voxels = [];
+    this.ambientCanvas = null;
   }
 }
