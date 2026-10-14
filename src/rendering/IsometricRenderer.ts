@@ -47,6 +47,45 @@ interface IsometricPoint {
   depth: number;
 }
 
+/** One drawable in the per-frame painter queue. */
+interface IsoRenderItem {
+  kind: IsoRenderKind;
+  gridX: number;
+  gridY: number;
+  zLayer: number;
+  depth: number;
+  voxel: Voxel;
+}
+
+type IsoRenderKind =
+  | 'terrainDecal'
+  | 'road'
+  | 'crop'
+  | 'ore'
+  | 'treeTrunk'
+  | 'treeTop'
+  | 'animal'
+  | 'player'
+  | 'vehicle'
+  | 'building';
+
+/**
+ * Order within a single tile. One grid step is 1000, so a nearer tile
+ * always paints later and a tree top cannot leap over the next tile.
+ */
+const RENDER_Z_LAYER: Record<IsoRenderKind, number> = {
+  terrainDecal: 0,
+  road: 20,
+  crop: 100,
+  ore: 150,
+  treeTrunk: 200,
+  animal: 300,
+  player: 400,
+  vehicle: 450,
+  building: 500,
+  treeTop: 800,
+};
+
 const liveRenderers = new Set<IsometricRenderer>();
 
 /** Isometric renderers currently constructed. Store world commits mark these dirty. */
@@ -58,6 +97,8 @@ export class IsometricRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private voxels: Voxel[] = [];
+  /** Painter order for this frame. depth = (gridX + gridY) * 1000 + zLayer. */
+  private renderQueue: IsoRenderItem[] = [];
   /** First render builds; later renders reuse voxels until markDirty(). */
   private worldDirty = true;
   private camera = { x: 0, y: 0, z: 0 };
@@ -211,18 +252,6 @@ export class IsometricRenderer {
 
     // Add Vehicles
     this.buildVehicles(world);
-
-    // Sort voxels by depth for proper rendering order
-    // Order: lower Z first, then by X+Y
-    this.voxels.sort((a, b) => {
-      // First compare Z levels
-      if (a.z !== b.z) return a.z - b.z;
-
-      // Then compare isometric depth (back to front)
-      const depthA = a.x + a.y;
-      const depthB = b.x + b.y;
-      return depthA - depthB;
-    });
   }
 
   private buildTerrain(world: GameWorld): void {
@@ -892,7 +921,12 @@ export class IsometricRenderer {
   }
 
   private drawTree(iso: IsometricPoint, type: string, voxel: Voxel): void {
-    const time = Date.now();
+    this.drawTreeLayer(iso, type, voxel, 'trunk');
+    this.drawTreeLayer(iso, type, voxel, 'top');
+  }
+
+  /** Trunk (and shadow) or canopy. The queue draws these at different zLayers. */
+  private drawTreeLayer(iso: IsometricPoint, type: string, voxel: Voxel, layer: 'trunk' | 'top'): void {
     const fruitStage = voxel.treeFruitStage || 0;
 
     // Calculate wind at this position for sway
@@ -909,7 +943,9 @@ export class IsometricRenderer {
       { id: `${prefix}_canopy_back`, type: 'canopy', swayScale: 1.0 },
       { id: `${prefix}_canopy_front`, type: 'canopy', swayScale: 1.2 },
       { id: `${prefix}_fruit`, type: 'fruit', swayScale: 1.2, visible: fruitStage > 0 }
-    ];
+    ].filter((part) => layer === 'trunk'
+      ? part.type === 'shadow' || part.type === 'trunk'
+      : part.type === 'canopy' || part.type === 'fruit');
 
     this.ctx.save();
 
@@ -1180,10 +1216,61 @@ export class IsometricRenderer {
     this.ctx.restore();
   }
 
+  private renderKind(voxel: Voxel): IsoRenderKind | null {
+    if (voxel.type === 'grass' || voxel.type === 'dirt') return 'terrainDecal';
+    if (voxel.type === 'road' && (voxel.roadGrade || voxel.roadType)) return 'road';
+    if (voxel.type === 'crop' && voxel.cropType) return 'crop';
+    if (voxel.type === 'ore' && voxel.oreType) return 'ore';
+    if (voxel.type === 'animal' && voxel.animalType) return 'animal';
+    if (voxel.type === 'player') return 'player';
+    if (voxel.type === 'vehicle' && voxel.vehicleType) return 'vehicle';
+    if (voxel.type === 'building' && voxel.buildingType) return 'building';
+    return null;
+  }
+
+  private enqueue(renderQueue: IsoRenderItem[], voxel: Voxel, kind: IsoRenderKind): void {
+    const gridX = voxel.x;
+    const gridY = voxel.y;
+    const zLayer = RENDER_Z_LAYER[kind];
+    const depth = (gridX + gridY) * 1000 + zLayer;
+    renderQueue.push({ kind, gridX, gridY, zLayer, depth, voxel });
+  }
+
+  /** Terrain decals, crops, buildings, player, animals, tree trunks, and tree tops. */
+  private collectRenderQueue(): IsoRenderItem[] {
+    const renderQueue: IsoRenderItem[] = [];
+    for (const voxel of this.voxels) {
+      if (voxel.type === 'wood' && voxel.treeType) {
+        this.enqueue(renderQueue, voxel, 'treeTrunk');
+        this.enqueue(renderQueue, voxel, 'treeTop');
+        continue;
+      }
+      const kind = this.renderKind(voxel);
+      if (kind) this.enqueue(renderQueue, voxel, kind);
+    }
+    return renderQueue;
+  }
+
+  private drawQueued(item: IsoRenderItem): void {
+    if (item.kind === 'treeTrunk' || item.kind === 'treeTop') {
+      const voxel = item.voxel;
+      if (!voxel.treeType) return;
+      const iso = this.worldToIsometric(voxel.x, voxel.y, voxel.z);
+      this.ctx.save();
+      this.drawTreeLayer(iso, voxel.treeType, voxel, item.kind === 'treeTrunk' ? 'trunk' : 'top');
+      this.ctx.restore();
+      return;
+    }
+    this.drawVoxel(item.voxel);
+  }
+
   private drawVoxels(): void {
-    this.voxels.forEach(voxel => {
-      this.drawVoxel(voxel);
-    });
+    const renderQueue = this.collectRenderQueue();
+    renderQueue.sort((a, b) => a.depth - b.depth);
+    this.renderQueue = renderQueue;
+    for (const item of renderQueue) {
+      this.drawQueued(item);
+    }
   }
 
   /**
