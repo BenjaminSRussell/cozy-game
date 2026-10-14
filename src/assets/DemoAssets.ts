@@ -1058,43 +1058,43 @@ export class DemoAssets {
   }
 
   static createHouseBuilding(): string {
-    return '/assets/buildings/house.svg';
+    return require('../../assets/buildings/house.svg') as string;
   }
 
   static createBarnBuilding(): string {
-    return '/assets/buildings/barn.svg';
+    return require('../../assets/buildings/barn.svg') as string;
   }
 
   static createShedBuilding(): string {
-    return '/assets/buildings/shed.svg';
+    return require('../../assets/buildings/shed.svg') as string;
   }
 
   static createWindmillBuilding(): string {
-    return '/assets/buildings/windmill.svg';
+    return require('../../assets/buildings/windmill.svg') as string;
   }
 
   static createGreenhouseBuilding(): string {
-    return '/assets/buildings/greenhouse.svg';
+    return require('../../assets/buildings/greenhouse.svg') as string;
   }
 
   static createWellBuilding(): string {
-    return '/assets/buildings/well.svg';
+    return require('../../assets/buildings/well.svg') as string;
   }
 
   static createFenceBuilding(): string {
-    return '/assets/buildings/fence.svg';
+    return require('../../assets/buildings/fence.svg') as string;
   }
 
   static createTowerBuilding(): string {
-    return '/assets/buildings/tower.svg';
+    return require('../../assets/buildings/tower.svg') as string;
   }
 
   static createBridgeBuilding(): string {
-    return '/assets/buildings/bridge.svg';
+    return require('../../assets/buildings/bridge.svg') as string;
   }
 
   static createMarketBuilding(): string {
-    return '/assets/buildings/market.svg';
+    return require('../../assets/buildings/market.svg') as string;
   }
 
   static createPlaceholderBuilding(): string {
