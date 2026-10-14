@@ -14,6 +14,7 @@ import { AssetManager } from '../systems/AssetManager';
 import { CraftingMenu } from './CraftingMenu';
 import { theme } from '../styles/theme';
 import { CozyIconButton } from './CozyIconButton';
+import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -36,8 +37,24 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const [selectedRoadType, setSelectedRoadType] = useState<'gravel' | 'paved'>('gravel');
   const [selectedVehicleType, setSelectedVehicleType] = useState<'tractor' | 'truck'>('tractor');
   const [notification, setNotification] = useState('');
+  const notificationTimerRef = useRef<NotificationTimerId>(null);
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
   const [showCrafting, setShowCrafting] = useState(false);
+
+  const showNotification = (msg: string, durationMs = 2000) => {
+    setNotification(msg);
+    notificationTimerRef.current = scheduleNotificationHide(
+      notificationTimerRef.current,
+      () => setNotification(''),
+      durationMs,
+    );
+  };
+
+  useEffect(() => {
+    return () => {
+      clearNotificationTimer(notificationTimerRef.current);
+    };
+  }, []);
 
   const CROP_TYPES = {
     wheat: { name: 'Wheat', emoji: '🌾', growthDays: 3, sellValue: 50, color: '#DAA520' },
@@ -143,13 +160,11 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     if (!world) return false;
     const tool = world.player.tools[type];
     if (!tool) {
-      setNotification(`❌ No ${type} equipped!`);
-      setTimeout(() => setNotification(''), 2000);
+      showNotification(`❌ No ${type} equipped!`);
       return false;
     }
     if (tool.durability <= 0) {
-      setNotification(`❌ ${tool.name} is broken!`);
-      setTimeout(() => setNotification(''), 2000);
+      showNotification(`❌ ${tool.name} is broken!`);
       return false;
     }
     return true;
@@ -159,29 +174,25 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     if (selectedAction === 'plant' && !plot.crop) {
       plantCrop(plot.id, selectedCropType);
       const cropInfo = CROP_TYPES[selectedCropType];
-      setNotification(`🌱 Planted ${cropInfo.name}!`);
+      showNotification(`🌱 Planted ${cropInfo.name}!`);
       addExperience(10);
       setSelectedAction(null);
-      setTimeout(() => setNotification(''), 2000);
     } else if (selectedAction === 'water' && plot.crop) {
       if (!checkTool(ToolType.WATERING_CAN)) return;
       waterCrop(plot.id);
-      setNotification('💧 Watered crop!');
+      showNotification('💧 Watered crop!');
       addExperience(5);
       setSelectedAction(null);
-      setTimeout(() => setNotification(''), 2000);
     } else if (selectedAction === 'harvest' && plot.crop && plot.crop.stage === CropStage.HARVESTABLE) {
       const cropInfo = CROP_TYPES[selectedCropType];
       harvestCrop(plot.id);
       addCoins(cropInfo.sellValue);
       addExperience(25);
-      setNotification(`🌾 Harvested ${plot.crop.type}! +${cropInfo.sellValue} coins!`);
+      showNotification(`🌾 Harvested ${plot.crop.type}! +${cropInfo.sellValue} coins!`);
       setSelectedAction(null);
-      setTimeout(() => setNotification(''), 2000);
     } else if (selectedAction === 'fertilize' && plot.tilled) {
       if (plot.fertilizerType) {
-        setNotification('❌ Fertilizer already applied!');
-        setTimeout(() => setNotification(''), 2000);
+        showNotification('❌ Fertilizer already applied!');
         return;
       }
 
@@ -192,15 +203,13 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       );
 
       if (!fertilizerItem) {
-        setNotification(`❌ No ${selectedFertilizerType} fertilizer!`);
-        setTimeout(() => setNotification(''), 2000);
+        showNotification(`❌ No ${selectedFertilizerType} fertilizer!`);
         return;
       }
 
       applyFertilizer(plot.id, fertilizerItem.id);
-      setNotification(`🩹 Applied ${selectedFertilizerType} fertilizer!`);
+      showNotification(`🩹 Applied ${selectedFertilizerType} fertilizer!`);
       setSelectedAction(null);
-      setTimeout(() => setNotification(''), 2000);
     } else if (plot.crop) {
       // Show crop info
       Alert.alert(
@@ -219,13 +228,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
       if (existingRoad) {
         upgradeRoad({ x: voxel.x, y: voxel.y });
-        setNotification('✨ Road Upgraded!');
+        showNotification('✨ Road Upgraded!');
       } else {
         buildRoad({ x: voxel.x, y: voxel.y }, selectedRoadType, 1);
-        setNotification(`🛣️ Built ${selectedRoadType} road!`);
+        showNotification(`🛣️ Built ${selectedRoadType} road!`);
         addExperience(5);
       }
-      setTimeout(() => setNotification(''), 2000);
       // Don't clear selectedAction so user can build multiple roads
     }
     else if (selectedAction === 'spawn_vehicle') {
@@ -241,8 +249,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     } else if (selectedAction === 'build') {
       const buildingInfo = BUILDING_TYPES[selectedBuildingType];
       if (world && world.player.coins < buildingInfo.cost) {
-        setNotification(`❌ Not enough coins! Need ${buildingInfo.cost}`);
-        setTimeout(() => setNotification(''), 2000);
+        showNotification(`❌ Not enough coins! Need ${buildingInfo.cost}`);
         return;
       }
 
@@ -259,27 +266,23 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       placeBuilding(newBuilding);
       addCoins(-buildingInfo.cost);
       addExperience(15);
-      setNotification(`🏗️ Built ${buildingInfo.name}!`);
+      showNotification(`🏗️ Built ${buildingInfo.name}!`);
       setSelectedAction(null);
-      setTimeout(() => setNotification(''), 2000);
     } else if (selectedAction === 'mine') {
       createOreDeposit({ x: voxel.x, y: voxel.y }, 'copper', 1);
-      setNotification('🌍 Created ore deposit!');
+      showNotification('🌍 Created ore deposit!');
       setSelectedAction(null);
-      setTimeout(() => setNotification(''), 2000);
     } else if (selectedAction === 'plant') {
       // Plant action on empty soil -> Till
       if (!checkTool(ToolType.HOE)) return;
       createFarmPlot({ x: voxel.x, y: voxel.y });
-      setNotification('📍 Tilled soil!');
-      setTimeout(() => setNotification(''), 2000);
+      showNotification('📍 Tilled soil!');
     }
   };
 
   const handleMining = () => {
     if (!world || world.oreDeposits.length === 0) {
-      setNotification('❌ No ore deposits found!');
-      setTimeout(() => setNotification(''), 2000);
+      showNotification('❌ No ore deposits found!');
       return;
     }
 
@@ -290,9 +293,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       mineOre(deposit.id);
       addCoins(75);
       addExperience(20);
-      setNotification(`⛏️ Mined ${deposit.oreType}! +75 coins`);
+      showNotification(`⛏️ Mined ${deposit.oreType}! +75 coins`);
       setSelectedAction(null);
-      setTimeout(() => setNotification(''), 2000);
     }
   };
 
