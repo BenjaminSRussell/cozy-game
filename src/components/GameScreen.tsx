@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Modal, Image as RNImage } from 'react-native';
 import { useGameStore } from '../store/gameStore';
 import { CropStage, DamBuilding } from '../types/game';
 import { DrawingScreen } from './DrawingScreen';
@@ -19,116 +19,304 @@ interface GameScreenProps {
 }
 
 /**
- * SVG asset paths for game elements
- * Maps game types to their corresponding SVG files
+ * Metro asset ids for crop, building, and tile art.
+ * require() must be a static literal or Metro will not bundle the file.
+ * Paths are relative to this file (src/components).
+ * assets/crops/<name>.svg is absent; full-grown icons live in grains, fruits, vegetables, and berries.
  */
-const SVG_ASSETS = {
+type SvgSource = number | string;
+
+const SVG_ASSETS: { [key: string]: number } = {
   // Crops
-  wheat: './assets/crops/wheat.svg',
-  carrot: './assets/crops/carrot.svg',
-  tomato: './assets/crops/tomato.svg',
-  corn: './assets/crops/corn.svg',
-  apple: './assets/crops/apple.svg',
-  asparagus: './assets/crops/asparagus.svg',
-  blueberry: './assets/crops/blueberry.svg',
-  broccoli: './assets/crops/broccoli.svg',
-  cabbage: './assets/crops/cabbage.svg',
-  cherry: './assets/crops/cherry.svg',
-  cucumber: './assets/crops/cucumber.svg',
-  garlic: './assets/crops/garlic.svg',
-  grape: './assets/crops/grape.svg',
-  lettuce: './assets/crops/lettuce.svg',
-  mushroom: './assets/crops/mushroom.svg',
-  onion: './assets/crops/onion.svg',
-  peach: './assets/crops/peach.svg',
-  pear: './assets/crops/pear.svg',
-  pepper: './assets/crops/pepper.svg',
-  potato: './assets/crops/potato.svg',
-  pumpkin: './assets/crops/pumpkin.svg',
-  radish: './assets/crops/radish.svg',
-  spinach: './assets/crops/spinach.svg',
-  strawberry: './assets/crops/strawberry.svg',
-  watermelon: './assets/crops/watermelon.svg',
+  wheat: require('../../assets/crops/grains/wheat.svg'),
+  carrot: require('../../assets/crops/vegetables/carrot.svg'),
+  tomato: require('../../assets/crops/vegetables/tomato.svg'),
+  corn: require('../../assets/crops/vegetables/corn.svg'),
+  apple: require('../../assets/crops/fruits/apple.svg'),
+  asparagus: require('../../assets/crops/vegetables/asparagus.svg'),
+  blueberry: require('../../assets/crops/berries/blueberry.svg'),
+  broccoli: require('../../assets/crops/vegetables/broccoli.svg'),
+  cabbage: require('../../assets/crops/vegetables/cabbage.svg'),
+  cherry: require('../../assets/crops/fruits/cherry.svg'),
+  cucumber: require('../../assets/crops/vegetables/cucumber.svg'),
+  garlic: require('../../assets/crops/vegetables/garlic.svg'),
+  grape: require('../../assets/crops/berries/grape.svg'),
+  lettuce: require('../../assets/crops/vegetables/lettuce.svg'),
+  mushroom: require('../../assets/crops/vegetables/mushroom.svg'),
+  onion: require('../../assets/crops/vegetables/onion.svg'),
+  peach: require('../../assets/crops/fruits/peach.svg'),
+  pear: require('../../assets/crops/fruits/pear.svg'),
+  pepper: require('../../assets/crops/vegetables/pepper.svg'),
+  potato: require('../../assets/crops/vegetables/potato.svg'),
+  pumpkin: require('../../assets/crops/vegetables/pumpkin.svg'),
+  radish: require('../../assets/crops/vegetables/radish.svg'),
+  spinach: require('../../assets/crops/vegetables/spinach.svg'),
+  strawberry: require('../../assets/crops/fruits/strawberry.svg'),
+  watermelon: require('../../assets/crops/fruits/watermelon.svg'),
 
   // Phase-specific crop assets
-  'apple_seed': './assets/crops/phase1/apple.svg',
-  'carrot_seed': './assets/crops/phase1/carrot.svg',
-  'tomato_seed': './assets/crops/phase1/tomato.svg',
-  'corn_seed': './assets/crops/phase1/corn.svg',
-  'asparagus_seed': './assets/crops/phase1/asparagus.svg',
-  'blueberry_seed': './assets/crops/phase1/blueberry.svg',
-  'broccoli_seed': './assets/crops/phase1/broccoli.svg',
-  'cabbage_seed': './assets/crops/phase1/cabbage.svg',
-  'cherry_seed': './assets/crops/phase1/cherry.svg',
-  'cucumber_seed': './assets/crops/phase1/cucumber.svg',
-  'garlic_seed': './assets/crops/phase1/garlic.svg',
-  'grape_seed': './assets/crops/phase1/grape.svg',
-  'lettuce_seed': './assets/crops/phase1/lettuce.svg',
-  'mushroom_seed': './assets/crops/phase1/mushroom.svg',
-  'onion_seed': './assets/crops/phase1/onion.svg',
-  'peach_seed': './assets/crops/phase1/peach.svg',
-  'pear_seed': './assets/crops/phase1/pear.svg',
-  'pepper_seed': './assets/crops/phase1/pepper.svg',
-  'potato_seed': './assets/crops/phase1/potato.svg',
-  'pumpkin_seed': './assets/crops/phase1/pumpkin.svg',
-  'radish_seed': './assets/crops/phase1/radish.svg',
-  'spinach_seed': './assets/crops/phase1/spinach.svg',
-  'strawberry_seed': './assets/crops/phase1/strawberry.svg',
-  'watermelon_seed': './assets/crops/phase1/watermelon.svg',
-  'wheat_seed': './assets/crops/phase1/wheat.svg',
+  apple_seed: require('../../assets/crops/phase1/apple.svg'),
+  carrot_seed: require('../../assets/crops/phase1/carrot.svg'),
+  tomato_seed: require('../../assets/crops/phase1/tomato.svg'),
+  corn_seed: require('../../assets/crops/phase1/corn.svg'),
+  asparagus_seed: require('../../assets/crops/phase1/asparagus.svg'),
+  blueberry_seed: require('../../assets/crops/phase1/blueberry.svg'),
+  broccoli_seed: require('../../assets/crops/phase1/broccoli.svg'),
+  cabbage_seed: require('../../assets/crops/phase1/cabbage.svg'),
+  cherry_seed: require('../../assets/crops/phase1/cherry.svg'),
+  cucumber_seed: require('../../assets/crops/phase1/cucumber.svg'),
+  garlic_seed: require('../../assets/crops/phase1/garlic.svg'),
+  grape_seed: require('../../assets/crops/phase1/grape.svg'),
+  lettuce_seed: require('../../assets/crops/phase1/lettuce.svg'),
+  mushroom_seed: require('../../assets/crops/phase1/mushroom.svg'),
+  onion_seed: require('../../assets/crops/phase1/onion.svg'),
+  peach_seed: require('../../assets/crops/phase1/peach.svg'),
+  pear_seed: require('../../assets/crops/phase1/pear.svg'),
+  pepper_seed: require('../../assets/crops/phase1/pepper.svg'),
+  potato_seed: require('../../assets/crops/phase1/potato.svg'),
+  pumpkin_seed: require('../../assets/crops/phase1/pumpkin.svg'),
+  radish_seed: require('../../assets/crops/phase1/radish.svg'),
+  spinach_seed: require('../../assets/crops/phase1/spinach.svg'),
+  strawberry_seed: require('../../assets/crops/phase1/strawberry.svg'),
+  watermelon_seed: require('../../assets/crops/phase1/watermelon.svg'),
+  wheat_seed: require('../../assets/crops/phase1/wheat.svg'),
 
   // Buildings
-  barn: './assets/buildings/barn.svg',
-  shed: './assets/buildings/shed.svg',
-  house: './assets/buildings/house.svg',
-  fence: './assets/buildings/fence.svg',
-  small_dam: './assets/buildings/well.svg',
-  medium_dam: './assets/buildings/bridge.svg',
-  large_dam: './assets/buildings/tower.svg',
+  barn: require('../../assets/buildings/barn.svg'),
+  shed: require('../../assets/buildings/shed.svg'),
+  house: require('../../assets/buildings/house.svg'),
+  fence: require('../../assets/buildings/fence.svg'),
+  small_dam: require('../../assets/buildings/well.svg'),
+  medium_dam: require('../../assets/buildings/bridge.svg'),
+  large_dam: require('../../assets/buildings/tower.svg'),
 
   // Decorations
-  tree_oak: './assets/decorations/tree_oak.svg',
-  bench: './assets/decorations/bench.svg',
-  lamp: './assets/decorations/lamp.svg',
+  tree_oak: require('../../assets/decorations/tree_oak.svg'),
+  bench: require('../../assets/decorations/bench.svg'),
+  lamp: require('../../assets/decorations/lamp.svg'),
 
   // Land types
-  grassland: './assets/tiles/grass.svg',
-  forest: './assets/decorations/tree_oak.svg',
-  riverfront: './assets/tiles/water.svg',
-  hillside: './assets/tiles/dirt.svg',
+  grassland: require('../../assets/tiles/grass.svg'),
+  forest: require('../../assets/decorations/tree_oak.svg'),
+  riverfront: require('../../assets/tiles/water.svg'),
+  hillside: require('../../assets/tiles/dirt.svg'),
 
   // Tiles
-  grass: './assets/tiles/grass.svg',
-  dirt: './assets/tiles/dirt.svg',
-  water: './assets/tiles/water.svg',
+  grass: require('../../assets/tiles/grass.svg'),
+  dirt: require('../../assets/tiles/dirt.svg'),
+  water: require('../../assets/tiles/water.svg'),
 
   // Grass variations for overgrowth phases
-  grass_fresh: './assets/tiles/grass.svg',
-  grass_growing: './assets/decorations/tree_oak.svg',
-  grass_overgrown: './assets/decorations/tree_oak.svg',
+  grass_fresh: require('../../assets/tiles/grass.svg'),
+  grass_growing: require('../../assets/decorations/tree_oak.svg'),
+  grass_overgrown: require('../../assets/decorations/tree_oak.svg'),
 
   // Seasonal flowers
-  flower_pink: './assets/seasons/spring/flower_pink.svg',
-  flower_red: './assets/seasons/spring/flower_red.svg',
-  flower_white: './assets/seasons/spring/flower_white.svg',
-  flower_yellow: './assets/seasons/spring/flower_yellow.svg',
+  flower_pink: require('../../assets/seasons/spring/flower_pink.svg'),
+  flower_red: require('../../assets/seasons/spring/flower_red.svg'),
+  flower_white: require('../../assets/seasons/spring/flower_white.svg'),
+  flower_yellow: require('../../assets/seasons/spring/flower_yellow.svg'),
 
-  // Seasonal effects - create these if they don't exist
-  heat_shimmer: './assets/tiles/water.svg', // temporary fallback
-  sun_glare: './assets/tiles/grass.svg', // temporary fallback
-  leaf_orange: './assets/crops/carrot.svg', // temporary fallback
-  leaf_red: './assets/crops/tomato.svg', // temporary fallback
-  leaf_gold: './assets/crops/corn.svg', // temporary fallback
-  leaf_brown: './assets/tiles/dirt.svg', // temporary fallback
-  snow_flake: './assets/tiles/grass.svg', // temporary fallback
-  snow_coverage: './assets/tiles/water.svg', // temporary fallback
+  // Seasonal effects
+  heat_shimmer: require('../../assets/seasons/summer/heat_shimmer.svg'),
+  sun_glare: require('../../assets/seasons/summer/sun_glare.svg'),
+  leaf_orange: require('../../assets/seasons/fall/leaf_orange.svg'),
+  leaf_red: require('../../assets/seasons/fall/leaf_red.svg'),
+  leaf_gold: require('../../assets/seasons/fall/leaf_gold.svg'),
+  leaf_brown: require('../../assets/seasons/fall/leaf_brown.svg'),
+  snow_flake: require('../../assets/seasons/winter/snow_flake.svg'),
+  snow_coverage: require('../../assets/seasons/winter/snow_coverage.svg'),
 
-  // Tools - create these if they don't exist
-  rake: './assets/tiles/dirt.svg', // temporary fallback
-  snow_shovel: './assets/tiles/water.svg', // temporary fallback
-  lawn_mower_basic: './assets/buildings/shed.svg', // temporary fallback
-  lawn_mower_pro: './assets/buildings/barn.svg', // temporary fallback
-  lawn_mower_riding: './assets/buildings/house.svg', // temporary fallback
+  // Tools. No lawn-mower SVG exists; those keys keep the building stand-ins.
+  rake: require('../../assets/tools/rake.svg'),
+  snow_shovel: require('../../assets/tools/snow_shovel.svg'),
+  lawn_mower_basic: require('../../assets/buildings/shed.svg'),
+  lawn_mower_pro: require('../../assets/buildings/barn.svg'),
+  lawn_mower_riding: require('../../assets/buildings/house.svg'),
+};
+
+/**
+ * Growth-stage art. Template strings cannot be required, so each phase is static.
+ * assets/crops/death/placeholder.svg is absent; dead crops use death/<name>.svg.
+ */
+const CROP_GROWTH: {
+  [crop: string]: { seed: number; sprout: number; growing: number; mature: number; dead: number };
+} = {
+  wheat: {
+    seed: require('../../assets/crops/phase1/wheat.svg'),
+    sprout: require('../../assets/crops/phase2/wheat.svg'),
+    growing: require('../../assets/crops/phase3/wheat.svg'),
+    mature: require('../../assets/crops/phase4/wheat.svg'),
+    dead: require('../../assets/crops/death/wheat.svg'),
+  },
+  carrot: {
+    seed: require('../../assets/crops/phase1/carrot.svg'),
+    sprout: require('../../assets/crops/phase2/carrot.svg'),
+    growing: require('../../assets/crops/phase3/carrot.svg'),
+    mature: require('../../assets/crops/phase4/carrot.svg'),
+    dead: require('../../assets/crops/death/carrot.svg'),
+  },
+  tomato: {
+    seed: require('../../assets/crops/phase1/tomato.svg'),
+    sprout: require('../../assets/crops/phase2/tomato.svg'),
+    growing: require('../../assets/crops/phase3/tomato.svg'),
+    mature: require('../../assets/crops/phase4/tomato.svg'),
+    dead: require('../../assets/crops/death/tomato.svg'),
+  },
+  corn: {
+    seed: require('../../assets/crops/phase1/corn.svg'),
+    sprout: require('../../assets/crops/phase2/corn.svg'),
+    growing: require('../../assets/crops/phase3/corn.svg'),
+    mature: require('../../assets/crops/phase4/corn.svg'),
+    dead: require('../../assets/crops/death/corn.svg'),
+  },
+  apple: {
+    seed: require('../../assets/crops/phase1/apple.svg'),
+    sprout: require('../../assets/crops/phase2/apple.svg'),
+    growing: require('../../assets/crops/phase3/apple.svg'),
+    mature: require('../../assets/crops/phase4/apple.svg'),
+    dead: require('../../assets/crops/death/apple.svg'),
+  },
+  asparagus: {
+    seed: require('../../assets/crops/phase1/asparagus.svg'),
+    sprout: require('../../assets/crops/phase2/asparagus.svg'),
+    growing: require('../../assets/crops/phase3/asparagus.svg'),
+    mature: require('../../assets/crops/phase4/asparagus.svg'),
+    dead: require('../../assets/crops/death/asparagus.svg'),
+  },
+  blueberry: {
+    seed: require('../../assets/crops/phase1/blueberry.svg'),
+    sprout: require('../../assets/crops/phase2/blueberry.svg'),
+    growing: require('../../assets/crops/phase3/blueberry.svg'),
+    mature: require('../../assets/crops/phase4/blueberry.svg'),
+    dead: require('../../assets/crops/death/blueberry.svg'),
+  },
+  broccoli: {
+    seed: require('../../assets/crops/phase1/broccoli.svg'),
+    sprout: require('../../assets/crops/phase2/broccoli.svg'),
+    growing: require('../../assets/crops/phase3/broccoli.svg'),
+    mature: require('../../assets/crops/phase4/broccoli.svg'),
+    dead: require('../../assets/crops/death/broccoli.svg'),
+  },
+  cabbage: {
+    seed: require('../../assets/crops/phase1/cabbage.svg'),
+    sprout: require('../../assets/crops/phase2/cabbage.svg'),
+    growing: require('../../assets/crops/phase3/cabbage.svg'),
+    mature: require('../../assets/crops/phase4/cabbage.svg'),
+    dead: require('../../assets/crops/death/cabbage.svg'),
+  },
+  cherry: {
+    seed: require('../../assets/crops/phase1/cherry.svg'),
+    sprout: require('../../assets/crops/phase2/cherry.svg'),
+    growing: require('../../assets/crops/phase3/cherry.svg'),
+    mature: require('../../assets/crops/phase4/cherry.svg'),
+    dead: require('../../assets/crops/death/cherry.svg'),
+  },
+  cucumber: {
+    seed: require('../../assets/crops/phase1/cucumber.svg'),
+    sprout: require('../../assets/crops/phase2/cucumber.svg'),
+    growing: require('../../assets/crops/phase3/cucumber.svg'),
+    mature: require('../../assets/crops/phase4/cucumber.svg'),
+    dead: require('../../assets/crops/death/cucumber.svg'),
+  },
+  garlic: {
+    seed: require('../../assets/crops/phase1/garlic.svg'),
+    sprout: require('../../assets/crops/phase2/garlic.svg'),
+    growing: require('../../assets/crops/phase3/garlic.svg'),
+    mature: require('../../assets/crops/phase4/garlic.svg'),
+    dead: require('../../assets/crops/death/garlic.svg'),
+  },
+  grape: {
+    seed: require('../../assets/crops/phase1/grape.svg'),
+    sprout: require('../../assets/crops/phase2/grape.svg'),
+    growing: require('../../assets/crops/phase3/grape.svg'),
+    mature: require('../../assets/crops/phase4/grape.svg'),
+    dead: require('../../assets/crops/death/grape.svg'),
+  },
+  lettuce: {
+    seed: require('../../assets/crops/phase1/lettuce.svg'),
+    sprout: require('../../assets/crops/phase2/lettuce.svg'),
+    growing: require('../../assets/crops/phase3/lettuce.svg'),
+    mature: require('../../assets/crops/phase4/lettuce.svg'),
+    dead: require('../../assets/crops/death/lettuce.svg'),
+  },
+  mushroom: {
+    seed: require('../../assets/crops/phase1/mushroom.svg'),
+    sprout: require('../../assets/crops/phase2/mushroom.svg'),
+    growing: require('../../assets/crops/phase3/mushroom.svg'),
+    mature: require('../../assets/crops/phase4/mushroom.svg'),
+    dead: require('../../assets/crops/death/mushroom.svg'),
+  },
+  onion: {
+    seed: require('../../assets/crops/phase1/onion.svg'),
+    sprout: require('../../assets/crops/phase2/onion.svg'),
+    growing: require('../../assets/crops/phase3/onion.svg'),
+    mature: require('../../assets/crops/phase4/onion.svg'),
+    dead: require('../../assets/crops/death/onion.svg'),
+  },
+  peach: {
+    seed: require('../../assets/crops/phase1/peach.svg'),
+    sprout: require('../../assets/crops/phase2/peach.svg'),
+    growing: require('../../assets/crops/phase3/peach.svg'),
+    mature: require('../../assets/crops/phase4/peach.svg'),
+    dead: require('../../assets/crops/death/peach.svg'),
+  },
+  pear: {
+    seed: require('../../assets/crops/phase1/pear.svg'),
+    sprout: require('../../assets/crops/phase2/pear.svg'),
+    growing: require('../../assets/crops/phase3/pear.svg'),
+    mature: require('../../assets/crops/phase4/pear.svg'),
+    dead: require('../../assets/crops/death/pear.svg'),
+  },
+  pepper: {
+    seed: require('../../assets/crops/phase1/pepper.svg'),
+    sprout: require('../../assets/crops/phase2/pepper.svg'),
+    growing: require('../../assets/crops/phase3/pepper.svg'),
+    mature: require('../../assets/crops/phase4/pepper.svg'),
+    dead: require('../../assets/crops/death/pepper.svg'),
+  },
+  potato: {
+    seed: require('../../assets/crops/phase1/potato.svg'),
+    sprout: require('../../assets/crops/phase2/potato.svg'),
+    growing: require('../../assets/crops/phase3/potato.svg'),
+    mature: require('../../assets/crops/phase4/potato.svg'),
+    dead: require('../../assets/crops/death/potato.svg'),
+  },
+  pumpkin: {
+    seed: require('../../assets/crops/phase1/pumpkin.svg'),
+    sprout: require('../../assets/crops/phase2/pumpkin.svg'),
+    growing: require('../../assets/crops/phase3/pumpkin.svg'),
+    mature: require('../../assets/crops/phase4/pumpkin.svg'),
+    dead: require('../../assets/crops/death/pumpkin.svg'),
+  },
+  radish: {
+    seed: require('../../assets/crops/phase1/radish.svg'),
+    sprout: require('../../assets/crops/phase2/radish.svg'),
+    growing: require('../../assets/crops/phase3/radish.svg'),
+    mature: require('../../assets/crops/phase4/radish.svg'),
+    dead: require('../../assets/crops/death/radish.svg'),
+  },
+  spinach: {
+    seed: require('../../assets/crops/phase1/spinach.svg'),
+    sprout: require('../../assets/crops/phase2/spinach.svg'),
+    growing: require('../../assets/crops/phase3/spinach.svg'),
+    mature: require('../../assets/crops/phase4/spinach.svg'),
+    dead: require('../../assets/crops/death/spinach.svg'),
+  },
+  strawberry: {
+    seed: require('../../assets/crops/phase1/strawberry.svg'),
+    sprout: require('../../assets/crops/phase2/strawberry.svg'),
+    growing: require('../../assets/crops/phase3/strawberry.svg'),
+    mature: require('../../assets/crops/phase4/strawberry.svg'),
+    dead: require('../../assets/crops/death/strawberry.svg'),
+  },
+  watermelon: {
+    seed: require('../../assets/crops/phase1/watermelon.svg'),
+    sprout: require('../../assets/crops/phase2/watermelon.svg'),
+    growing: require('../../assets/crops/phase3/watermelon.svg'),
+    mature: require('../../assets/crops/phase4/watermelon.svg'),
+    dead: require('../../assets/crops/death/watermelon.svg'),
+  },
 };
 
 /**
@@ -206,10 +394,10 @@ const BUILDING_TYPES = {
  * Ores provide valuable resources through the mining system
  */
 const ORE_TYPES = {
-  copper: { name: 'Copper', svg: '/assets/tiles/dirt.svg', sellValue: 75, rarity: 'common' },
-  silver: { name: 'Silver', svg: '/assets/tiles/water.svg', sellValue: 150, rarity: 'uncommon' },
-  gold: { name: 'Gold', svg: '/assets/tiles/grass.svg', sellValue: 300, rarity: 'rare' },
-  diamond: { name: 'Diamond', svg: '/assets/decorations/lamp.svg', sellValue: 500, rarity: 'legendary' },
+  copper: { name: 'Copper', svg: require('../../assets/tiles/dirt.svg'), sellValue: 75, rarity: 'common' },
+  silver: { name: 'Silver', svg: require('../../assets/tiles/water.svg'), sellValue: 150, rarity: 'uncommon' },
+  gold: { name: 'Gold', svg: require('../../assets/tiles/grass.svg'), sellValue: 300, rarity: 'rare' },
+  diamond: { name: 'Diamond', svg: require('../../assets/decorations/lamp.svg'), sellValue: 500, rarity: 'legendary' },
 };
 
 /** Type for valid crop options based on CROP_TYPES */
@@ -219,56 +407,82 @@ type CropType = keyof typeof CROP_TYPES;
 type BuildingType = keyof typeof BUILDING_TYPES;
 
 /**
- * Helper function to load and render SVG images
- * Returns an Image object that can be drawn on canvas
- */
-const loadSVG = (svgPath: string): Promise<HTMLImageElement> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = svgPath;
-  });
-};
-
-/**
- * Cache for loaded SVG images to avoid repeated loading
+ * Resolve a bundled asset id or an existing URI (data URL from DemoAssets) for canvas drawImage.
  */
 const svgCache: { [key: string]: HTMLImageElement | null } = {};
 
-/**
- * Get cached SVG image or load it if not cached
- */
-const getSVGImage = async (svgPath: string): Promise<HTMLImageElement | null> => {
-  if (svgCache[svgPath]) {
-    return svgCache[svgPath];
+const svgKey = (source: SvgSource): string => String(source);
+
+const svgUri = (source: SvgSource): string => {
+  if (typeof source === 'string') {
+    return source;
+  }
+  return RNImage.resolveAssetSource(source)?.uri ?? '';
+};
+
+const loadSVG = (source: SvgSource): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const uri = svgUri(source);
+    if (!uri) {
+      reject(new Error(`SVG asset has no URI: ${svgKey(source)}`));
+      return;
+    }
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to decode SVG: ${uri}`));
+    img.src = uri;
+  });
+};
+
+const getSVGImage = async (source: SvgSource): Promise<HTMLImageElement | null> => {
+  const key = svgKey(source);
+  if (svgCache[key]) {
+    return svgCache[key];
   }
 
   try {
-    const img = await loadSVG(svgPath);
-    svgCache[svgPath] = img;
+    const img = await loadSVG(source);
+    svgCache[key] = img;
     return img;
   } catch (error) {
-    console.error(`Failed to load SVG: ${svgPath}`, error);
+    console.error(`Failed to load SVG: ${key}`, error);
     return null;
   }
 };
 
+const cachedSvg = (source: SvgSource | null | undefined): HTMLImageElement | null => {
+  if (source == null || source === '') {
+    return null;
+  }
+  return svgCache[svgKey(source)] ?? null;
+};
+
 /**
- * Preload all SVG assets at component mount
+ * Preload bundled SVG assets at component mount.
  */
 const preloadCropSVGs = async () => {
-  const allSvgPaths = Object.values(SVG_ASSETS);
+  const sources: SvgSource[] = [...Object.values(SVG_ASSETS)];
+  for (const stages of Object.values(CROP_GROWTH)) {
+    sources.push(stages.seed, stages.sprout, stages.growing, stages.mature, stages.dead);
+  }
+  for (const ore of Object.values(ORE_TYPES)) {
+    sources.push(ore.svg);
+  }
 
-  const loadPromises = allSvgPaths.map(async (path) => {
-    try {
-      await getSVGImage(path);
-    } catch (error) {
-      console.warn(`Failed to preload SVG: ${path}`);
-    }
-  });
+  const pending = new Map<string, SvgSource>();
+  for (const source of sources) {
+    pending.set(svgKey(source), source);
+  }
 
-  await Promise.allSettled(loadPromises);
+  await Promise.allSettled(
+    [...pending.values()].map(async (source) => {
+      try {
+        await getSVGImage(source);
+      } catch (error) {
+        console.warn(`Failed to preload SVG: ${svgKey(source)}`);
+      }
+    })
+  );
 };
 
 /**
@@ -508,8 +722,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
             }
 
             // Draw grass SVG if loaded, otherwise fallback
-            if (svgsLoaded && grassSvg && svgCache[grassSvg]) {
-              const grassImage = svgCache[grassSvg];
+            if (svgsLoaded && grassSvg && cachedSvg(grassSvg)) {
+              const grassImage = cachedSvg(grassSvg);
               if (grassImage) {
                 ctx.save();
 
@@ -569,8 +783,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
                 const flowerSvg = getFlowerSvg(flowerColor);
 
                 // Try to render flower SVG, fallback to circle
-                if (svgsLoaded && flowerSvg && svgCache[flowerSvg]) {
-                  const flowerImage = svgCache[flowerSvg];
+                if (svgsLoaded && flowerSvg && cachedSvg(flowerSvg)) {
+                  const flowerImage = cachedSvg(flowerSvg);
                   if (flowerImage) {
                     ctx.save();
                     const flowerX = pixelX + random(8, grassTileSize - 8, seed + 400 + i);
@@ -613,8 +827,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
                 else if (leafColor === '#8B4513') leafSvg = SVG_ASSETS.leaf_brown;
 
                 // Try to render leaf SVG, fallback to rectangle
-                if (svgsLoaded && leafSvg && svgCache[leafSvg]) {
-                  const leafImage = svgCache[leafSvg];
+                if (svgsLoaded && leafSvg && cachedSvg(leafSvg)) {
+                  const leafImage = cachedSvg(leafSvg);
                   if (leafImage) {
                     ctx.save();
                     const leafX = pixelX + random(8, grassTileSize - 8, seed + 900 + i);
@@ -648,8 +862,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
 
               for (let i = 0; i < snowCount; i++) {
                 // Try to render snow flake SVG, fallback to coverage
-                if (svgsLoaded && SVG_ASSETS.snow_flake && svgCache[SVG_ASSETS.snow_flake]) {
-                  const snowImage = svgCache[SVG_ASSETS.snow_flake];
+                if (svgsLoaded && SVG_ASSETS.snow_flake && cachedSvg(SVG_ASSETS.snow_flake)) {
+                  const snowImage = cachedSvg(SVG_ASSETS.snow_flake);
                   if (snowImage) {
                     ctx.save();
                     const snowX = pixelX + random(8, grassTileSize - 8, seed + 1300 + i);
@@ -705,33 +919,34 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
         // Draw crop or seed
         if (plot.crop) {
           const cropInfo = CROP_TYPES[plot.crop.type as CropType] || CROP_TYPES.wheat;
+          const growth = CROP_GROWTH[plot.crop.type];
           let cropColor = '#FFD700';
-          let cropSvg = '';
+          let cropSvg: SvgSource | null = null;
 
           switch (plot.crop.stage) {
             case CropStage.SEED:
               cropColor = '#8B4513';
-              cropSvg = `./assets/crops/phase1/${plot.crop.type}.svg`; // Use phase-specific seed
+              cropSvg = growth?.seed ?? null;
               break;
             case CropStage.SPROUTING:
               cropColor = '#90EE90';
-              cropSvg = `./assets/crops/phase2/${plot.crop.type}.svg`; // Use phase2 sprout
+              cropSvg = growth?.sprout ?? null;
               break;
             case CropStage.GROWING:
               cropColor = '#7CB342';
-              cropSvg = `./assets/crops/phase3/${plot.crop.type}.svg`; // Use phase3 growing
+              cropSvg = growth?.growing ?? null;
               break;
             case CropStage.MATURE:
               cropColor = cropInfo.color;
-              cropSvg = `./assets/crops/phase4/${plot.crop.type}.svg`; // Use phase4 mature
+              cropSvg = growth?.mature ?? null;
               break;
             case CropStage.HARVESTABLE:
               cropColor = cropInfo.color;
-              cropSvg = cropInfo.svg; // Use full grown crop
+              cropSvg = cropInfo.svg;
               break;
             case CropStage.DEAD:
               cropColor = '#8B4513';
-              cropSvg = './assets/crops/death/placeholder.svg'; // Dead crop
+              cropSvg = growth?.dead ?? null;
               break;
           }
 
@@ -752,7 +967,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
 
           // Draw crop using SVG or fallback
           if (svgsLoaded && cropSvg) {
-            const cropImage = svgCache[cropSvg];
+            const cropImage = cachedSvg(cropSvg);
             if (cropImage) {
               ctx.save();
               ctx.globalAlpha = alpha;
@@ -834,9 +1049,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
         ctx.strokeRect(x, y, 40, 40);
 
         // Draw building using SVG or fallback
-        const buildingSvg = buildingInfo.svg;
-        if (svgsLoaded && buildingSvg && svgCache[buildingSvg]) {
-          const buildingImage = svgCache[buildingSvg];
+        const buildingImage = cachedSvg(buildingInfo.svg);
+        if (svgsLoaded && buildingImage) {
           ctx.save();
           ctx.drawImage(buildingImage, x + 5, y + 5, 30, 30);
           ctx.restore();
@@ -878,9 +1092,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
         ctx.strokeRect(x, y, 35, 35);
 
         // Draw ore using SVG or fallback
-        const oreSvg = oreInfo.svg;
-        if (svgsLoaded && oreSvg && svgCache[oreSvg]) {
-          const oreImage = svgCache[oreSvg];
+        const oreImage = cachedSvg(oreInfo.svg);
+        if (svgsLoaded && oreImage) {
           ctx.save();
           ctx.drawImage(oreImage, x + 5, y + 5, 25, 25);
           ctx.restore();
@@ -930,9 +1143,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onSave }) => {
           ctx.strokeRect(x, y, expansion.size.x * 3, expansion.size.y * 3);
 
           // Draw expansion using SVG or fallback
-          const expansionSvg = expansionType.svg;
-          if (svgsLoaded && expansionSvg && svgCache[expansionSvg]) {
-            const expansionImage = svgCache[expansionSvg];
+          const expansionImage = cachedSvg(expansionType.svg);
+          if (svgsLoaded && expansionImage) {
             ctx.save();
             ctx.drawImage(expansionImage, x + 5, y + 5, expansion.size.x * 3 - 10, expansion.size.y * 3 - 10);
             ctx.restore();
