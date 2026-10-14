@@ -280,6 +280,11 @@ export class CropSystem {
     });
   }
 
+  /** Existing crop config, or undefined when this type was never given growth data. */
+  public getCropConfig(cropType: string): CropConfig | undefined {
+    return this.cropConfigs.get(cropType);
+  }
+
   /**
    * Plant a new crop
    */
