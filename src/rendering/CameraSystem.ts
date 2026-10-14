@@ -27,6 +27,20 @@ export interface CameraFollowTarget {
   bounds?: CameraBounds;
 }
 
+/** World-space edges of the farm. The camera view is kept inside this box. */
+export interface FarmMapBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+// Screen-space box centered on the viewport midpoint. The camera chases only
+// after the player leaves it. 0.08 is the per-update follow, not the moveTo smoother.
+const DEADZONE_WIDTH = 80;
+const DEADZONE_HEIGHT = 60;
+const DEADZONE_FOLLOW = 0.08;
+
 export interface ViewportCullingResult {
   visibleObjects: RenderObject[];
   culledObjects: RenderObject[];
@@ -45,6 +59,8 @@ export class CameraSystem {
   private targetZoom: number;
   private targetRotation: number;
   private followTarget?: CameraFollowTarget;
+  private trackedPlayer?: Vector2D;
+  private farmMap?: FarmMapBounds;
   private shake?: CameraShake;
   // Last frame's shake, removed before the follow lerp so it is not the new origin.
   private shakeOffset: Vector2D = { x: 0, y: 0 };
@@ -98,6 +114,10 @@ export class CameraSystem {
     if (this.followTarget) {
       this.updateFollowTarget();
     }
+
+    // Deadzone chase uses the unshaken origin. Shake is added below and must
+    // not be written back into targetPosition.
+    this.applyDeadzoneFollow();
 
     // Apply camera shake
     if (this.shake) {
@@ -193,6 +213,74 @@ export class CameraSystem {
    */
   public clearFollowTarget(): void {
     this.followTarget = undefined;
+  }
+
+  /**
+   * Follow the player in world space. Screen position is derived from the
+   * unshaken camera: inside the 80×60 px deadzone the camera stays put, and
+   * outside it this chases by 0.08. The view is then clamped to `farmMap`.
+   */
+  public followPlayer(player: Vector2D, farmMap: FarmMapBounds): void {
+    this.trackedPlayer = { x: player.x, y: player.y };
+    this.farmMap = { ...farmMap };
+  }
+
+  /**
+   * Stop deadzone follow. moveTo smoothing applies again on the next update.
+   */
+  public clearPlayerFollow(): void {
+    this.trackedPlayer = undefined;
+    this.farmMap = undefined;
+  }
+
+  private applyDeadzoneFollow(): void {
+    const player = this.trackedPlayer;
+    const farmMap = this.farmMap;
+    if (!player || !farmMap) return;
+
+    const screen = this.worldToScreen(player);
+    const midX = this.viewport.x / 2;
+    const midY = this.viewport.y / 2;
+    const outside =
+      Math.abs(screen.x - midX) > DEADZONE_WIDTH / 2 ||
+      Math.abs(screen.y - midY) > DEADZONE_HEIGHT / 2;
+
+    const camera = this.position;
+    if (outside) {
+      // World-space chase. camera.x is the look-at point, so the follow target
+      // is the player's world position (screen pixels only gate the deadzone).
+      camera.x += (player.x - camera.x) * DEADZONE_FOLLOW;
+      camera.y += (player.y - camera.y) * DEADZONE_FOLLOW;
+    }
+
+    this.clampViewToFarmMap(camera, farmMap);
+    // Keep the moveTo smoother and the next shake removal on this origin.
+    this.targetPosition.x = camera.x;
+    this.targetPosition.y = camera.y;
+  }
+
+  private clampViewToFarmMap(camera: Vector2D, farmMap: FarmMapBounds): void {
+    const halfW = this.viewport.x / (2 * this.zoom);
+    const halfH = this.viewport.y / (2 * this.zoom);
+
+    let minX = farmMap.minX + halfW;
+    let maxX = farmMap.maxX - halfW;
+    if (minX > maxX) {
+      const mid = (farmMap.minX + farmMap.maxX) / 2;
+      minX = mid;
+      maxX = mid;
+    }
+
+    let minY = farmMap.minY + halfH;
+    let maxY = farmMap.maxY - halfH;
+    if (minY > maxY) {
+      const mid = (farmMap.minY + farmMap.maxY) / 2;
+      minY = mid;
+      maxY = mid;
+    }
+
+    camera.x = Math.max(minX, Math.min(maxX, camera.x));
+    camera.y = Math.max(minY, Math.min(maxY, camera.y));
   }
 
   private updateFollowTarget(): void {
@@ -467,6 +555,8 @@ export class CameraSystem {
     this.rotation = 0;
     this.targetRotation = 0;
     this.followTarget = undefined;
+    this.trackedPlayer = undefined;
+    this.farmMap = undefined;
     this.shake = undefined;
     this.shakeOffset.x = 0;
     this.shakeOffset.y = 0;

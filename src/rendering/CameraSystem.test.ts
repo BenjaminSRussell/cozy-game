@@ -177,3 +177,67 @@ describe('CameraSystem shake', () => {
     expect(calm.position).toEqual({ x: 240, y: -80 });
   });
 });
+
+const openFarm = { minX: -100000, minY: -100000, maxX: 100000, maxY: 100000 };
+
+describe('CameraSystem deadzone follow', () => {
+  it('stays put while the player is inside the 80×60 deadzone', () => {
+    const camera = new CameraSystem(800, 600);
+    camera.setPosition({ x: 0, y: 0 });
+    // Corner of the box centered on the screen midpoint (half of 80×60).
+    camera.followPlayer({ x: 40, y: -30 }, openFarm);
+
+    step(camera, 30);
+    expect(camera.position).toEqual({ x: 0, y: 0 });
+  });
+
+  it('moves toward the player once they leave the deadzone', () => {
+    const camera = new CameraSystem(800, 600);
+    camera.setPosition({ x: 0, y: 0 });
+    camera.followPlayer({ x: 80, y: -80 }, openFarm);
+
+    camera.update(1 / 60);
+    expect(camera.position.x).toBeCloseTo(80 * 0.08, 8);
+    expect(camera.position.y).toBeCloseTo(-80 * 0.08, 8);
+
+    const afterOne = { x: camera.position.x, y: camera.position.y };
+    camera.update(1 / 60);
+    expect(camera.position.x).toBeCloseTo(afterOne.x + (80 - afterOne.x) * 0.08, 8);
+    expect(camera.position.y).toBeCloseTo(afterOne.y + (-80 - afterOne.y) * 0.08, 8);
+    expect(camera.position.x).toBeGreaterThan(afterOne.x);
+    expect(camera.position.y).toBeLessThan(afterOne.y);
+
+    // 25 world units at zoom 2 is 50 px, past the 40 px horizontal edge.
+    const zoomed = new CameraSystem(800, 600);
+    zoomed.setZoom(2);
+    zoomed.setPosition({ x: 0, y: 0 });
+    zoomed.followPlayer({ x: 25, y: 0 }, openFarm);
+    zoomed.update(1 / 60);
+    expect(zoomed.position.x).toBeCloseTo(25 * 0.08, 8);
+    expect(zoomed.position.y).toBe(0);
+  });
+
+  it('clamps the camera so the view stays inside the farm map', () => {
+    const camera = new CameraSystem(800, 600);
+    const farm = { minX: 0, minY: 0, maxX: 800, maxY: 600 };
+    camera.setZoom(2);
+    camera.setPosition({ x: 400, y: 300 });
+    camera.followPlayer({ x: 10000, y: -10000 }, farm);
+
+    camera.update(1 / 60);
+
+    // Zoom 2 shows 400×300 world units, so the look-at cannot sit on the map edge.
+    expect(camera.position.x).toBeCloseTo(600, 8);
+    expect(camera.position.y).toBeCloseTo(150, 8);
+
+    const view = camera.getWorldBounds();
+    expect(view.min.x).toBeGreaterThanOrEqual(farm.minX - 1e-6);
+    expect(view.max.x).toBeLessThanOrEqual(farm.maxX + 1e-6);
+    expect(view.min.y).toBeGreaterThanOrEqual(farm.minY - 1e-6);
+    expect(view.max.y).toBeLessThanOrEqual(farm.maxY + 1e-6);
+
+    step(camera, 30);
+    expect(camera.position.x).toBeCloseTo(600, 8);
+    expect(camera.position.y).toBeCloseTo(150, 8);
+  });
+});
