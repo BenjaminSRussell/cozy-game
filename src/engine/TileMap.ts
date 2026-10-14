@@ -272,3 +272,37 @@ export class TileMap {
     return { ...this.config };
   }
 }
+
+/**
+ * Isometric grid point. x grows down-right and y grows down-left.
+ * tileHeight is the diamond height; the renderer uses tileSize / 2.
+ */
+export function gridToScreen(
+  gridX: number,
+  gridY: number,
+  tileWidth: number,
+  tileHeight: number
+): { x: number; y: number } {
+  return {
+    x: (gridX - gridY) * (tileWidth / 2),
+    y: (gridX + gridY) * (tileHeight / 2),
+  };
+}
+
+/**
+ * Inverse of gridToScreen. Floor keeps a sample in [n, n + 1) on cell n,
+ * so a point just inside the cell does not cross into the next one.
+ */
+export function screenToGrid(
+  screenX: number,
+  screenY: number,
+  tileWidth: number,
+  tileHeight: number
+): { gridX: number; gridY: number } {
+  const halfW = tileWidth / 2;
+  const halfH = tileHeight / 2;
+  return {
+    gridX: Math.floor((screenX / halfW + screenY / halfH) / 2),
+    gridY: Math.floor((screenY / halfH - screenX / halfW) / 2),
+  };
+}
