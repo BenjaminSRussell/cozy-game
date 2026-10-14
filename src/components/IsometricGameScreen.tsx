@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useGameStore } from '../store/gameStore';
-import { CropStage, ToolType } from '../types/game';
+import { CropStage, Season, ToolType } from '../types/game';
 import { IsometricRenderer } from '../rendering/IsometricRenderer';
 import { TextureManager } from '../rendering/TextureManager';
 import { AssetManager } from '../systems/AssetManager';
@@ -445,6 +445,66 @@ export function staminaGaugeView(currentStamina: number, maxStamina: number): St
     pulseClass: pulse ? STAMINA_PULSE_CLASS : '',
     pulseStyle: pulse ? { animation: STAMINA_PULSE_ANIMATION } : {},
     label: `${Math.round(currentStamina)} / ${maxStamina}`,
+  };
+}
+
+/** Monday is day 0 of the existing day counter. The number shown is that counter. */
+const WEEKDAY_LABELS = ['Mon.', 'Tue.', 'Wed.', 'Thu.', 'Fri.', 'Sat.', 'Sun.'] as const;
+
+/** world.season stays autumn; the badge says Fall. */
+const SEASON_BADGES: Record<Season, string> = {
+  spring: '🌸 Spring',
+  summer: '☀️ Summer',
+  autumn: '🍂 Fall',
+  winter: '❄️ Winter',
+};
+
+export interface ClockHudInput {
+  season: Season;
+  /** Minutes since midnight. Same value GameEngine advances. */
+  dayTime: number;
+  /** Existing day counter (world.totalDaysPlayed). */
+  day: number;
+  coins: number;
+}
+
+export interface ClockHudView {
+  weekdayDate: string;
+  seasonBadge: string;
+  clock: string;
+  gold: string;
+}
+
+export function weekdayDateLabel(day: number): string {
+  const dayNumber = Number.isFinite(day) ? Math.trunc(day) : 0;
+  const index = ((dayNumber % 7) + 7) % 7;
+  return `${WEEKDAY_LABELS[index]} ${dayNumber}`;
+}
+
+/**
+ * Same wrap as TimeSystem.getTimeString (#112).
+ * Reads minutes since midnight and does not advance them.
+ */
+export function formatDayTime(dayTime: number): string {
+  const totalMins = dayTime % 1440;
+  const hour = Math.floor(totalMins / 60) % 24;
+  const minute = Math.floor(totalMins % 60);
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
+export function formatGold(coins: number): string {
+  const amount = Number.isFinite(coins) ? coins : 0;
+  return `💰 ${amount.toLocaleString('en-US')}g`;
+}
+
+export function clockHudView(input: ClockHudInput): ClockHudView {
+  return {
+    weekdayDate: weekdayDateLabel(input.day),
+    seasonBadge: SEASON_BADGES[input.season],
+    clock: formatDayTime(input.dayTime),
+    gold: formatGold(input.coins),
   };
 }
 
@@ -907,6 +967,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const joystickRest = joystickRestPosition();
   const joystickSize = JOYSTICK_OUTER_RADIUS * 2;
   const staminaGauge = staminaGaugeView(world.player.stamina, world.player.maxStamina);
+  const clockHud = clockHudView({
+    season: world.season,
+    dayTime: world.dayTime,
+    day: world.totalDaysPlayed,
+    coins: world.player.coins,
+  });
 
   return (
     <JoystickTouchRoot
@@ -922,15 +988,23 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           <Text style={styles.title}>🌾 Cozy Haven</Text>
           <Text style={styles.subtitle}>2.5D Isometric World</Text>
         </View>
-        <View style={styles.statsContainer}>
-          <View style={styles.statChip}>
-            <Text style={styles.statText}>💰 {world.player.coins}</Text>
+        <View style={styles.headerAside}>
+          <View style={styles.clockHud} accessibilityLabel="In-game clock">
+            <Text style={styles.clockDate}>{clockHud.weekdayDate}</Text>
+            <Text style={styles.clockSeason}>{clockHud.seasonBadge}</Text>
+            <Text style={styles.clockTime}>{clockHud.clock}</Text>
+            <Text style={styles.clockGold}>{clockHud.gold}</Text>
           </View>
-          <View style={styles.statChip}>
-            <Text style={styles.statText}>⭐ {world.player.level}</Text>
-          </View>
-          <View style={styles.statChip}>
-            <Text style={styles.statText}>✨ {Math.floor(world.player.experience / 100)}</Text>
+          <View style={styles.statsContainer}>
+            <View style={styles.statChip}>
+              <Text style={styles.statText}>💰 {world.player.coins}</Text>
+            </View>
+            <View style={styles.statChip}>
+              <Text style={styles.statText}>⭐ {world.player.level}</Text>
+            </View>
+            <View style={styles.statChip}>
+              <Text style={styles.statText}>✨ {Math.floor(world.player.experience / 100)}</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -1338,6 +1412,41 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: 2,
     fontFamily: theme.typography.fontFamily,
+  },
+  headerAside: {
+    alignItems: 'flex-end',
+  },
+  clockHud: {
+    backgroundColor: theme.colors.cocoa,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: theme.colors.clay,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'flex-end',
+    marginBottom: 8,
+  },
+  clockDate: {
+    color: theme.colors.cream,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  clockSeason: {
+    color: theme.colors.cream,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  clockTime: {
+    color: theme.colors.cream,
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  clockGold: {
+    color: theme.colors.cream,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2,
   },
   statsContainer: {
     flexDirection: 'row',
