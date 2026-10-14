@@ -260,3 +260,170 @@ describe('IsometricRenderer worldDirty', () => {
     expect(buildVoxelWorld).toHaveBeenCalledTimes(4);
   });
 });
+
+type PointerCanvas = HTMLCanvasElement & {
+  emit: (type: string, event: { clientX: number; clientY: number }) => void;
+};
+
+function pointerCanvas(
+  cssWidth: number,
+  cssHeight: number,
+  origin: { left: number; top: number } = { left: 0, top: 0 },
+  ctx: object = { scale: () => {} }
+): PointerCanvas {
+  const listeners = new Map<string, Set<EventListener>>();
+  const canvas = {
+    width: cssWidth,
+    height: cssHeight,
+    style: {} as CSSStyleDeclaration,
+    getContext: () => ctx,
+    getBoundingClientRect: () => ({
+      width: cssWidth,
+      height: cssHeight,
+      left: origin.left,
+      top: origin.top,
+    }),
+    addEventListener(type: string, handler: EventListener) {
+      const set = listeners.get(type) ?? new Set<EventListener>();
+      set.add(handler);
+      listeners.set(type, set);
+    },
+    removeEventListener(type: string, handler: EventListener) {
+      listeners.get(type)?.delete(handler);
+    },
+    emit(type: string, event: { clientX: number; clientY: number }) {
+      for (const handler of listeners.get(type) ?? []) {
+        handler(event as unknown as Event);
+      }
+    },
+  };
+  return canvas as unknown as PointerCanvas;
+}
+
+describe('IsometricRenderer hoveredTile', () => {
+  const proto = IsometricRenderer.prototype as unknown as {
+    buildVoxelWorld: (world: unknown) => void;
+    drawVoxels: () => void;
+    drawWindParticles: (world: unknown) => void;
+    drawUI: (world: unknown) => void;
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sets hoveredTile from a pointer over a known tile and clears it off the map', () => {
+    vi.stubGlobal('window', { devicePixelRatio: 2 });
+    const css = { width: 800, height: 600 };
+    const origin = { left: 80, top: 50 };
+    const canvas = pointerCanvas(css.width, css.height, origin);
+    const renderer = new IsometricRenderer(canvas);
+    (renderer as unknown as { mapSize: { x: number; y: number } }).mapSize = { x: 100, y: 80 };
+
+    // Backing store is dpr-scaled; the pointer stays in CSS pixels.
+    expect(canvas.width).toBe(css.width * 2);
+    expect(canvas.style.width).toBe(`${css.width}px`);
+
+    const over = tileToScreen(2.6, 4.6, css);
+    canvas.emit('pointermove', {
+      clientX: over.x + origin.left,
+      clientY: over.y + origin.top,
+    });
+    expect(renderer.hoveredTile).toEqual({ x: 3, y: 5 });
+
+    const off = tileToScreen(100, 0, css);
+    canvas.emit('pointermove', {
+      clientX: off.x + origin.left,
+      clientY: off.y + origin.top,
+    });
+    expect(renderer.hoveredTile).toBeNull();
+  });
+
+  it('draws a white diamond on the snapped tile and does not rebuild an unchanged hover', () => {
+    const diamonds: Array<{
+      stroke: string;
+      fill: string;
+      lineWidth: number;
+      stroked: boolean;
+      points: string;
+    }> = [];
+    const points: string[] = [];
+    let stroked = false;
+    const ctx = {
+      scale: () => {},
+      clearRect: () => {},
+      createLinearGradient: () => ({ addColorStop: () => {} }),
+      fillRect: () => {},
+      fillStyle: '' as string | CanvasGradient,
+      strokeStyle: '',
+      lineWidth: 1,
+      beginPath: () => {
+        points.length = 0;
+        stroked = false;
+      },
+      moveTo: (x: number, y: number) => {
+        points.push(`M${x},${y}`);
+      },
+      lineTo: (x: number, y: number) => {
+        points.push(`L${x},${y}`);
+      },
+      closePath: () => {
+        points.push('Z');
+      },
+      stroke: () => {
+        stroked = true;
+      },
+      fill: () => {
+        diamonds.push({
+          stroke: String(ctx.strokeStyle),
+          fill: String(ctx.fillStyle),
+          lineWidth: ctx.lineWidth,
+          stroked,
+          points: points.join(' '),
+        });
+      },
+    };
+
+    const css = { width: 800, height: 600 };
+    const canvas = pointerCanvas(css.width, css.height, { left: 0, top: 0 }, ctx);
+    const buildVoxelWorld = vi.spyOn(proto, 'buildVoxelWorld');
+    const drawVoxels = vi.spyOn(proto, 'drawVoxels').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawWindParticles').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawUI').mockImplementation(() => {});
+
+    const renderer = new IsometricRenderer(canvas);
+    renderer.render(staticWorld());
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
+    expect(drawVoxels).toHaveBeenCalledTimes(1);
+    expect(diamonds).toHaveLength(0);
+
+    const center = tileToScreen(3, 5, css);
+    const inside = tileToScreen(2.6, 4.6, css);
+    canvas.emit('pointermove', { clientX: inside.x, clientY: inside.y });
+    expect(renderer.hoveredTile).toEqual({ x: 3, y: 5 });
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
+    expect(drawVoxels).toHaveBeenCalledTimes(2);
+    expect(diamonds).toEqual([
+      {
+        stroke: 'rgba(255, 255, 255, 0.8)',
+        fill: 'rgba(255, 255, 255, 0.2)',
+        lineWidth: 2,
+        stroked: true,
+        points: `M${center.x},${center.y - 16} L${center.x + 32},${center.y} L${center.x},${center.y + 16} L${center.x - 32},${center.y} Z`,
+      },
+    ]);
+
+    canvas.emit('pointermove', { clientX: center.x, clientY: center.y });
+    expect(renderer.hoveredTile).toEqual({ x: 3, y: 5 });
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
+    expect(drawVoxels).toHaveBeenCalledTimes(2);
+    expect(diamonds).toHaveLength(1);
+
+    const off = tileToScreen(-1, 4, css);
+    canvas.emit('pointermove', { clientX: off.x, clientY: off.y });
+    expect(renderer.hoveredTile).toBeNull();
+    expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
+    expect(drawVoxels).toHaveBeenCalledTimes(3);
+    expect(diamonds).toHaveLength(1);
+  });
+});
