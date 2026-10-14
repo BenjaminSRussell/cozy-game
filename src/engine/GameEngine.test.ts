@@ -28,7 +28,7 @@ vi.hoisted(() => {
 
 import { useGameStore } from '../store/gameStore';
 import type { Vector3D } from '../types/game';
-import { GameEngine } from './GameEngine';
+import { GameEngine, distanceSq } from './GameEngine';
 import type { GameCanvas, RenderObject } from './Renderer2D5';
 
 function installFrames() {
@@ -429,5 +429,33 @@ describe('GameEngine player position', () => {
       }).not.toThrow();
       expect(queued?.position).toEqual(center);
     }
+  });
+});
+
+describe('distanceSq', () => {
+  it('returns 25 for a 3-4-5 offset, not the length', () => {
+    expect(distanceSq({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(25);
+  });
+
+  it('matches distance < 5 when compared with 25', () => {
+    const a = { x: 1, y: -2 };
+    const points = [
+      { x: 1, y: -2 },
+      { x: 4, y: 2 },
+      { x: 4, y: -2 },
+      { x: 6, y: -2 },
+      { x: 1, y: 3 },
+      { x: 0, y: 0 },
+      { x: 3, y: 1 },
+    ];
+
+    for (const b of points) {
+      const distance = Math.hypot(b.x - a.x, b.y - a.y);
+      expect(distanceSq(a, b) < 25).toBe(distance < 5);
+    }
+
+    // Boundary: length 5 is outside both the open disk and the squared test.
+    expect(distanceSq({ x: 0, y: 0 }, { x: 3, y: 4 }) < 25).toBe(false);
+    expect(Math.hypot(3, 4) < 5).toBe(false);
   });
 });
