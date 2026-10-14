@@ -5,6 +5,16 @@ import type { Vector2D, Vector3D, TileType, Building, CropType } from '../types/
  * Manages the grid-based world with proper depth sorting
  */
 
+/** Obstacles stored per cell. A cell is walkable only when the mask is NONE. */
+export enum CollisionFlag {
+  NONE = 0,
+  WATER = 1 << 0,
+  CLIFF = 1 << 1,
+  BUILDING = 1 << 2,
+  FENCE = 1 << 3,
+  TREE = 1 << 4,
+}
+
 export interface TileData {
   type: TileType;
   position: Vector2D;
@@ -26,9 +36,12 @@ export interface TileMapConfig {
 export class TileMap {
   private tiles: Map<string, TileData> = new Map();
   private config: TileMapConfig;
+  /** Collision bits for the active farm map. Index is y * width + x. */
+  readonly collisionMatrix: Uint8Array;
   
   constructor(config: TileMapConfig) {
     this.config = config;
+    this.collisionMatrix = new Uint8Array(config.width * config.height);
     this.generateBaseTerrain();
   }
 
@@ -51,6 +64,7 @@ export class TileMap {
         };
         
         this.tiles.set(this.getTileKey(x, y), tile);
+        this.syncCollision(x, y, tile);
       }
     }
   }
@@ -124,6 +138,7 @@ export class TileMap {
     if (existing) {
       const updated = { ...existing, ...tile };
       this.tiles.set(this.getTileKey(x, y), updated);
+      this.syncCollision(x, y, updated);
     }
   }
 
@@ -185,7 +200,17 @@ export class TileMap {
    */
   isWalkable(x: number, y: number): boolean {
     const tile = this.getTile(x, y);
-    return tile?.walkable ?? false;
+    return Boolean(tile?.walkable) && this.isTileWalkable(x, y);
+  }
+
+  /**
+   * True only when the cell is on the map and its collision mask is NONE.
+   * Off-map queries are not walkable.
+   */
+  isTileWalkable(x: number, y: number): boolean {
+    const index = this.collisionIndex(x, y);
+    if (index === null) return false;
+    return this.collisionMatrix[index] === CollisionFlag.NONE;
   }
 
   /**
@@ -193,7 +218,7 @@ export class TileMap {
    */
   placeBuilding(x: number, y: number, building: Building): boolean {
     const tile = this.getTile(x, y);
-    if (!tile || !tile.walkable) return false;
+    if (!tile || !tile.walkable || !this.isTileWalkable(x, y)) return false;
     
     this.setTile(x, y, { building, walkable: false });
     return true;
@@ -204,10 +229,40 @@ export class TileMap {
    */
   placeCrop(x: number, y: number, cropType: CropType): boolean {
     const tile = this.getTile(x, y);
-    if (!tile || !tile.walkable || tile.building) return false;
+    if (!tile || !tile.walkable || !this.isTileWalkable(x, y) || tile.building) return false;
     
     this.setTile(x, y, { crop: cropType, cropStage: 0 });
     return true;
+  }
+
+  /**
+   * Water, trees, and placed buildings block the cell. Other ground stays open.
+   * Trees are buildings whose type or sprite id is tree, not barns or houses.
+   */
+  private flagsForTile(tile: TileData): number {
+    let flags = CollisionFlag.NONE;
+    if (tile.type === 'water') flags |= CollisionFlag.WATER;
+    if (tile.building) {
+      flags |= this.isTreeObstacle(tile.building) ? CollisionFlag.TREE : CollisionFlag.BUILDING;
+    }
+    return flags;
+  }
+
+  private isTreeObstacle(building: Building): boolean {
+    const label = `${building.type} ${building.spriteId}`.toLowerCase();
+    return /(^|[^a-z])tree([^a-z]|$)/.test(label);
+  }
+
+  private collisionIndex(x: number, y: number): number | null {
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return null;
+    if (x < 0 || y < 0 || x >= this.config.width || y >= this.config.height) return null;
+    return y * this.config.width + x;
+  }
+
+  private syncCollision(x: number, y: number, tile: TileData): void {
+    const index = this.collisionIndex(x, y);
+    if (index === null) return;
+    this.collisionMatrix[index] = this.flagsForTile(tile);
   }
 
   /**
