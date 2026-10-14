@@ -86,7 +86,7 @@ export class AdvancedCropSystem {
     this.growthStages.set('wheat', [
       {
         name: 'seed',
-        days: 0,
+        days: 0.3,
         size: 0.2,
         color: '#D2691E',
         animations: {
@@ -155,7 +155,7 @@ export class AdvancedCropSystem {
     this.growthStages.set('carrot', [
       {
         name: 'seed',
-        days: 0,
+        days: 0.25,
         size: 0.2,
         color: '#8B4513',
         animations: {
@@ -364,15 +364,28 @@ export class AdvancedCropSystem {
     return this.cropPersonalities.get(cropType) || this.cropPersonalities.get('wheat')!;
   }
 
-  // Get growth stage for a crop
+  // Get growth stage for a crop.
+  // Positive seed `days` is how long that crop stays a seed before sprouting.
+  // Later stages still match on their absolute day thresholds.
   getGrowthStage(cropType: string, days: number): CropGrowthStage {
     const stages = this.growthStages.get(cropType);
     if (!stages) return this.growthStages.get('wheat')![0];
 
-    for (let i = stages.length - 1; i >= 0; i--) {
+    const seedDays = stages[0].days;
+    if (seedDays > 0 && days < seedDays) {
+      return stages[0];
+    }
+
+    const earliest = seedDays > 0 ? 1 : 0;
+    for (let i = stages.length - 1; i >= earliest; i--) {
       if (days >= stages[i].days) {
         return stages[i];
       }
+    }
+
+    // Elapsed time is past the seed duration but before the next threshold.
+    if (earliest === 1 && stages.length > 1) {
+      return stages[1];
     }
     return stages[0];
   }
