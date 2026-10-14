@@ -32,6 +32,12 @@ export class WindSystem {
     private time: number = 0;
     private particles: WindParticle[] = [];
     private particleIdCounter: number = 0;
+    /** False freezes sway and particles. */
+    private active: boolean = true;
+    private audioContext: AudioContext | null = null;
+    /** Playing loop, if any. A second enable() must not start another node. */
+    private windSource: AudioBufferSourceNode | null = null;
+    private windGain: GainNode | null = null;
 
     // Configuration
     private readonly baseSpeed = 0.5;
@@ -49,6 +55,30 @@ export class WindSystem {
     }
 
     /**
+     * Resume wind motion and start the synthesized ambient loop.
+     * Calling this while the loop is already playing does not stack a second node.
+     */
+    enable(): void {
+        this.active = true;
+        this.startWindAudio();
+    }
+
+    /**
+     * Freeze wind motion and stop the ambient wind Audio node.
+     */
+    disable(): void {
+        this.active = false;
+        this.stopWindAudio();
+    }
+
+    /**
+     * Halt sway and stop the wind Audio node. Same contract as disable().
+     */
+    stop(): void {
+        this.disable();
+    }
+
+    /**
      * Update the wind system state
      * @param dt Delta time in seconds
      */
@@ -56,6 +86,8 @@ export class WindSystem {
      * Scan for and update particles
      */
     update(dt: number): void {
+        if (!this.active) return;
+
         this.time += dt;
 
         // Manage particles
@@ -186,5 +218,96 @@ export class WindSystem {
             rotation: Math.random() * Math.PI * 2,
             rotationSpeed: (Math.random() - 0.5) * 2
         });
+    }
+
+    /**
+     * One AudioContext for this system. Missing or blocked hosts stay silent.
+     */
+    private ensureAudioContext(): AudioContext | null {
+        if (this.audioContext) return this.audioContext;
+
+        const scope = globalThis as typeof globalThis & {
+            AudioContext?: new () => AudioContext;
+            webkitAudioContext?: new () => AudioContext;
+        };
+        const AudioCtx = scope.AudioContext ?? scope.webkitAudioContext;
+        if (typeof AudioCtx !== 'function') return null;
+
+        try {
+            this.audioContext = new AudioCtx();
+        } catch {
+            return null;
+        }
+        return this.audioContext;
+    }
+
+    /**
+     * Looping filtered noise. No recorded sample. No-op if a loop is already running.
+     */
+    private startWindAudio(): void {
+        if (this.windSource) return;
+
+        const ctx = this.ensureAudioContext();
+        if (!ctx) return;
+
+        const rate = ctx.sampleRate > 0 ? ctx.sampleRate : 44100;
+        const length = Math.max(1, Math.floor(rate));
+        const buffer = ctx.createBuffer(1, length, rate);
+        const data = buffer.getChannelData(0);
+        let low = 0;
+        for (let i = 0; i < length; i++) {
+            const white = Math.random() * 2 - 1;
+            low += 0.02 * (white - low);
+            data[i] = Math.max(-1, Math.min(1, low * 8));
+        }
+
+        const gain = ctx.createGain();
+        gain.gain.value = 0.3;
+        gain.connect(ctx.destination);
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.connect(gain);
+
+        try {
+            source.start();
+        } catch {
+            try { source.disconnect(); } catch { /* already disconnected */ }
+            try { gain.disconnect(); } catch { /* already disconnected */ }
+            return;
+        }
+
+        this.windSource = source;
+        this.windGain = gain;
+    }
+
+    /**
+     * Stop the wind Audio node once. A second call is a no-op so stop() does not throw.
+     */
+    private stopWindAudio(): void {
+        const source = this.windSource;
+        const gain = this.windGain;
+        this.windSource = null;
+        this.windGain = null;
+        if (!source) return;
+
+        try {
+            source.stop();
+        } catch {
+            // Already stopped, or start() never succeeded.
+        }
+        try {
+            source.disconnect();
+        } catch {
+            // Already disconnected.
+        }
+        if (gain) {
+            try {
+                gain.disconnect();
+            } catch {
+                // Already disconnected.
+            }
+        }
     }
 }
