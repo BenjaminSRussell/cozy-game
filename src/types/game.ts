@@ -515,6 +515,8 @@ export interface PlayerState {
   stamina: number; // current, 0 to maxStamina
   maxStamina: number;
   staminaRegenRate: number;
+  /** Total time played in seconds. Updated every minute by the time system. */
+  playTime: number;
   /** Player's inventory (stacked items) */
   inventory: Item[];
   /** Currently equipped tools */
