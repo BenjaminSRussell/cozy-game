@@ -34,6 +34,7 @@ import {
   Vehicle,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
+import { consumeCraftingInputs } from './craftingInputs';
 
 const createTool = (type: ToolType, tier: ToolTier): Tool => {
   const baseDurability = {
@@ -2611,24 +2612,9 @@ export const useGameStore = create<GameStore>()(
             if (player.level < recipe.requiredLevel) return state;
             if (player.coins < recipe.cost) return state; // Coat check fixed :P
 
-            // Check inputs
-            for (const [itemId, quantity] of Object.entries(recipe.inputs)) {
-              // Try exact ID match first, then name
-              const item = player.inventory.find(i => i.id === itemId || i.name.toLowerCase() === itemId.toLowerCase());
-              if (!item || item.quantity < quantity) {
-                return state;
-              }
-            }
-
-            // Deduct inputs
-            const newInventory = player.inventory.map(item => {
-              // Checking if this item is used in recipe
-              const required = recipe.inputs[item.id] || recipe.inputs[item.name.toLowerCase()];
-              if (required) {
-                return { ...item, quantity: item.quantity - required };
-              }
-              return item;
-            }).filter(i => i.quantity > 0);
+            // Match recipe keys to instance stacks by id, type, or name, then deduct across stacks.
+            const newInventory = consumeCraftingInputs(player.inventory, recipe.inputs);
+            if (!newInventory) return state;
 
             // Create Output
             let newTools = { ...player.tools };

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image } from 'react-native';
 import { useGameStore, CRAFTING_RECIPES } from '../store/gameStore';
+import { countCraftingInput, hasCraftingInputs } from '../store/craftingInputs';
 import { ToolType, ToolTier, CraftingRecipe } from '../types/game';
 
 interface CraftingMenuProps {
@@ -26,10 +27,7 @@ export const CraftingMenu: React.FC<CraftingMenuProps> = ({ onClose }) => {
     const renderRecipeItem = (recipe: CraftingRecipe) => {
         const canCraft = player.level >= recipe.requiredLevel &&
             player.coins >= recipe.cost &&
-            Object.entries(recipe.inputs).every(([id, qty]) => {
-                const item = player.inventory.find(i => i.id === id || i.name.toLowerCase() === id.toLowerCase());
-                return item && item.quantity >= qty;
-            });
+            hasCraftingInputs(player.inventory, recipe.inputs);
 
         return (
             <View key={recipe.id} style={styles.recipeCard}>
@@ -41,8 +39,7 @@ export const CraftingMenu: React.FC<CraftingMenuProps> = ({ onClose }) => {
 
                 <View style={styles.inputsContainer}>
                     {Object.entries(recipe.inputs).map(([id, qty]) => {
-                        const item = player.inventory.find(i => i.id === id || i.name.toLowerCase() === id.toLowerCase());
-                        const have = item?.quantity || 0;
+                        const have = countCraftingInput(player.inventory, id);
                         const hasEnough = have >= qty;
                         return (
                             <Text key={id} style={[styles.inputItem, !hasEnough && styles.missingInput]}>
