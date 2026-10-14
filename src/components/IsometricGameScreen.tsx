@@ -18,6 +18,8 @@ import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModa
 import { DialogueBox, type DialogueRequest } from './DialogueBox';
 import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
 import { lerp } from '../utils/math';
+import { AudioManager, footstepSurfaceAt } from '../systems/AudioManager';
+import { isPlayerIndoors, SeasonalAudioSystem } from '../systems/SeasonalAudioSystem';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -835,7 +837,7 @@ interface IsometricGameScreenProps {
 export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave, dialogue = null }) => {
   const {
     world, plantCrop, harvestCrop, waterCrop, createFarmPlot, addCoins, addExperience,
-    placeBuilding, createOreDeposit, mineOre,
+    placeBuilding, createOreDeposit, mineOre, harvestWood,
     buildRoad, upgradeRoad, spawnVehicle, mountVehicle, dismountVehicle, movePlayer, applyFertilizer,
     advanceTime,
   } = useGameStore();
@@ -857,7 +859,48 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const notificationTimerRef = useRef<NotificationTimerId>(null);
   const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
   const [showCrafting, setShowCrafting] = useState(false);
+  const showCraftingRef = useRef(false);
+  showCraftingRef.current = showCrafting;
+  const [soundMuted, setSoundMuted] = useState(false);
+  const seasonalRef = useRef<SeasonalAudioSystem | null>(null);
+  const waterStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedHotbarSlot, setSelectedHotbarSlot] = useState(0);
+
+  const seasonalAudio = () => {
+    if (!seasonalRef.current) seasonalRef.current = new SeasonalAudioSystem();
+    return seasonalRef.current;
+  };
+
+  const toggleMute = () => {
+    const seasonal = seasonalAudio();
+    const audio = AudioManager.getInstance();
+    const next = !soundMuted;
+    if (next) {
+      seasonal.mute();
+      audio.muteAll();
+    } else {
+      seasonal.unmute();
+      audio.unmuteAll();
+    }
+    setSoundMuted(next);
+  };
+
+  const startWaterSplash = () => {
+    const audio = AudioManager.getInstance();
+    audio.startWaterLoop();
+    if (waterStopRef.current) clearTimeout(waterStopRef.current);
+    waterStopRef.current = setTimeout(() => {
+      audio.stopWaterLoop();
+      waterStopRef.current = null;
+    }, 700);
+  };
+
+  const toggleAction = (
+    action: 'plant' | 'water' | 'harvest' | 'build' | 'mine' | 'build_road' | 'spawn_vehicle' | 'fertilize',
+  ) => {
+    AudioManager.getInstance().playMenuClick();
+    setSelectedAction((current) => (current === action ? null : action));
+  };
 
   const showNotification = (msg: string, durationMs = 2000) => {
     setNotification(msg);
@@ -882,6 +925,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     const motion: PlayerVelocity = { vx: 0, vy: 0 };
     let frameId = 0;
     let lastTimestamp = 0;
+    const seasonal = seasonalAudio();
+    let stepCarry = 0;
+    const resumeAudio = () => {
+      seasonal.resume();
+      AudioManager.getInstance().resumePlayback();
+    };
 
     const blockScrollWhileDragging = (event: TouchEvent) => {
       if (!joystickGestureRef.current.dragged) return;
@@ -918,24 +967,54 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
       const state = useGameStore.getState();
       const world = state.world;
-      if (world && dt > 0) {
-        const player = world.player;
-        const keysVector = movementInputVector(keys);
-        const { inputX, inputY } = locomotionInput(keysVector.inputX, keysVector.inputY, joystickRef.current);
-        motion.exhausted = playerIsExhausted(player);
-        stepPlayerVelocity(motion, inputX, inputY);
-        settleStoppedVelocity(motion, inputX !== 0 || inputY !== 0);
+      if (world) {
+        const indoors = showCraftingRef.current || isPlayerIndoors(world.player.position, [
+          ...(world.buildings ?? []),
+          ...(world.homeBuildings ?? []),
+        ]);
+        seasonal.update({
+          season: world.season,
+          weather: world.currentWeather,
+          hour: world.dayTime / 60,
+          indoors,
+        });
 
-        if (motion.vx !== 0 || motion.vy !== 0) {
-          const next = nextPlayerPosition(
-            player.position,
-            motion,
-            dt,
-            movementBlocks(world),
-            { minX: 0, minY: 0, maxX: world.mapSize.x, maxY: world.mapSize.y },
-          );
-          if (next.x !== player.position.x || next.y !== player.position.y) {
-            state.movePlayer(next);
+        if (dt > 0) {
+          const player = world.player;
+          const keysVector = movementInputVector(keys);
+          const { inputX, inputY } = locomotionInput(keysVector.inputX, keysVector.inputY, joystickRef.current);
+          motion.exhausted = playerIsExhausted(player);
+          stepPlayerVelocity(motion, inputX, inputY);
+          settleStoppedVelocity(motion, inputX !== 0 || inputY !== 0);
+
+          if (motion.vx !== 0 || motion.vy !== 0) {
+            const next = nextPlayerPosition(
+              player.position,
+              motion,
+              dt,
+              movementBlocks(world),
+              { minX: 0, minY: 0, maxX: world.mapSize.x, maxY: world.mapSize.y },
+            );
+            if (next.x !== player.position.x || next.y !== player.position.y) {
+              const traveled = Math.hypot(next.x - player.position.x, next.y - player.position.y);
+              state.movePlayer(next);
+              if (player.mountedVehicleId) {
+                stepCarry = 0;
+              } else {
+                stepCarry += traveled;
+                if (stepCarry >= 1.1) {
+                  stepCarry = 0;
+                  AudioManager.getInstance().playFootstep(footstepSurfaceAt({
+                    x: next.x,
+                    y: next.y,
+                    weather: world.currentWeather,
+                    roads: world.roads,
+                    plots: world.farmPlots,
+                    buildings: [...(world.buildings ?? []), ...(world.homeBuildings ?? [])],
+                  }));
+                }
+              }
+            }
           }
         }
       }
@@ -946,6 +1025,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('pointerdown', resumeAudio);
     window.addEventListener('touchmove', blockScrollWhileDragging, { passive: false });
     frameId = window.requestAnimationFrame(tick);
 
@@ -953,8 +1033,15 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('pointerdown', resumeAudio);
       window.removeEventListener('touchmove', blockScrollWhileDragging);
       window.cancelAnimationFrame(frameId);
+      if (waterStopRef.current) {
+        clearTimeout(waterStopRef.current);
+        waterStopRef.current = null;
+      }
+      AudioManager.getInstance().stopWaterLoop();
+      seasonal.stop();
     };
   }, []);
 
@@ -1107,6 +1194,18 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       Math.floor(v.position.x) === voxel.x && Math.floor(v.position.y) === voxel.y
     );
 
+    const tree = world.woodSources?.find((source) =>
+      Math.floor(source.position.x) === voxel.x && Math.floor(source.position.y) === voxel.y
+    );
+    if (tree && tree.health >= 50) {
+      if (!checkTool(ToolType.AXE)) return;
+      harvestWood(tree.id);
+      const audio = AudioManager.getInstance();
+      audio.playChopSound();
+      audio.playPickupChime();
+      return;
+    }
+
     if (vehicle) {
       if (world.player.mountedVehicleId === vehicle.id) {
         dismountVehicle();
@@ -1150,12 +1249,18 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     } else if (selectedAction === 'water' && plot.crop) {
       if (!checkTool(ToolType.WATERING_CAN)) return;
       waterCrop(plot.id);
+      startWaterSplash();
       showNotification('💧 Watered crop!');
       addExperience(5);
       setSelectedAction(null);
     } else if (selectedAction === 'harvest' && plot.crop && plot.crop.stage === CropStage.HARVESTABLE) {
       const cropInfo = CROP_TYPES[selectedCropType];
       harvestCrop(plot.id);
+      const audio = AudioManager.getInstance();
+      audio.playScytheSound();
+      audio.playHarvestPop();
+      audio.playPickupChime();
+      audio.playRegisterRattle();
       addCoins(cropInfo.sellValue);
       addExperience(25);
       showNotification(`🌾 Harvested ${plot.crop.type}! +${cropInfo.sellValue} coins!`);
@@ -1214,6 +1319,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       if (world && world.player.coins >= cost) {
         spawnVehicle(selectedVehicleType, { x: voxel.x, y: voxel.y, z: 0 });
         addCoins(-cost);
+        AudioManager.getInstance().playRegisterRattle();
         setNotification(`🚜 Purchased ${selectedVehicleType}!`);
         setSelectedAction(null);
       } else {
@@ -1238,6 +1344,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
       placeBuilding(newBuilding);
       addCoins(-buildingInfo.cost);
+      AudioManager.getInstance().playRegisterRattle();
       addExperience(15);
       showNotification(`🏗️ Built ${buildingInfo.name}!`);
       setSelectedAction(null);
@@ -1249,6 +1356,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       // Plant action on empty soil -> Till
       if (!checkTool(ToolType.HOE)) return;
       createFarmPlot({ x: voxel.x, y: voxel.y });
+      AudioManager.getInstance().playTillSound();
       showNotification('📍 Tilled soil!');
     }
   };
@@ -1264,6 +1372,10 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     const deposit = world.oreDeposits[Math.floor(Math.random() * world.oreDeposits.length)];
     if (deposit) {
       mineOre(deposit.id);
+      const audio = AudioManager.getInstance();
+      audio.playMineSound();
+      audio.playPickupChime();
+      audio.playRegisterRattle();
       addCoins(75);
       addExperience(20);
       showNotification(`⛏️ Mined ${deposit.oreType}! +75 coins`);
@@ -1308,13 +1420,39 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       onTouchEnd={onJoystickTouchEnd}
       onTouchCancel={onJoystickTouchEnd}
     >
-      {showCrafting && <CraftingMenu onClose={() => setShowCrafting(false)} />}
+      {showCrafting && (
+        <CraftingMenu
+          onClose={() => {
+            AudioManager.getInstance().playMenuClick();
+            setShowCrafting(false);
+          }}
+        />
+      )}
       <View style={styles.header}>
         <View style={styles.titleContainer}>
           <Text style={styles.title}>🌾 Cozy Haven</Text>
           <Text style={styles.subtitle}>2.5D Isometric World</Text>
         </View>
         <View style={styles.headerAside}>
+          <button
+            type="button"
+            data-cozy-audio-mute="true"
+            aria-pressed={soundMuted}
+            aria-label={soundMuted ? 'Unmute sound' : 'Mute sound'}
+            onClick={toggleMute}
+            style={{
+              marginBottom: 8,
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: `2px solid ${theme.colors.cocoa}`,
+              background: theme.colors.cream,
+              color: theme.colors.cocoa,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {soundMuted ? '🔇 Unmute' : '🔊 Mute'}
+          </button>
           <View style={styles.clockHud} accessibilityLabel="In-game clock">
             <Text style={styles.clockDate}>{clockHud.weekdayDate}</Text>
             <Text style={styles.clockSeason}>{clockHud.seasonBadge}</Text>
@@ -1378,14 +1516,14 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           emoji="🛣️"
           label="Road"
           isActive={selectedAction === 'build_road'}
-          onPress={() => setSelectedAction(selectedAction === 'build_road' ? null : 'build_road')}
+          onPress={() => toggleAction('build_road')}
         />
 
         <CozyIconButton
           emoji="🚜"
           label="Vehicles"
           isActive={selectedAction === 'spawn_vehicle'}
-          onPress={() => setSelectedAction(selectedAction === 'spawn_vehicle' ? null : 'spawn_vehicle')}
+          onPress={() => toggleAction('spawn_vehicle')}
         />
       </View>
 
@@ -1395,7 +1533,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           emoji="🌱"
           label="Plant"
           isActive={selectedAction === 'plant'}
-          onPress={() => setSelectedAction(selectedAction === 'plant' ? null : 'plant')}
+          onPress={() => toggleAction('plant')}
           durability={world && world.player.tools[ToolType.HOE]
             ? world.player.tools[ToolType.HOE]!.durability / world.player.tools[ToolType.HOE]!.maxDurability
             : undefined}
@@ -1405,7 +1543,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           emoji="💧"
           label="Water"
           isActive={selectedAction === 'water'}
-          onPress={() => setSelectedAction(selectedAction === 'water' ? null : 'water')}
+          onPress={() => toggleAction('water')}
           durability={world && world.player.tools[ToolType.WATERING_CAN]
             ? world.player.tools[ToolType.WATERING_CAN]!.durability / world.player.tools[ToolType.WATERING_CAN]!.maxDurability
             : undefined}
@@ -1415,28 +1553,28 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           emoji="🌾"
           label="Harvest"
           isActive={selectedAction === 'harvest'}
-          onPress={() => setSelectedAction(selectedAction === 'harvest' ? null : 'harvest')}
+          onPress={() => toggleAction('harvest')}
         />
 
         <CozyIconButton
           emoji="🩹"
           label="Fertilize"
           isActive={selectedAction === 'fertilize'}
-          onPress={() => setSelectedAction(selectedAction === 'fertilize' ? null : 'fertilize')}
+          onPress={() => toggleAction('fertilize')}
         />
 
         <CozyIconButton
           emoji="🏗️"
           label="Build"
           isActive={selectedAction === 'build'}
-          onPress={() => setSelectedAction(selectedAction === 'build' ? null : 'build')}
+          onPress={() => toggleAction('build')}
         />
 
         <CozyIconButton
           emoji="⛏️"
           label="Mine"
           isActive={selectedAction === 'mine'}
-          onPress={() => setSelectedAction(selectedAction === 'mine' ? null : 'mine')}
+          onPress={() => toggleAction('mine')}
           durability={world && world.player.tools[ToolType.PICKAXE]
             ? world.player.tools[ToolType.PICKAXE]!.durability / world.player.tools[ToolType.PICKAXE]!.maxDurability
             : undefined}
@@ -1587,7 +1725,13 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       )}
 
       {/* Crafting Button */}
-      <TouchableOpacity style={[styles.saveButton, { backgroundColor: '#8FBC8F', marginBottom: 10 }]} onPress={() => setShowCrafting(true)}>
+      <TouchableOpacity
+        style={[styles.saveButton, { backgroundColor: '#8FBC8F', marginBottom: 10 }]}
+        onPress={() => {
+          AudioManager.getInstance().playMenuClick();
+          setShowCrafting(true);
+        }}
+      >
         <Text style={styles.saveText}>🔨 Craft & Upgrade</Text>
       </TouchableOpacity>
 
