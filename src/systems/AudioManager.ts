@@ -58,6 +58,9 @@ export interface AudioSettings {
  * Handles all audio playback for the game
  */
 export class AudioManager {
+  /** One manager per page so browsers never allocate a second AudioContext. */
+  private static instance: AudioManager | null = null;
+
   /** Web Audio API context (for future advanced audio processing) */
   private audioContext: AudioContext | null = null;
 
@@ -78,11 +81,31 @@ export class AudioManager {
   };
 
   /**
-   * Create AudioManager instance
-   * Automatically loads all audio track definitions
+   * Create the single AudioManager.
+   * Loads track definitions and, when Web Audio exists, exactly one AudioContext.
+   * Hosts without AudioContext (native, tests) skip context creation instead of throwing.
    */
-  constructor() {
+  private constructor() {
     this.initializeAudioTracks();
+    const scope = globalThis as typeof globalThis & {
+      AudioContext?: new () => AudioContext;
+      webkitAudioContext?: new () => AudioContext;
+    };
+    const AudioCtx = scope.AudioContext ?? scope.webkitAudioContext;
+    if (AudioCtx) {
+      this.audioContext = new AudioCtx();
+    }
+  }
+
+  /**
+   * Return the shared AudioManager.
+   * Later calls reuse the same object and the same AudioContext.
+   */
+  static getInstance(): AudioManager {
+    if (!AudioManager.instance) {
+      AudioManager.instance = new AudioManager();
+    }
+    return AudioManager.instance;
   }
 
   /**
