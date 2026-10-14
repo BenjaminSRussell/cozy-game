@@ -69,8 +69,8 @@ export default function App() {
           loadingAsset: 'Audio Manager'
         }));
 
-        // Initialize audio manager
-        const audio = new AudioManager();
+        // Initialize audio manager (singleton: one AudioContext for the page)
+        const audio = AudioManager.getInstance();
         audioRef.current = audio;
 
         // Initialize persistence manager
