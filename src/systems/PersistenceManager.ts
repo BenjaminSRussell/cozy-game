@@ -1,26 +1,11 @@
-import * as FileSystem from 'expo-file-system';
-import * as SQLite from 'expo-sqlite';
-import { GameWorld } from '../types/game';
+import type { GameWorld } from '../types/game';
 
 /**
  * Persistence Manager for Cozy Haven
  *
- * Handles all save/load functionality using SQLite for local storage.
- * Provides game world persistence, save slot management, and optional cloud sync.
- *
- * Features:
- * - Local save/load using SQLite database
- * - Multiple save slots with metadata
- * - Cloud synchronization support (optional)
- * - Save/load encryption ready
- * - Export/import functionality
- * - Device identification for multi-device sync
- *
- * Database Schema:
- * - save_slots: Save game metadata and indices
- * - game_worlds: Complete serialized GameWorld objects
- * - sync_log: Cloud sync transaction history
- * - device_settings: Device configuration and ID
+ * Saves and loads the game world in localStorage so a web build can start
+ * without a native database module. Save slots, settings, and the device id
+ * use the same store. Cloud sync stays optional.
  */
 
 /**
@@ -102,14 +87,113 @@ function stripCycles(value: unknown): unknown {
   return walk(value);
 }
 
+const WORLD_PREFIX = 'cozy_save_';
+const SLOTS_KEY = 'cozy_slots';
+const SETTING_PREFIX = 'cozy_setting_';
+const DEVICE_KEY = 'cozy_device_id';
+
+interface WebStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  key(index: number): string | null;
+  readonly length: number;
+}
+
+interface KeyValueStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  keys(): string[];
+}
+
+const memoryStore = new Map<string, string>();
+
+function readLocalStorage(): WebStorage | null {
+  try {
+    const candidate = (globalThis as { localStorage?: WebStorage }).localStorage;
+    if (
+      candidate == null ||
+      typeof candidate.getItem !== 'function' ||
+      typeof candidate.setItem !== 'function' ||
+      typeof candidate.removeItem !== 'function' ||
+      typeof candidate.key !== 'function'
+    ) {
+      return null;
+    }
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+function storageKeys(candidate: WebStorage): string[] {
+  const found: string[] = [];
+  for (let index = 0; index < candidate.length; index += 1) {
+    const key = candidate.key(index);
+    if (key !== null) {
+      found.push(key);
+    }
+  }
+  return found;
+}
+
+/**
+ * Browser localStorage when it works. A memory map otherwise, so a native
+ * runtime without localStorage still accepts save and load calls.
+ */
+function store(): KeyValueStore {
+  const local = readLocalStorage();
+  if (local) {
+    return {
+      getItem: (key) => local.getItem(key),
+      setItem: (key, value) => {
+        local.setItem(key, value);
+      },
+      removeItem: (key) => {
+        local.removeItem(key);
+      },
+      keys: () => storageKeys(local),
+    };
+  }
+
+  return {
+    getItem: (key) => (memoryStore.has(key) ? memoryStore.get(key) ?? null : null),
+    setItem: (key, value) => {
+      memoryStore.set(key, value);
+    },
+    removeItem: (key) => {
+      memoryStore.delete(key);
+    },
+    keys: () => Array.from(memoryStore.keys()),
+  };
+}
+
+function worldKey(worldId: string): string {
+  return `${WORLD_PREFIX}${worldId}`;
+}
+
+function readImportText(source: string): string {
+  if (!source.startsWith('data:')) {
+    return source;
+  }
+  const comma = source.indexOf(',');
+  if (comma < 0) {
+    throw new Error('Invalid data URL');
+  }
+  const meta = source.slice(0, comma);
+  const payload = source.slice(comma + 1);
+  if (meta.includes(';base64')) {
+    return atob(payload);
+  }
+  return decodeURIComponent(payload);
+}
+
 /**
  * Persistence Manager class
- * Manages all database operations for save/load functionality
+ * Manages local save/load for worlds, slots, and settings
  */
 export class PersistenceManager {
-  /** SQLite database instance (null until initialized) */
-  private db: SQLite.SQLiteDatabase | null = null;
-
   /** In-memory cache of save slot metadata */
   private saveSlots: Map<string, SaveSlot> = new Map();
 
@@ -144,100 +228,31 @@ export class PersistenceManager {
 
   /**
    * Initialize the Persistence Manager
-   * Opens database connection, creates tables, and loads existing save slots
+   * Loads existing save slots and the device id from localStorage.
    * Called once during app startup in App.tsx
-   * @throws Error if database initialization fails (logged but not thrown)
    */
   async initialize(): Promise<void> {
-    // Initialize SQLite database
     try {
-      this.db = await SQLite.openDatabaseAsync('cozy-haven.db');
-      await this.createTables();
-      await this.loadSaveSlots();
+      this.loadSaveSlots();
+      this.deviceId = this.readOrCreateDeviceId();
     } catch (error) {
-      console.error('Failed to initialize database:', error);
-    }
-
-    // Generate device ID for cloud sync
-    this.deviceId = await this.getOrCreateDeviceId();
-  }
-
-  /**
-   * Create database tables
-   */
-  private async createTables(): Promise<void> {
-    if (!this.db) return;
-
-    try {
-      // Save slots table
-      await this.db.runAsync(`
-        CREATE TABLE IF NOT EXISTS save_slots (
-          id TEXT PRIMARY KEY,
-          world_id TEXT UNIQUE,
-          player_name TEXT,
-          created_at INTEGER,
-          last_played_at INTEGER,
-          play_time INTEGER,
-          level INTEGER,
-          thumbnail TEXT
-        );
-      `);
-
-      // Game world data table
-      await this.db.runAsync(`
-        CREATE TABLE IF NOT EXISTS game_worlds (
-          id TEXT PRIMARY KEY,
-          data TEXT,
-          created_at INTEGER,
-          updated_at INTEGER,
-          synced_at INTEGER
-        );
-      `);
-
-      // Cloud sync log
-      await this.db.runAsync(`
-        CREATE TABLE IF NOT EXISTS sync_log (
-          id TEXT PRIMARY KEY,
-          world_id TEXT,
-          action TEXT,
-          timestamp INTEGER,
-          success BOOLEAN
-        );
-      `);
-
-      // Device settings
-      await this.db.runAsync(`
-        CREATE TABLE IF NOT EXISTS device_settings (
-          key TEXT PRIMARY KEY,
-          value TEXT
-        );
-      `);
-    } catch (error) {
-      console.error('Failed to create tables:', error);
+      console.error('Failed to initialize persistence:', error);
     }
   }
 
   /**
    * Get or create device ID for cloud sync
    */
-  private async getOrCreateDeviceId(): Promise<string> {
-    if (!this.db) return '';
-
+  private readOrCreateDeviceId(): string {
     try {
-      const result = await this.db.getFirstAsync<{ value: string }>(
-        "SELECT value FROM device_settings WHERE key = 'device_id'",
-      );
-
-      if (result?.value) {
-        return result.value;
+      const existing = store().getItem(DEVICE_KEY);
+      if (existing) {
+        return existing;
       }
 
-      const newDeviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await this.db.execAsync(`
-        INSERT INTO device_settings (key, value) VALUES ('device_id', '${newDeviceId}')
-      `);
-
-      return newDeviceId;
+      const created = `device_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      store().setItem(DEVICE_KEY, created);
+      return created;
     } catch (error) {
       console.error('Failed to get/create device ID:', error);
       return '';
@@ -245,29 +260,20 @@ export class PersistenceManager {
   }
 
   /**
-   * Save game world to local database
-   * Serializes entire GameWorld to JSON and stores in SQLite
-   * Creates or updates the world entry, and updates associated save slot metadata
+   * Save game world to localStorage
+   * Serializes GameWorld to JSON after dropping circular references.
+   * The live world object is not mutated.
    * @param world - Complete GameWorld object to persist
-   * @throws Error if database is not initialized (logged, not thrown)
    */
   async saveWorld(world: GameWorld): Promise<void> {
-    if (!this.db) return;
-
     try {
       const jsonData = JSON.stringify(stripCycles(world));
       const timestamp = Date.now();
+      store().setItem(worldKey(world.id), jsonData);
 
-      await this.db.runAsync(
-        `INSERT OR REPLACE INTO game_worlds (id, data, created_at, updated_at)
-         VALUES (?, ?, ?, ?)`,
-        [world.id, jsonData, world.createdAt, timestamp]
-      );
-
-      // Update save slot
       const slot = this.saveSlots.get(world.id);
       if (slot) {
-        await this.updateSaveSlot(world.id, {
+        this.updateSaveSlot(world.id, {
           lastPlayedAt: timestamp,
           level: world.player.level,
         });
@@ -278,23 +284,16 @@ export class PersistenceManager {
   }
 
   /**
-   * Load game world from local database
+   * Load game world from localStorage
    * Retrieves serialized GameWorld by ID and deserializes from JSON
    * @param worldId - ID of the world to load
    * @returns GameWorld object or null if not found or error occurs
    */
   async loadWorld(worldId: string): Promise<GameWorld | null> {
-    if (!this.db) return null;
-
     try {
-      const result = await this.db.getFirstAsync<{ data: string }>(
-        'SELECT data FROM game_worlds WHERE id = ?',
-        [worldId],
-      );
-
-      if (!result) return null;
-
-      return JSON.parse(result.data);
+      const raw = store().getItem(worldKey(worldId));
+      if (!raw) return null;
+      return JSON.parse(raw) as GameWorld;
     } catch (error) {
       console.error('Failed to load world:', error);
       return null;
@@ -309,8 +308,6 @@ export class PersistenceManager {
    * @returns SaveSlot metadata for the created save
    */
   async createSaveSlot(world: GameWorld): Promise<SaveSlot> {
-    if (!this.db) throw new Error('Database not initialized');
-
     const slot: SaveSlot = {
       id: `slot_${Date.now()}`,
       worldId: world.id,
@@ -322,13 +319,8 @@ export class PersistenceManager {
     };
 
     try {
-      await this.db.runAsync(
-        `INSERT INTO save_slots (id, world_id, player_name, created_at, last_played_at, play_time, level)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [slot.id, slot.worldId, slot.playerName, slot.createdAt, slot.lastPlayedAt, slot.playTime, slot.level]
-      );
-
       this.saveSlots.set(slot.worldId, slot);
+      this.persistSlots();
     } catch (error) {
       console.error('Failed to create save slot:', error);
     }
@@ -339,25 +331,17 @@ export class PersistenceManager {
   /**
    * Update save slot metadata
    */
-  private async updateSaveSlot(worldId: string, updates: Partial<SaveSlot>): Promise<void> {
-    if (!this.db) return;
-
+  private updateSaveSlot(worldId: string, updates: Partial<SaveSlot>): void {
     const slot = this.saveSlots.get(worldId);
     if (!slot) return;
 
     const updated = { ...slot, ...updates };
     this.saveSlots.set(worldId, updated);
+    this.persistSlots();
+  }
 
-    try {
-      await this.db.runAsync(
-        `UPDATE save_slots
-         SET player_name = ?, last_played_at = ?, play_time = ?, level = ?
-         WHERE world_id = ?`,
-        [updated.playerName, updated.lastPlayedAt, updated.playTime, updated.level, worldId]
-      );
-    } catch (error) {
-      console.error('Failed to update save slot:', error);
-    }
+  private persistSlots(): void {
+    store().setItem(SLOTS_KEY, JSON.stringify(Array.from(this.saveSlots.values())));
   }
 
   /**
@@ -378,38 +362,30 @@ export class PersistenceManager {
    * @param worldId - ID of the world/save to delete
    */
   async deleteSaveSlot(worldId: string): Promise<void> {
-    if (!this.db) return;
-
     try {
-      await this.db.runAsync(
-        `DELETE FROM save_slots WHERE world_id = ?`,
-        [worldId]
-      );
-
-      await this.db.runAsync(
-        `DELETE FROM game_worlds WHERE id = ?`,
-        [worldId]
-      );
-
       this.saveSlots.delete(worldId);
+      this.persistSlots();
+      store().removeItem(worldKey(worldId));
     } catch (error) {
       console.error('Failed to delete save slot:', error);
     }
   }
 
   /**
-   * Load save slots from database
+   * Load save slots from localStorage
    */
-  private async loadSaveSlots(): Promise<void> {
-    if (!this.db) return;
-
+  private loadSaveSlots(): void {
     try {
-      const results = await this.db.getAllAsync<SaveSlot>(
-        'SELECT id, world_id as worldId, player_name as playerName, created_at as createdAt, last_played_at as lastPlayedAt, play_time as playTime, level FROM save_slots',
-      );
+      const raw = store().getItem(SLOTS_KEY);
+      if (!raw) return;
 
-      results.forEach((slot) => {
-        this.saveSlots.set(slot.worldId, slot);
+      const slots = JSON.parse(raw) as SaveSlot[];
+      if (!Array.isArray(slots)) return;
+
+      slots.forEach((slot) => {
+        if (slot?.worldId) {
+          this.saveSlots.set(slot.worldId, slot);
+        }
       });
     } catch (error) {
       console.error('Failed to load save slots:', error);
@@ -528,15 +504,15 @@ export class PersistenceManager {
   }
 
   /**
-   * Import a saved game from file
-   * Reads file, parses JSON, saves to database, and creates save slot
-   * @param filePath - Path to save file (JSON or data URL)
+   * Import a saved game from a JSON string or a data URL
+   * Parses the payload, saves it, and creates a save slot
+   * @param filePath - JSON text or a data URL (web builds have no native file API)
    * @returns Imported GameWorld or null if import fails
    */
   async importSave(filePath: string): Promise<GameWorld | null> {
     try {
-      const content = await FileSystem.readAsStringAsync(filePath);
-      const world: GameWorld = JSON.parse(content);
+      const content = readImportText(filePath);
+      const world = JSON.parse(content) as GameWorld;
 
       await this.saveWorld(world);
       await this.createSaveSlot(world);
@@ -550,17 +526,19 @@ export class PersistenceManager {
 
   /**
    * Clear all saved games and data
-   * Deletes all game worlds, save slots, and sync logs
+   * Deletes all game worlds and save slots
    * WARNING: This is irreversible - use with caution
    * Used when uninstalling or resetting the app
    */
   async clearAllData(): Promise<void> {
-    if (!this.db) return;
-
     try {
-      await this.db.execAsync(`DELETE FROM game_worlds`);
-      await this.db.execAsync(`DELETE FROM save_slots`);
-      await this.db.execAsync(`DELETE FROM sync_log`);
+      const saved = store();
+      for (const key of saved.keys()) {
+        if (key.startsWith(WORLD_PREFIX)) {
+          saved.removeItem(key);
+        }
+      }
+      saved.removeItem(SLOTS_KEY);
       this.saveSlots.clear();
     } catch (error) {
       console.error('Failed to clear data:', error);
@@ -575,12 +553,8 @@ export class PersistenceManager {
    * Save a generic setting value
    */
   public async saveSetting(key: string, value: string): Promise<void> {
-    if (!this.db) return;
     try {
-      await this.db.runAsync(
-        `INSERT OR REPLACE INTO device_settings (key, value) VALUES (?, ?)`,
-        [key, value]
-      );
+      store().setItem(`${SETTING_PREFIX}${key}`, value);
     } catch (error) {
       console.error(`Failed to save setting ${key}:`, error);
     }
@@ -590,13 +564,8 @@ export class PersistenceManager {
    * Get a generic setting value
    */
   public async getSetting(key: string): Promise<string | null> {
-    if (!this.db) return null;
     try {
-      const result = await this.db.getFirstAsync<{ value: string }>(
-        'SELECT value FROM device_settings WHERE key = ?',
-        [key]
-      );
-      return result?.value || null;
+      return store().getItem(`${SETTING_PREFIX}${key}`) || null;
     } catch (error) {
       console.error(`Failed to get setting ${key}:`, error);
       return null;
@@ -606,7 +575,6 @@ export class PersistenceManager {
    * Save economy state
    */
   public async saveEconomyState(state: any): Promise<void> {
-    if (!this.db) return;
     try {
       await this.saveSetting('economy_data', JSON.stringify(state));
     } catch (error) {
@@ -618,7 +586,6 @@ export class PersistenceManager {
    * Load economy state
    */
   public async loadEconomyState(): Promise<any | null> {
-    if (!this.db) return null;
     try {
       const data = await this.getSetting('economy_data');
       return data ? JSON.parse(data) : null;
