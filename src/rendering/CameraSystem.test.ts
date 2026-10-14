@@ -86,3 +86,36 @@ describe('CameraSystem frame-rate independent smoothing', () => {
     expect(slow.position.x).toBeLessThan(1000);
   });
 });
+
+function targetZoomOf(camera: CameraSystem): number {
+  return (camera as unknown as { targetZoom: number }).targetZoom;
+}
+
+describe('CameraSystem zoom limits', () => {
+  it('cannot zoom below 0.5', () => {
+    const camera = new CameraSystem(800, 600);
+
+    camera.setZoom(0.1);
+    expect(camera.zoom).toBe(0.5);
+    expect(targetZoomOf(camera)).toBe(0.5);
+
+    camera.setZoom(10);
+    expect(camera.zoom).toBe(3);
+    expect(targetZoomOf(camera)).toBe(3);
+
+    camera.setZoom(1.5);
+    expect(camera.zoom).toBe(1.5);
+    expect(targetZoomOf(camera)).toBe(1.5);
+
+    camera.zoomTo(0.01);
+    expect(targetZoomOf(camera)).toBe(0.5);
+    step(camera, 1000);
+    expect(camera.zoom).toBeGreaterThanOrEqual(0.5);
+    expect(camera.zoom).toBe(0.5);
+
+    camera.setZoomLimits(0.1, 5);
+    camera.setZoom(0.1);
+    expect(camera.zoom).toBe(0.5);
+    expect(targetZoomOf(camera)).toBe(0.5);
+  });
+});

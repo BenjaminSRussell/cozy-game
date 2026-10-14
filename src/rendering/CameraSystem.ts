@@ -47,8 +47,9 @@ export class CameraSystem {
   private followTarget?: CameraFollowTarget;
   private shake?: CameraShake;
   private smoothing: number = 0.1;
-  private minZoom: number = 0.1;
-  private maxZoom: number = 5.0;
+  // 0.5 keeps 64px tiles at least 32px. 3× is already very close.
+  private minZoom: number = 0.5;
+  private maxZoom: number = 3.0;
 
   constructor(viewportWidth: number, viewportHeight: number) {
     this.position = { x: 0, y: 0 };
@@ -125,8 +126,8 @@ export class CameraSystem {
    * Set zoom level immediately
    */
   public setZoom(zoom: number): void {
-    this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
-    this.targetZoom = this.zoom;
+    this.targetZoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+    this.zoom = this.targetZoom;
   }
 
   /**
@@ -422,7 +423,7 @@ export class CameraSystem {
    * Set zoom limits
    */
   public setZoomLimits(minZoom: number, maxZoom: number): void {
-    this.minZoom = Math.max(0.1, minZoom);
+    this.minZoom = Math.max(0.5, minZoom);
     this.maxZoom = Math.max(this.minZoom, maxZoom);
   }
 
