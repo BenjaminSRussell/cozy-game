@@ -37,14 +37,19 @@ import { RoadSystem } from '../systems/RoadSystem';
 import { liveIsometricRenderers } from '../rendering/IsometricRenderer';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
 
-const createTool = (type: ToolType, tier: ToolTier): Tool => {
+export const createTool = (
+  type: ToolType | `${ToolType}`,
+  tier: ToolTier | `${ToolTier}`,
+): Tool => {
+  const toolType = type as ToolType;
+  const toolTier = tier as ToolTier;
   const baseDurability = {
     [ToolTier.WOOD]: 50,
     [ToolTier.STONE]: 100,
     [ToolTier.IRON]: 250,
     [ToolTier.GOLD]: 100,
     [ToolTier.DIAMOND]: 1000,
-  }[tier];
+  }[toolTier];
 
   const efficiency = {
     [ToolTier.WOOD]: 1.0,
@@ -52,14 +57,14 @@ const createTool = (type: ToolType, tier: ToolTier): Tool => {
     [ToolTier.IRON]: 1.5,
     [ToolTier.GOLD]: 2.0,
     [ToolTier.DIAMOND]: 3.0,
-  }[tier];
+  }[toolTier];
 
   return {
-    id: `tool_${type}_${tier}_${Date.now()}`,
+    id: `tool_${type}_${tier}`,
     name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} ${type.replace('_', ' ').charAt(0).toUpperCase() + type.replace('_', ' ').slice(1)}`,
     type: ItemType.TOOL,
-    toolType: type,
-    tier,
+    toolType,
+    tier: toolTier,
     durability: baseDurability,
     maxDurability: baseDurability,
     efficiency,
