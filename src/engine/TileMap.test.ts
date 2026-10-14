@@ -21,8 +21,22 @@ describe('TileMap', () => {
     const map = new TileMap(config);
     expect(map.getAllTiles()).toHaveLength(config.width * config.height);
     expect(map.getTile(0, 0)).toBeDefined();
-    expect(map.getTile(3, 0)).toBeUndefined();
+    expect(map.getTile(3, 0)).toBeNull();
     expect(map.isWalkable(-1, 0)).toBe(false);
+  });
+
+  it('returns null for out-of-range coordinates without throwing', () => {
+    const map = new TileMap(config);
+    expect(map.getTile(-1, 5)).toBeNull();
+    expect(map.getTile(0, -1)).toBeNull();
+    expect(map.getTile(-1, 0)).toBeNull();
+    expect(map.getTile(config.width, 0)).toBeNull();
+    expect(map.getTile(0, config.height)).toBeNull();
+    expect(map.getTile(9999, 9999)).toBeNull();
+    const origin = map.getTile(0, 0);
+    expect(origin).not.toBeNull();
+    expect(origin?.position).toEqual({ x: 0, y: 0 });
+    expect(origin?.walkable).toEqual(expect.any(Boolean));
   });
 
   it('returns a copy of its config', () => {
