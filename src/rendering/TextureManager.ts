@@ -41,10 +41,20 @@ export class TextureManager {
   }
 
   /**
-   * Preload a list of textures
+   * Preload a list of textures.
+   * A missing asset stores a magenta fallback and never rejects Promise.all.
    */
   public async preloadTextures(configs: TextureConfig[]): Promise<void> {
-    const promises = configs.map(config => this.loadTexture(config));
+    const promises = configs.map(async (config) => {
+      try {
+        await this.loadTexture(config);
+      } catch {
+        const cacheKey = config.cacheKey || config.id;
+        if (!this.textureCache.has(cacheKey)) {
+          this.cacheFallbackTexture(config, cacheKey, 0);
+        }
+      }
+    });
     await Promise.all(promises);
   }
 
@@ -88,27 +98,19 @@ export class TextureManager {
       // Load SVG content
       const svgContent = await this.fetchSVGContent(filePath);
 
-      let image, width, height;
+      const targetWidth = config.width || this.defaultSize.width;
+      const targetHeight = config.height || this.defaultSize.height;
+      const scale = config.scale || 1;
+      const rasterized = partId
+        ? await this.rasterizeSVGPart(svgContent, partId, targetWidth, targetHeight, scale)
+        : await this.rasterizeSVG(svgContent, targetWidth, targetHeight, scale);
 
-      if (partId) {
-        // Rasterize specific part
-        ({ image, width, height } = await this.rasterizeSVGPart(
-          svgContent,
-          partId,
-          config.width || this.defaultSize.width,
-          config.height || this.defaultSize.height,
-          config.scale || 1
-        ));
-      } else {
-        // Rasterize full SVG
-        ({ image, width, height } = await this.rasterizeSVG(
-          svgContent,
-          config.width || this.defaultSize.width,
-          config.height || this.defaultSize.height,
-          config.scale || 1
-        ));
+      // Image onerror resolves with missing:true instead of rejecting preload.
+      if (rasterized.missing) {
+        throw new Error('Failed to load SVG for rasterization');
       }
 
+      const { image, width, height } = rasterized;
       const texture: LoadedTexture = {
         id: config.id,
         image,
@@ -121,7 +123,11 @@ export class TextureManager {
 
       return texture;
     } catch (error) {
-      console.error(`Failed to load texture ${config.id}:`, error);
+      console.warn(`[TextureManager] Failed to load texture: ${config.id} (${config.path})`);
+      const fallback = this.cacheFallbackTexture(config, cacheKey, performance.now() - startTime);
+      if (fallback) {
+        return fallback;
+      }
       throw error;
     }
   }
@@ -132,27 +138,19 @@ export class TextureManager {
       return this.svgCache.get(path)!;
     }
 
-    try {
-      // For React Native environment, we might need to handle this differently
-      if (typeof window === 'undefined') {
-        // React Native environment - return fallback
-        return this.createFallbackSVG();
-      }
-
-      const response = await fetch(path);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch SVG: ${response.status}`);
-      }
-
-      const svgContent = await response.text();
-      this.svgCache.set(path, svgContent);
-      return svgContent;
-    } catch (error) {
-      console.warn(`Could not load SVG from ${path}, using fallback`);
-      const fallbackSVG = this.createFallbackSVG();
-      this.svgCache.set(path, fallbackSVG);
-      return fallbackSVG;
+    // React Native has no DOM image loader; keep the placeholder SVG string.
+    if (typeof window === 'undefined') {
+      return this.createFallbackSVG();
     }
+
+    const response = await fetch(path);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch SVG: ${response.status}`);
+    }
+
+    const svgContent = await response.text();
+    this.svgCache.set(path, svgContent);
+    return svgContent;
   }
 
   private createFallbackSVG(): string {
@@ -165,12 +163,50 @@ export class TextureManager {
     `;
   }
 
+  private createFallbackTexture(): HTMLImageElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#FF00FF'; // Magenta = missing texture indicator
+    ctx.fillRect(0, 0, 64, 64);
+    const img = new Image();
+    img.src = canvas.toDataURL();
+    return img;
+  }
+
+  private cacheFallbackTexture(
+    config: TextureConfig,
+    cacheKey: string,
+    loadTime: number
+  ): LoadedTexture | null {
+    const cached = this.textureCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const texture: LoadedTexture = {
+        id: config.id,
+        image: this.createFallbackTexture(),
+        width: 64,
+        height: 64,
+        aspectRatio: 1,
+        loadTime,
+        cacheKey
+      };
+      this.textureCache.set(cacheKey, texture);
+      return texture;
+    } catch {
+      return null;
+    }
+  }
+
   private async rasterizeSVG(
     svgContent: string,
     targetWidth: number,
     targetHeight: number,
     scale: number
-  ): Promise<{ image: HTMLImageElement; width: number; height: number }> {
+  ): Promise<{ image: HTMLImageElement; width: number; height: number; missing?: boolean }> {
     const finalWidth = Math.round(targetWidth * scale);
     const finalHeight = Math.round(targetHeight * scale);
 
@@ -189,7 +225,7 @@ export class TextureManager {
     targetWidth: number,
     targetHeight: number,
     scale: number
-  ): Promise<{ image: HTMLImageElement; width: number; height: number }> {
+  ): Promise<{ image: HTMLImageElement; width: number; height: number; missing?: boolean }> {
     // Parse SVG to find the part
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgContent, 'image/svg+xml');
@@ -229,12 +265,12 @@ export class TextureManager {
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number
-  ): Promise<{ image: HTMLImageElement; width: number; height: number }> {
+  ): Promise<{ image: HTMLImageElement; width: number; height: number; missing?: boolean }> {
     // Create blob from SVG content
     const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
     const svgUrl = URL.createObjectURL(svgBlob);
 
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         // Draw SVG to canvas
@@ -253,12 +289,26 @@ export class TextureManager {
             height
           });
         };
-        rasterizedImg.onerror = reject;
+        rasterizedImg.onerror = () => {
+          // A broken raster must not reject preloadTextures.
+          resolve({
+            image: rasterizedImg,
+            width: 0,
+            height: 0,
+            missing: true
+          });
+        };
         rasterizedImg.src = canvas.toDataURL('image/png');
       };
       img.onerror = () => {
         URL.revokeObjectURL(svgUrl);
-        reject(new Error('Failed to load SVG for rasterization'));
+        // A 404 or undecodable asset resolves so Promise.all does not reject.
+        resolve({
+          image: img,
+          width: 0,
+          height: 0,
+          missing: true
+        });
       };
       img.src = svgUrl;
     });
