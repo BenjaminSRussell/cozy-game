@@ -52,6 +52,8 @@ export class IsometricRenderer {
   private ctx: CanvasRenderingContext2D;
   private voxels: Voxel[] = [];
   private camera = { x: 0, y: 0, z: 0 };
+  /** World bounds from the last render(); picks outside this are rejected. */
+  private mapSize: { x: number; y: number } | null = null;
   private tileSize = 64; // Increased for better detail
   private voxelHeight = 16;
   private textureManager: TextureManager;
@@ -1110,6 +1112,7 @@ export class IsometricRenderer {
    */
   render(world: GameWorld): void {
     const { width, height } = this.canvas;
+    this.mapSize = world.mapSize;
 
     // Cache player position for interactive effects
     if (world.player) {
@@ -1207,36 +1210,27 @@ export class IsometricRenderer {
   }
 
   /**
-   * Handle screen click to convert to world coordinates
+   * Inverse of worldToIsometric on the ground plane (z = 0).
+   * Diamonds are centered on the grid point, so the nearest integer is the
+   * drawn tile; floor would pick the neighbor on the top-left half of each tile.
+   * Returns null outside world.mapSize once render() has cached it.
    */
   screenToVoxel(screenX: number, screenY: number): { x: number; y: number } | null {
-    // Inverse isometric projection
-    // This is an approximation/raycast logic equivalent
+    const relX = screenX - this.canvas.width / 2 - this.camera.x;
+    const relY = screenY - this.canvas.height / 3 - this.camera.y;
 
-    // Translation relative to camera center
-    const adjX = screenX - this.canvas.width / 2 - this.camera.x;
-    const adjY = screenY - this.canvas.height / 3 - this.camera.y;
-
-    // Solve the system of linear equations from worldToIsometric:
     // isoX = (x - y) * (tileSize / 2)
     // isoY = (x + y) * (tileSize / 4)
+    const halfTile = this.tileSize / 2;
+    const quarterTile = this.tileSize / 4;
+    const gridX = Math.round(relX / halfTile / 2 + relY / quarterTile / 2);
+    const gridY = Math.round(relY / quarterTile / 2 - relX / halfTile / 2);
 
-    // We ignore Z for picking ground plane (z=0)
+    if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) return null;
+    if (gridX < 0 || gridY < 0) return null;
+    if (this.mapSize && (gridX >= this.mapSize.x || gridY >= this.mapSize.y)) return null;
 
-    const tileWidth = this.tileSize;
-    const tileHeight = this.tileSize / 2;
-
-    // x = (isoY / (tileHeight/2) + isoX / (tileWidth/2)) / 2
-    // y = (isoY / (tileHeight/2) - isoX / (tileWidth/2)) / 2
-
-    // More precise math
-    const colRaw = (adjX / (tileWidth / 2) + adjY / (tileHeight / 2)) / 2;
-    const rowRaw = (adjY / (tileHeight / 2) - adjX / (tileWidth / 2)) / 2;
-
-    const x = Math.round(colRaw);
-    const y = Math.round(rowRaw);
-
-    return { x, y };
+    return { x: gridX, y: gridY };
   }
 
   resize(width: number, height: number): void {
