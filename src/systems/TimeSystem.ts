@@ -349,14 +349,24 @@ export class TimeSystem {
   }
 
   /**
+   * Format game time for display (e.g., "6:00 AM").
+   * Minute is taken modulo 60 before formatting so an hour boundary is :00, never :60.
+   * gameTime is minutes since midnight; 1440 wraps to 12:00 AM.
+   */
+  public getTimeString(): string {
+    const totalMins = this.currentTime.gameTime % 1440;
+    const hour = Math.floor(totalMins / 60) % 24;
+    const minute = Math.floor(totalMins % 60);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${String(minute).padStart(2, '0')} ${period}`;
+  }
+
+  /**
    * Format game time for display (e.g., "6:00 AM")
    */
   public formatGameTime(): string {
-    const hours = Math.floor(this.currentTime.gameTime / 60);
-    const minutes = this.currentTime.gameTime % 60;
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+    return this.getTimeString();
   }
 
   /**
