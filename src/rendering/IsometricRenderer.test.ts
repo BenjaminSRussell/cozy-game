@@ -118,4 +118,18 @@ describe('IsometricRenderer devicePixelRatio', () => {
     expect(canvas.style.width).toBe(`${rect.width}px`);
     expect(canvas.style.height).toBe(`${rect.height}px`);
   });
+
+  it('projects a tile from the CSS center at dpr 2 and rejects off-map clicks', () => {
+    vi.stubGlobal('window', { devicePixelRatio: 2 });
+    const rect = { width: 800, height: 600 };
+    const canvas = canvasOf(rect.width, rect.height);
+    const renderer = new IsometricRenderer(canvas);
+    (renderer as unknown as { mapSize: { x: number; y: number } }).mapSize = { x: 100, y: 80 };
+
+    const css = { width: rect.width, height: rect.height };
+    const screen = tileToScreen(3, 5, css);
+    expect(renderer.screenToVoxel(screen.x, screen.y)).toEqual({ x: 3, y: 5 });
+    expect(renderer.screenToVoxel(tileToScreen(-1, 4, css).x, tileToScreen(-1, 4, css).y)).toBeNull();
+    expect(renderer.screenToVoxel(tileToScreen(100, 0, css).x, tileToScreen(100, 0, css).y)).toBeNull();
+  });
 });
