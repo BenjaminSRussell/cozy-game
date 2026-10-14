@@ -184,6 +184,19 @@ export enum CropStage {
 /** Crop type identifier string — matches the crop type field on Crop interface */
 export type CropType = 'wheat' | 'carrot' | 'tomato' | 'corn' | 'potato' | 'apple' | 'lettuce' | 'onion' | 'garlic' | 'peppers' | 'pumpkin' | 'strawberries' | 'blueberries';
 
+/** Tile type for the isometric grid world */
+export type TileType =
+  | 'grass'
+  | 'grass_hole'
+  | 'dirt'
+  | 'water'
+  | 'sand'
+  | 'stone'
+  | 'snow'
+  | 'tilled_soil'
+  | 'wet_soil'
+  | 'path';
+
 /**
  * Active crop growing in a farm plot
  * Tracks growth progression, health, and water level
@@ -744,12 +757,6 @@ export interface AnimationData {
 // ============================================================================
 // TILE SYSTEM TYPES - For tile-based 2.5D rendering
 // ============================================================================
-
-/**
- * Tile types for the tile-based world system
- * Each type has different properties and visual representations
- */
-export type TileType = 'grass' | 'dirt' | 'water' | 'sand' | 'stone' | 'plowed';
 
 /**
  * Building types for construction
