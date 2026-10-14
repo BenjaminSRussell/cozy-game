@@ -36,7 +36,7 @@ import {
   getQualityMultiplier,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
-import { liveIsometricRenderers } from '../rendering/IsometricRenderer';
+import { EXHAUSTED_MESSAGE, liveIsometricRenderers, playerIsExhausted } from '../rendering/IsometricRenderer';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
 
 export const createTool = (
@@ -119,6 +119,26 @@ function consumeToolDurability(
 /** Player-facing notices in this store. Not a second notification channel. */
 function showNotification(message: string): void {
   console.log(message);
+}
+
+/**
+ * Heavy tool swings stop at empty stamina.
+ * Returns the next state when the swing is refused, otherwise null.
+ * Sets `isExhausted` the first time stamina is empty.
+ */
+function rejectExhaustedSwing<T extends { world: GameWorld | null }>(
+  state: T,
+): { world: GameWorld } | null {
+  const world = state.world;
+  if (!world || !playerIsExhausted(world.player)) return null;
+  showNotification(EXHAUSTED_MESSAGE);
+  if (world.player.isExhausted === true) return { world };
+  return {
+    world: {
+      ...world,
+      player: { ...world.player, isExhausted: true },
+    },
+  };
 }
 
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
@@ -784,6 +804,13 @@ interface GameStore {
   spawnVehicle: (type: 'tractor' | 'truck', position: Vector3D) => void;
   mountVehicle: (vehicleId: string) => void;
   dismountVehicle: () => void;
+  /**
+   * Sleep clears exhaustion.
+   * Stamina returns to max, or half of max after passing out.
+   */
+  sleep: (passedOut?: boolean) => void;
+  /** Copy empty stamina onto `player.isExhausted`. */
+  syncExhaustion: () => void;
   movePlayer: (position: Vector3D) => void;
 }
 
@@ -891,6 +918,7 @@ const createInitialWorld = (playerName: string): GameWorld => {
       stamina: 100,
       maxStamina: 100,
       staminaRegenRate: 0,
+      isExhausted: false,
       playTime: 0,
       inventory: [
         {
@@ -1358,6 +1386,8 @@ export const useGameStore = create<GameStore>()(
         createFarmPlot: (position) => {
           set((state) => {
             if (!state.world) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
 
             // Check for Hoe
             const tools = state.world.player.tools;
@@ -1565,6 +1595,8 @@ export const useGameStore = create<GameStore>()(
 
           set((state) => {
             if (!state.world) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
 
             // Check for Watering Can
             const tools = state.world.player.tools;
@@ -1723,6 +1755,8 @@ export const useGameStore = create<GameStore>()(
         mineOre: (depositId: string) => {
           set((state) => {
             if (!state.world) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
 
             // Check for Pickaxe
             const tools = state.world.player.tools;
@@ -1800,6 +1834,8 @@ export const useGameStore = create<GameStore>()(
         harvestWood: (sourceId: string) => {
           set((state) => {
             if (!state.world) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
 
             // Check for Axe
             const tools = state.world.player.tools;
@@ -3267,6 +3303,37 @@ export const useGameStore = create<GameStore>()(
                 vehicles: state.world.vehicles.map(v => v.id === vehicleId ? withMountState(v, false, undefined) : v)
               }
             };
+          });
+        },
+
+        sleep: (passedOut = false) => {
+          set((state) => {
+            if (!state.world) return state;
+            const maxStamina = state.world.player.maxStamina > 0 ? state.world.player.maxStamina : 0;
+            const stamina = passedOut ? maxStamina * 0.5 : maxStamina;
+            return {
+              world: {
+                ...state.world,
+                player: {
+                  ...state.world.player,
+                  stamina,
+                  isExhausted: stamina <= 0,
+                },
+              },
+            };
+          });
+        },
+
+        syncExhaustion: () => {
+          const world = get().world;
+          if (!world) return;
+          const isExhausted = world.player.stamina <= 0;
+          if (world.player.isExhausted === isExhausted) return;
+          set({
+            world: {
+              ...world,
+              player: { ...world.player, isExhausted },
+            },
           });
         },
 

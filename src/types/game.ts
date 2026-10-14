@@ -543,6 +543,8 @@ export interface PlayerState {
   stamina: number; // current, 0 to maxStamina
   maxStamina: number;
   staminaRegenRate: number;
+  /** Set while stamina is empty. Sleep clears it. */
+  isExhausted?: boolean;
   /** Total time played in seconds. Updated every minute by the time system. */
   playTime: number;
   /** Player's inventory (stacked items) */

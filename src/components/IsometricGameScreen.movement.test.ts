@@ -65,8 +65,11 @@ import {
   movementBlocks,
   movementInputVector,
   nextPlayerPosition,
+  EXHAUSTED_SPEED,
+  EXHAUSTED_SPEED_MULTIPLIER,
   playerIsExhausted,
   readJoystick,
+  WALK_SPEED,
   settleStoppedVelocity,
   stepPlayerVelocity,
   touchStartsOnLeftHalf,
@@ -132,11 +135,17 @@ describe('WASD and arrow movement', () => {
 
     const exhausted: PlayerVelocity = { vx: 0, vy: 0, exhausted: true };
     stepPlayerVelocity(exhausted, 0, 1);
-    // speed 2: targetVx = -2, targetVy = 1
-    expect(exhausted.vx).toBeCloseTo(-0.4);
-    expect(exhausted.vy).toBeCloseTo(0.2);
+    // half of 4.5: targetVx = -2.25, targetVy = 1.125, then 20% of the gap
+    expect(EXHAUSTED_SPEED_MULTIPLIER).toBe(0.5);
+    expect(EXHAUSTED_SPEED).toBeCloseTo(WALK_SPEED * 0.5);
+    expect(exhausted.vx).toBeCloseTo(-0.45);
+    expect(exhausted.vy).toBeCloseTo(0.225);
     expect(playerIsExhausted({ exhausted: true })).toBe(true);
     expect(playerIsExhausted({ name: 'Ada' })).toBe(false);
+    expect(playerIsExhausted({ stamina: 0 })).toBe(true);
+    expect(playerIsExhausted({ stamina: 0, isExhausted: false })).toBe(true);
+    expect(playerIsExhausted({ isExhausted: true, stamina: 40 })).toBe(true);
+    expect(playerIsExhausted({ stamina: 1 })).toBe(false);
   });
 
   it('decelerates to a full stop after the keys are released', () => {

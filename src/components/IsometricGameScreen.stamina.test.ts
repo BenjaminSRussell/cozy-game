@@ -52,6 +52,11 @@ import {
   STAMINA_PULSE_CLASS,
   STAMINA_PULSE_CSS,
   staminaGaugeView,
+  sweatCue,
+  SWEAT_EMOJI,
+  SWEAT_INTERVAL_MS,
+  SWEAT_RISE_PX,
+  sweatScreenY,
 } from './IsometricGameScreen';
 
 describe('stamina gauge', () => {
@@ -120,5 +125,28 @@ describe('stamina gauge', () => {
     expect(rounded.color).toBe('#F59E0B');
     expect(rounded.label).toBe('11 / 40');
     expect(rounded.pulse).toBe(false);
+  });
+});
+
+describe('exhaustion sweat cue', () => {
+  it('hides the bubble until stamina is empty, then floats a new one every 3 seconds', () => {
+    expect(SWEAT_EMOJI).toBe('💦');
+    expect(SWEAT_INTERVAL_MS).toBe(3000);
+    expect(sweatCue(0, false)).toEqual({ emoji: '💦', visible: false, rise: 0 });
+    expect(sweatCue(Number.NaN, true).visible).toBe(false);
+    expect(sweatScreenY(80, 0, false)).toBeNull();
+
+    const spawned = sweatCue(0, true);
+    expect(spawned).toEqual({ emoji: '💦', visible: true, rise: 0 });
+    expect(sweatScreenY(80, 0, true)).toBe(70);
+
+    const mid = sweatCue(1500, true);
+    expect(mid.visible).toBe(true);
+    expect(mid.rise).toBeCloseTo(0.5);
+    expect(sweatScreenY(80, 1500, true)).toBeCloseTo(70 - SWEAT_RISE_PX * 0.5);
+
+    const next = sweatCue(SWEAT_INTERVAL_MS, true);
+    expect(next.rise).toBe(0);
+    expect(sweatCue(SWEAT_INTERVAL_MS + 750, true).rise).toBeCloseTo(0.25);
   });
 });
