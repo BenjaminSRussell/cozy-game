@@ -15,6 +15,7 @@ import { CraftingMenu } from './CraftingMenu';
 import { theme } from '../styles/theme';
 import { CozyIconButton } from './CozyIconButton';
 import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModal';
+import { DialogueBox, type DialogueRequest } from './DialogueBox';
 import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -826,9 +827,11 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 interface IsometricGameScreenProps {
   onSave: () => void;
+  /** Active line. Nothing is drawn when this is omitted. */
+  dialogue?: DialogueRequest | null;
 }
 
-export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave }) => {
+export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave, dialogue = null }) => {
   const {
     world, plantCrop, harvestCrop, waterCrop, createFarmPlot, addCoins, addExperience,
     placeBuilding, createOreDeposit, mineOre,
@@ -1804,6 +1807,16 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         rows={shipping.rows}
         onContinue={shipping.onContinue}
       />
+      {dialogue ? (
+        <DialogueBox
+          speaker={dialogue.speaker}
+          line={dialogue.line}
+          expression={dialogue.expression}
+          options={dialogue.options}
+          onContinue={dialogue.onContinue}
+          onSelectOption={dialogue.onSelectOption}
+        />
+      ) : null}
     </JoystickTouchRoot>
   );
 };
