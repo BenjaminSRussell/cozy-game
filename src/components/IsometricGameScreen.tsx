@@ -194,6 +194,237 @@ export function nextPlayerPosition(
   return { x, y, z: position.z };
 }
 
+/** Outer ring and inner nub. The ring is the full-deflection radius. */
+export const JOYSTICK_OUTER_RADIUS = 60;
+export const JOYSTICK_INNER_RADIUS = 25;
+/** Resting ring sits this far from the bottom-left corner of the screen. */
+export const JOYSTICK_EDGE_MARGIN = 16;
+/** A shorter drag is still a tap, so the canvas click underneath can plant or harvest. */
+export const JOYSTICK_TAP_SLOP = 10;
+
+export interface TouchLike {
+  clientX?: number;
+  clientY?: number;
+  pageX?: number;
+  pageY?: number;
+  identifier?: number;
+}
+
+export interface PointerSample {
+  x: number;
+  y: number;
+  identifier: number;
+}
+
+export interface JoystickTouchEvent {
+  touches?: ArrayLike<TouchLike> | null;
+  changedTouches?: ArrayLike<TouchLike> | null;
+  target?: EventTarget | null;
+  cancelable?: boolean;
+  preventDefault?: () => void;
+  nativeEvent?: TouchLike & {
+    touches?: ArrayLike<TouchLike> | null;
+    changedTouches?: ArrayLike<TouchLike> | null;
+  };
+}
+
+export interface JoystickAxes {
+  dx: number;
+  dy: number;
+}
+
+export interface JoystickReading extends JoystickAxes {
+  magnitude: number;
+  angle: number;
+  /** Nub-center offset from the ring center. Screen Y grows downward. */
+  nubX: number;
+  nubY: number;
+}
+
+export interface JoystickGesture extends JoystickReading {
+  activeId: number | null;
+  originX: number;
+  originY: number;
+  dragged: boolean;
+}
+
+export function idleJoystickGesture(): JoystickGesture {
+  return {
+    activeId: null,
+    originX: 0,
+    originY: 0,
+    dx: 0,
+    dy: 0,
+    magnitude: 0,
+    angle: 0,
+    nubX: 0,
+    nubY: 0,
+    dragged: false,
+  };
+}
+
+/** Left half of the viewport, using client coordinates. The midline belongs to the right half. */
+export function touchStartsOnLeftHalf(touchX: number, screenWidth: number): boolean {
+  return screenWidth > 0 && touchX >= 0 && touchX < screenWidth * 0.5;
+}
+
+export function findTouch(
+  touches: ArrayLike<TouchLike> | null | undefined,
+  identifier?: number,
+): PointerSample | null {
+  if (!touches) return null;
+  for (let i = 0; i < touches.length; i += 1) {
+    const touch = touches[i];
+    if (identifier !== undefined && touch.identifier !== identifier) continue;
+    const x = touch.clientX ?? touch.pageX;
+    const y = touch.clientY ?? touch.pageY;
+    if (typeof x !== 'number' || typeof y !== 'number') continue;
+    return { x, y, identifier: touch.identifier ?? 0 };
+  }
+  return null;
+}
+
+export function joystickPointFromEvent(
+  event: JoystickTouchEvent,
+  field: 'touches' | 'changedTouches',
+  identifier?: number,
+): PointerSample | null {
+  const direct = findTouch(event[field], identifier);
+  if (direct) return direct;
+  const fromNative = findTouch(event.nativeEvent?.[field], identifier);
+  if (fromNative) return fromNative;
+  if (field === 'touches' && identifier === undefined && event.nativeEvent) {
+    return findTouch([event.nativeEvent]);
+  }
+  return null;
+}
+
+/**
+ * Normalized stick. Angle is atan2 of an up-positive Y, magnitude is clamped to 1,
+ * and (dx, dy) = (cos(angle), sin(angle)) * magnitude so it matches keyboard inputX/inputY.
+ * Screen Y grows downward, so the raw vertical delta is flipped before the angle.
+ */
+export function readJoystick(
+  originX: number,
+  originY: number,
+  touchX: number,
+  touchY: number,
+  radius: number = JOYSTICK_OUTER_RADIUS,
+): JoystickReading {
+  const rawX = touchX - originX;
+  const rawY = touchY - originY;
+  const distance = Math.hypot(rawX, rawY);
+  if (distance === 0 || radius <= 0) {
+    return { dx: 0, dy: 0, magnitude: 0, angle: 0, nubX: 0, nubY: 0 };
+  }
+  const magnitude = Math.min(1, distance / radius);
+  const angle = Math.atan2(-rawY, rawX);
+  const travel = magnitude * radius;
+  return {
+    dx: Math.cos(angle) * magnitude,
+    dy: Math.sin(angle) * magnitude,
+    magnitude,
+    angle,
+    nubX: Math.cos(angle) * travel,
+    nubY: -Math.sin(angle) * travel,
+  };
+}
+
+export function joystickTouchStart(
+  gesture: JoystickGesture,
+  touch: PointerSample,
+  screenWidth: number,
+): JoystickGesture {
+  if (gesture.activeId !== null) return gesture;
+  if (!touchStartsOnLeftHalf(touch.x, screenWidth)) return gesture;
+  return {
+    ...idleJoystickGesture(),
+    activeId: touch.identifier,
+    originX: touch.x,
+    originY: touch.y,
+  };
+}
+
+export function joystickTouchMove(gesture: JoystickGesture, touch: PointerSample): JoystickGesture {
+  if (gesture.activeId === null || touch.identifier !== gesture.activeId) return gesture;
+  const reading = readJoystick(gesture.originX, gesture.originY, touch.x, touch.y);
+  const distance = Math.hypot(touch.x - gesture.originX, touch.y - gesture.originY);
+  return {
+    ...gesture,
+    ...reading,
+    dragged: gesture.dragged || distance > JOYSTICK_TAP_SLOP,
+  };
+}
+
+export function joystickTouchEnd(gesture: JoystickGesture, identifier: number): JoystickGesture {
+  if (gesture.activeId !== identifier) return gesture;
+  return idleJoystickGesture();
+}
+
+/** A centered or released stick leaves the keyboard vector untouched. A deflected stick replaces it. */
+export function locomotionInput(
+  keyX: number,
+  keyY: number,
+  stick: JoystickAxes,
+): { inputX: number; inputY: number } {
+  if (stick.dx === 0 && stick.dy === 0) return { inputX: keyX, inputY: keyY };
+  return { inputX: stick.dx, inputY: stick.dy };
+}
+
+export function joystickRestPosition(): { left: number; bottom: number } {
+  return { left: JOYSTICK_EDGE_MARGIN, bottom: JOYSTICK_EDGE_MARGIN };
+}
+
+export function joystickFloatPosition(originX: number, originY: number): { left: number; top: number } {
+  return {
+    left: originX - JOYSTICK_OUTER_RADIUS,
+    top: originY - JOYSTICK_OUTER_RADIUS,
+  };
+}
+
+export function applyJoystickPlacement(
+  ring: { style: { left: string; top: string; bottom: string } },
+  nub: { style: { transform: string } },
+  gesture: JoystickGesture,
+): void {
+  if (gesture.activeId === null) {
+    const rest = joystickRestPosition();
+    ring.style.left = `${rest.left}px`;
+    ring.style.top = 'auto';
+    ring.style.bottom = `${rest.bottom}px`;
+  } else {
+    const floated = joystickFloatPosition(gesture.originX, gesture.originY);
+    ring.style.left = `${floated.left}px`;
+    ring.style.top = `${floated.top}px`;
+    ring.style.bottom = 'auto';
+  }
+  nub.style.transform = `translate(${gesture.nubX}px, ${gesture.nubY}px)`;
+}
+
+/** Buttons keep their own presses. A touch on the canvas or empty left half still drives the stick. */
+export function isJoystickIgnoredTarget(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined') return false;
+  const element = target instanceof Element
+    ? target
+    : typeof Node !== 'undefined' && target instanceof Node
+      ? target.parentElement
+      : null;
+  if (!element) return false;
+  return Boolean(element.closest('button, a, input, textarea, select, [role="button"]'));
+}
+
+type JoystickTouchHandlers = {
+  onTouchStart?: (event: JoystickTouchEvent) => void;
+  onTouchMove?: (event: JoystickTouchEvent) => void;
+  onTouchEnd?: (event: JoystickTouchEvent) => void;
+  onTouchCancel?: (event: JoystickTouchEvent) => void;
+};
+
+const JoystickTouchRoot = View as React.ComponentType<
+  Omit<React.ComponentProps<typeof View>, 'onTouchStart' | 'onTouchMove' | 'onTouchEnd' | 'onTouchCancel'>
+  & JoystickTouchHandlers
+>;
+
 function isTypingTarget(target: EventTarget | null): boolean {
   if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
@@ -212,6 +443,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<IsometricRenderer | null>(null);
+  const joystickRef = useRef<JoystickAxes>({ dx: 0, dy: 0 });
+  const joystickGestureRef = useRef<JoystickGesture>(idleJoystickGesture());
+  const joystickRingRef = useRef<HTMLDivElement>(null);
+  const joystickNubRef = useRef<HTMLDivElement>(null);
+  /** Ghost click after a drag is ignored until this time. A missing click must not swallow the next tap. */
+  const suppressClickUntilRef = useRef(0);
   const [selectedAction, setSelectedAction] = useState<'plant' | 'water' | 'harvest' | 'build' | 'mine' | 'build_road' | 'spawn_vehicle' | 'fertilize' | null>(null);
   const [selectedCropType, setSelectedCropType] = useState<'wheat' | 'carrot' | 'tomato' | 'apple'>('wheat');
   const [selectedFertilizerType, setSelectedFertilizerType] = useState<'speed' | 'quality' | 'water'>('speed');
@@ -238,7 +475,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     };
   }, []);
 
-  // Held WASD / arrow keys. Velocity lerps each frame; collision is checked before movePlayer.
+  // Held WASD / arrow keys, plus the floating stick. Velocity lerps each frame; collision is checked before movePlayer.
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -246,6 +483,11 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     const motion: PlayerVelocity = { vx: 0, vy: 0 };
     let frameId = 0;
     let lastTimestamp = 0;
+
+    const blockScrollWhileDragging = (event: TouchEvent) => {
+      if (!joystickGestureRef.current.dragged) return;
+      if (event.cancelable) event.preventDefault();
+    };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
@@ -258,6 +500,15 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     };
     const onBlur = () => {
       for (const code of MOVEMENT_KEY_CODES) keys[code] = false;
+      joystickRef.current = { dx: 0, dy: 0 };
+      joystickGestureRef.current = idleJoystickGesture();
+      if (joystickRingRef.current && joystickNubRef.current) {
+        applyJoystickPlacement(
+          joystickRingRef.current,
+          joystickNubRef.current,
+          joystickGestureRef.current,
+        );
+      }
     };
 
     const tick = (timestamp: number) => {
@@ -270,7 +521,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       const world = state.world;
       if (world && dt > 0) {
         const player = world.player;
-        const { inputX, inputY } = movementInputVector(keys);
+        const keysVector = movementInputVector(keys);
+        const { inputX, inputY } = locomotionInput(keysVector.inputX, keysVector.inputY, joystickRef.current);
         motion.exhausted = playerIsExhausted(player);
         stepPlayerVelocity(motion, inputX, inputY);
         settleStoppedVelocity(motion, inputX !== 0 || inputY !== 0);
@@ -295,12 +547,14 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('touchmove', blockScrollWhileDragging, { passive: false });
     frameId = window.requestAnimationFrame(tick);
 
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('touchmove', blockScrollWhileDragging);
       window.cancelAnimationFrame(frameId);
     };
   }, []);
@@ -364,8 +618,48 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     }
   }, [world, cameraOffset]);
 
+  const publishJoystick = (gesture: JoystickGesture) => {
+    joystickGestureRef.current = gesture;
+    joystickRef.current = { dx: gesture.dx, dy: gesture.dy };
+    if (joystickRingRef.current && joystickNubRef.current) {
+      applyJoystickPlacement(joystickRingRef.current, joystickNubRef.current, gesture);
+    }
+  };
+
+  const onJoystickTouchStart = (event: JoystickTouchEvent) => {
+    if (showCrafting) return;
+    if (isJoystickIgnoredTarget(event.target ?? null)) return;
+    const touch = joystickPointFromEvent(event, 'touches');
+    if (!touch) return;
+    const screenWidth = typeof window !== 'undefined' ? window.innerWidth : SCREEN_WIDTH;
+    const next = joystickTouchStart(joystickGestureRef.current, touch, screenWidth);
+    if (next === joystickGestureRef.current) return;
+    publishJoystick(next);
+  };
+
+  const onJoystickTouchMove = (event: JoystickTouchEvent) => {
+    const gesture = joystickGestureRef.current;
+    if (gesture.activeId === null) return;
+    const touch = joystickPointFromEvent(event, 'touches', gesture.activeId);
+    if (!touch) return;
+    publishJoystick(joystickTouchMove(gesture, touch));
+  };
+
+  const onJoystickTouchEnd = (event: JoystickTouchEvent) => {
+    const gesture = joystickGestureRef.current;
+    if (gesture.activeId === null) return;
+    const touch = joystickPointFromEvent(event, 'changedTouches', gesture.activeId);
+    if (!touch) return;
+    if (gesture.dragged) suppressClickUntilRef.current = Date.now() + 400;
+    publishJoystick(joystickTouchEnd(gesture, touch.identifier));
+  };
+
   // Handle canvas click for voxel interaction
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (Date.now() < suppressClickUntilRef.current) {
+      suppressClickUntilRef.current = 0;
+      return;
+    }
     if (!rendererRef.current || !world) return;
 
     const canvas = canvasRef.current!;
@@ -563,8 +857,17 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     );
   }
 
+  const joystickRest = joystickRestPosition();
+  const joystickSize = JOYSTICK_OUTER_RADIUS * 2;
+
   return (
-    <View style={styles.gameContainer}>
+    <JoystickTouchRoot
+      style={styles.gameContainer}
+      onTouchStart={onJoystickTouchStart}
+      onTouchMove={onJoystickTouchMove}
+      onTouchEnd={onJoystickTouchEnd}
+      onTouchCancel={onJoystickTouchEnd}
+    >
       {showCrafting && <CraftingMenu onClose={() => setShowCrafting(false)} />}
       <View style={styles.header}>
         <View style={styles.titleContainer}>
@@ -851,10 +1154,46 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         <Text style={styles.instructionText}>• Click on voxels to interact with them</Text>
         <Text style={styles.instructionText}>• Use arrow buttons to move camera</Text>
         <Text style={styles.instructionText}>• WASD or arrow keys walk across the farm</Text>
+        <Text style={styles.instructionText}>• Drag the left half of the screen to walk</Text>
         <Text style={styles.instructionText}>• Select actions then click to place/build</Text>
         <Text style={styles.instructionText}>• Watch your crops grow in beautiful 3D!</Text>
       </View>
-    </View >
+
+      <div
+        ref={joystickRingRef}
+        aria-hidden
+        style={{
+          position: 'fixed',
+          left: joystickRest.left,
+          bottom: joystickRest.bottom,
+          width: joystickSize,
+          height: joystickSize,
+          borderRadius: JOYSTICK_OUTER_RADIUS,
+          boxSizing: 'border-box',
+          border: `3px solid ${theme.colors.cocoa}`,
+          backgroundColor: 'rgba(253, 251, 247, 0.55)',
+          zIndex: 30,
+          pointerEvents: 'none',
+          touchAction: 'none',
+        }}
+      >
+        <div
+          ref={joystickNubRef}
+          style={{
+            position: 'absolute',
+            left: JOYSTICK_OUTER_RADIUS - JOYSTICK_INNER_RADIUS,
+            top: JOYSTICK_OUTER_RADIUS - JOYSTICK_INNER_RADIUS,
+            width: JOYSTICK_INNER_RADIUS * 2,
+            height: JOYSTICK_INNER_RADIUS * 2,
+            borderRadius: JOYSTICK_INNER_RADIUS,
+            boxSizing: 'border-box',
+            border: `2px solid ${theme.colors.cocoa}`,
+            backgroundColor: theme.colors.sage,
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+    </JoystickTouchRoot>
   );
 };
 
