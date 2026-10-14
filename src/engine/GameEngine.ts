@@ -1,6 +1,6 @@
 import { Renderer2D5, Camera, GameCanvas } from './Renderer2D5';
 import { useGameStore } from '../store/gameStore';
-import { Vector3D } from '../types/game';
+import { Vector2D, Vector3D } from '../types/game';
 
 /**
  * Core Game Engine for Cozy Haven
@@ -79,6 +79,16 @@ function createHeadlessCanvas(): GameCanvas {
   } as unknown as CanvasRenderingContext2D;
 
   return { context, width: 1, height: 1 };
+}
+
+/**
+ * Squared Euclidean distance. Radius checks compare this to radius * radius
+ * and skip Math.sqrt.
+ */
+export function distanceSq(a: Vector2D, b: Vector2D): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
 }
 
 /**
@@ -573,7 +583,13 @@ export class GameEngine {
       if (!event.active) return;
 
       const { center, radius } = event.affectedArea;
-      
+      const anchor: Vector2D = { x: center.x, y: center.y };
+      // Affected-area membership is a squared compare, not Math.sqrt.
+      // The overlay sits on the event center, so only a non-positive radius misses.
+      if (!(distanceSq(anchor, center) < radius * radius)) {
+        return;
+      }
+
       // Choose visual effect based on weather type
       let spriteId = '';
       let opacity = 0.3;
@@ -608,7 +624,7 @@ export class GameEngine {
       this.renderer.queueRender({
         id: `weather_${event.id}`,
         spriteId,
-        position: { x: center.x, y: center.y, z: 10 }, // Render above everything
+        position: { x: anchor.x, y: anchor.y, z: 10 }, // Render above everything
         scale: radius / 10, // Scale based on affected area
         rotation: 0,
         opacity: opacity * (event.severity / 5), // Opacity based on severity
