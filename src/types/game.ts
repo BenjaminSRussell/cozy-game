@@ -181,6 +181,9 @@ export enum CropStage {
   DEAD = 5,
 }
 
+/** Crop type identifier string — matches the crop type field on Crop interface */
+export type CropType = 'wheat' | 'carrot' | 'tomato' | 'corn' | 'potato' | 'apple' | 'lettuce' | 'onion' | 'garlic' | 'peppers' | 'pumpkin' | 'strawberries' | 'blueberries';
+
 /**
  * Active crop growing in a farm plot
  * Tracks growth progression, health, and water level
@@ -790,9 +793,3 @@ export type HomeBenefitType =
   | 'season_override'   // Allows year-round growing
   | 'energy_gen'        // Provides free tool energy
   | 'magical_bonuses';  // Special magical benefits
-
-/**
- * Crop types that can be planted and harvested
- * Each crop has different growth times, values, and requirements
- */
-export type CropType = 'wheat' | 'carrot' | 'tomato' | 'corn' | 'potato' | 'lettuce' | 'onion' | 'garlic' | 'peppers' | 'pumpkin' | 'strawberries' | 'blueberries';
