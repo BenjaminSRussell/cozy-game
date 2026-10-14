@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
 import { useGameStore } from '../store/gameStore';
-import { CropStage, Item, ItemType } from '../types/game';
+import { CropStage, ItemType, type Item, type Season } from '../types/game';
+import { EconomySystem } from '../systems/EconomySystem';
 
 export const MARKET_ITEMS: { [key: string]: { basePrice: number; demandMultiplier: number; icon: string } } = {
   // Crops - Common crops worth 1-5 bucks
@@ -44,8 +45,6 @@ interface MarketplaceScreenProps {
   onClose: () => void;
 }
 
-import { EconomySystem } from '../systems/EconomySystem';
-
 /**
  * Current sell price for a market key.
  * EconomySystem.getPrice returns 0 when the item is not tracked (it does not return null).
@@ -60,13 +59,147 @@ export function listedSellPrice(
   return MARKET_ITEMS[itemId]?.basePrice ?? 0;
 }
 
+/**
+ * Seed packets stocked by the general store.
+ * Seasons and harvest yields match rendering CropSystem configs.
+ * Growth days match the farm loop (wheat 3, carrot 2, tomato 4, corn 5).
+ * Buy prices and sell values match TimeSystem shop stock and EconomyManager.
+ */
+export interface SeedPacket {
+  id: string;
+  cropId: string;
+  name: string;
+  description: string;
+  icon: string;
+  seasons: readonly Season[];
+  growthDays: number;
+  harvestYield: number;
+  buyPrice: number;
+  sellValue: number;
+  rarity: Item['rarity'];
+}
+
+export const SEED_PACKETS: readonly SeedPacket[] = [
+  {
+    id: 'wheat_seeds',
+    cropId: 'wheat',
+    name: 'Wheat Seeds',
+    description: 'Staple grain seed. Grows in spring, summer, and autumn.',
+    icon: MARKET_ITEMS.wheat.icon,
+    seasons: ['spring', 'summer', 'autumn'],
+    growthDays: 3,
+    harvestYield: 5,
+    buyPrice: 10,
+    sellValue: 5,
+    rarity: 'common',
+  },
+  {
+    id: 'carrot_seeds',
+    cropId: 'carrot',
+    name: 'Carrot Seeds',
+    description: 'A quick root crop for spring through autumn.',
+    icon: MARKET_ITEMS.carrot.icon,
+    seasons: ['spring', 'summer', 'autumn'],
+    growthDays: 2,
+    harvestYield: 3,
+    buyPrice: 15,
+    sellValue: 8,
+    rarity: 'common',
+  },
+  {
+    id: 'tomato_seeds',
+    cropId: 'tomato',
+    name: 'Tomato Seeds',
+    description: 'Juicy fruit that keeps producing after the first harvest.',
+    icon: MARKET_ITEMS.tomato.icon,
+    seasons: ['spring', 'summer', 'autumn'],
+    growthDays: 4,
+    harvestYield: 4,
+    buyPrice: 20,
+    sellValue: 12,
+    rarity: 'common',
+  },
+  {
+    id: 'corn_seeds',
+    cropId: 'corn',
+    name: 'Corn Seeds',
+    description: 'Tall stalks with a heavy yield, sold in spring and summer.',
+    icon: MARKET_ITEMS.corn.icon,
+    seasons: ['spring', 'summer'],
+    growthDays: 5,
+    harvestYield: 6,
+    buyPrice: 25,
+    sellValue: 15,
+    rarity: 'uncommon',
+  },
+];
+
+export const SEED_COST_COLOR = '#333333';
+export const SEED_COST_UNAFFORDABLE_COLOR = '#C62828';
+
+export const SEED_QUANTITY_BUTTONS = [
+  { label: '[-1]', action: -1 },
+  { label: '[+1]', action: 1 },
+  { label: '[+5]', action: 5 },
+  { label: '[+25]', action: 25 },
+  { label: '[MAX]', action: 'max' },
+] as const;
+
+export type SeedQuantityAction = (typeof SEED_QUANTITY_BUTTONS)[number]['action'];
+
+export function growthDurationBadge(growthDays: number): string {
+  const days = Math.max(0, Math.round(growthDays));
+  return `⚡ ${days} ${days === 1 ? 'Day' : 'Days'}`;
+}
+
+export function filterSeedPacketsBySeason(
+  packets: readonly SeedPacket[],
+  season: Season | undefined,
+): SeedPacket[] {
+  if (!season) return [];
+  return packets.filter((packet) => packet.seasons.includes(season));
+}
+
+export function applySeedQuantity(
+  current: number,
+  action: SeedQuantityAction,
+  coins: number,
+  unitPrice: number,
+): number {
+  const safeCurrent = Number.isFinite(current) ? Math.floor(current) : 1;
+  if (action === 'max') {
+    if (unitPrice <= 0) return Math.max(1, safeCurrent);
+    const affordable = Math.floor(Math.max(0, coins) / unitPrice);
+    return Math.max(1, affordable);
+  }
+  return Math.max(1, safeCurrent + action);
+}
+
+export function seedTotalCost(unitPrice: number, quantity: number): number {
+  return unitPrice * Math.max(0, quantity);
+}
+
+export function canPurchaseSeeds(coins: number, totalCost: number): boolean {
+  return totalCost >= 0 && coins >= totalCost;
+}
+
+export function seedCostTextColor(coins: number, totalCost: number): string {
+  return canPurchaseSeeds(coins, totalCost) ? SEED_COST_COLOR : SEED_COST_UNAFFORDABLE_COLOR;
+}
+
 export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, onClose }) => {
-  const { world, addCoins, removeItem, getInventoryItem } = useGameStore();
+  const { world, addCoins, addItem, removeItem, getInventoryItem } = useGameStore();
+  const [shopMode, setShopMode] = useState<'buy' | 'sell'>('buy');
+  const [seedQuantities, setSeedQuantities] = useState<Record<string, number>>({});
   const [selectedTab, setSelectedTab] = useState<'crops' | 'ore' | 'wood' | 'all'>('all');
   const [refreshTime, setRefreshTime] = useState(300);
   const [updateTrigger, setUpdateTrigger] = useState(0); // To force re-render when economy changes
 
   const economy = EconomySystem.getInstance();
+  // Gameplay season lives on the world. TimeSystem has no currentSeason field.
+  const currentSeason = world?.season ?? 'spring';
+  const coins = world?.player.coins ?? 0;
+  const seasonalSeeds = filterSeedPacketsBySeason(SEED_PACKETS, currentSeason);
 
   // Update market prices periodically (simulation step)
   useEffect(() => {
@@ -248,6 +381,33 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
     );
   };
 
+  const changeSeedQuantity = (packet: SeedPacket, action: SeedQuantityAction) => {
+    setSeedQuantities((prev) => ({
+      ...prev,
+      [packet.id]: applySeedQuantity(prev[packet.id] ?? 1, action, coins, packet.buyPrice),
+    }));
+  };
+
+  const buySeedPacket = (packet: SeedPacket, quantity: number) => {
+    if (!world) return;
+    const totalCost = seedTotalCost(packet.buyPrice, quantity);
+    if (!canPurchaseSeeds(world.player.coins, totalCost)) return;
+
+    addCoins(-totalCost);
+    const item: Item = {
+      id: packet.id,
+      name: packet.name,
+      type: ItemType.SEED,
+      quantity,
+      sellValue: packet.sellValue,
+      spriteId: packet.icon,
+      rarity: packet.rarity,
+    };
+    addItem(item);
+    Alert.alert('Purchased', `Bought ${quantity}x ${packet.name} for ${totalCost} bucks`);
+    setUpdateTrigger((prev) => prev + 1);
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -286,7 +446,11 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
         <View style={styles.marketStatus}>
           <View style={styles.statusItem}>
             <Text style={styles.statusLabel}>Your Bucks:</Text>
-            <Text style={styles.statusValue}>💰 {world?.player.coins || 0}</Text>
+            <Text style={styles.statusValue}>💰 {coins}</Text>
+          </View>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>Season:</Text>
+            <Text style={styles.statusValue}>{currentSeason}</Text>
           </View>
           <View style={styles.statusItem}>
             <Text style={styles.statusLabel}>Price Refresh:</Text>
@@ -294,7 +458,27 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
           </View>
         </View>
 
+        <View style={styles.modeRow}>
+          <TouchableOpacity
+            style={[styles.modeButton, shopMode === 'buy' && styles.modeButtonActive]}
+            onPress={() => setShopMode('buy')}
+          >
+            <Text style={[styles.modeButtonText, shopMode === 'buy' && styles.modeButtonTextActive]}>
+              Buy Seeds
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeButton, shopMode === 'sell' && styles.modeButtonActive]}
+            onPress={() => setShopMode('sell')}
+          >
+            <Text style={[styles.modeButtonText, shopMode === 'sell' && styles.modeButtonTextActive]}>
+              Sell
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Category Tabs */}
+        {shopMode === 'sell' && (
         <View style={styles.tabs}>
           {(['all', 'crops', 'ore', 'wood'] as const).map(tab => (
             <TouchableOpacity
@@ -308,10 +492,62 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
             </TouchableOpacity>
           ))}
         </View>
+        )}
 
         {/* Items List */}
         <ScrollView style={styles.itemsContainer}>
-          {getFilteredItems().length === 0 ? (
+          {shopMode === 'buy' ? (
+            seasonalSeeds.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No seed packets this season</Text>
+                <Text style={styles.emptySubtext}>The general store restocks when the season changes.</Text>
+              </View>
+            ) : (
+              seasonalSeeds.map((packet) => {
+                const quantity = seedQuantities[packet.id] ?? 1;
+                const totalCost = seedTotalCost(packet.buyPrice, quantity);
+                const affordable = canPurchaseSeeds(coins, totalCost);
+                return (
+                  <View key={packet.id} style={styles.seedCard}>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemIcon}>{packet.icon}</Text>
+                      <View style={styles.itemDetails}>
+                        <Text style={styles.itemName}>{packet.name}</Text>
+                        <Text style={styles.seedDescription}>{packet.description}</Text>
+                        <Text style={styles.growthBadge}>{growthDurationBadge(packet.growthDays)}</Text>
+                        <Text style={styles.seedYield}>Harvest yield: {packet.harvestYield}</Text>
+                        <Text style={styles.seedBuyPrice}>Buy price: {packet.buyPrice} bucks</Text>
+                      </View>
+                    </View>
+                    <View style={styles.qtyRow}>
+                      {SEED_QUANTITY_BUTTONS.map((button) => (
+                        <TouchableOpacity
+                          key={button.label}
+                          style={styles.qtyButton}
+                          onPress={() => changeSeedQuantity(packet, button.action)}
+                        >
+                          <Text style={styles.qtyButtonText}>{button.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                      <Text style={styles.itemQuantity}>Qty: {quantity}</Text>
+                    </View>
+                    <View style={styles.seedPurchaseRow}>
+                      <Text style={[styles.seedCost, { color: seedCostTextColor(coins, totalCost) }]}>
+                        Cost: {totalCost} bucks
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.buyButton, !affordable && styles.buyButtonDisabled]}
+                        disabled={!affordable}
+                        onPress={() => buySeedPacket(packet, quantity)}
+                      >
+                        <Text style={styles.buyButtonText}>Buy</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            )
+          ) : getFilteredItems().length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No items to sell in this category</Text>
               <Text style={styles.emptySubtext}>Harvest crops or mine ore to get started!</Text>
@@ -362,9 +598,11 @@ export const MarketplaceScreen: React.FC<MarketplaceScreenProps> = ({ visible, o
             <Text style={styles.refreshButtonText}>⏩ Next Day (Debug)</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.sellAllButton} onPress={sellAll}>
-            <Text style={styles.sellAllButtonText}>💰 Sell All</Text>
-          </TouchableOpacity>
+          {shopMode === 'sell' && (
+            <TouchableOpacity style={styles.sellAllButton} onPress={sellAll}>
+              <Text style={styles.sellAllButtonText}>💰 Sell All</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
@@ -572,5 +810,105 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  modeButtonActive: {
+    borderBottomColor: '#8B4513',
+    backgroundColor: '#F5F5DC',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  modeButtonTextActive: {
+    color: '#8B4513',
+    fontWeight: 'bold',
+  },
+  seedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  seedDescription: {
+    fontSize: 12,
+    color: '#666666',
+    marginBottom: 2,
+  },
+  growthBadge: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#F9A825',
+    marginTop: 4,
+  },
+  seedYield: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  seedBuyPrice: {
+    fontSize: 12,
+    color: '#333333',
+    marginTop: 2,
+  },
+  qtyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  qtyButton: {
+    backgroundColor: '#EFE6D5',
+    borderWidth: 1,
+    borderColor: '#C4B49A',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  qtyButtonText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#5D4037',
+  },
+  seedPurchaseRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  seedCost: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buyButton: {
+    backgroundColor: '#8B4513',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 6,
+  },
+  buyButtonDisabled: {
+    backgroundColor: '#BDBDBD',
+  },
+  buyButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });
