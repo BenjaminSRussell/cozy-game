@@ -708,11 +708,12 @@ interface GameStore {
   collectMachineOutput: (buildingId: string) => void;
 
   /**
-   * Apply fertilizer to a farm plot
-   * @param plotId - ID of the plot
-   * @param itemId - ID of the fertilizer item
+   * Apply fertilizer to the crop on the plot at a grid cell.
+   * The cell is compared to Math.floor of the plot position, not the plot id.
+   * @param position - Grid cell of the plot
+   * @param fertilizerType - Fertilizer to store on the plot
    */
-  applyFertilizer: (plotId: string, itemId: string) => void;
+  applyFertilizer: (position: Vector2D, fertilizerType: 'speed' | 'quality' | 'water') => void;
 
   /**
    * Purchase an animal
@@ -2862,36 +2863,38 @@ export const useGameStore = create<GameStore>()(
           });
         },
 
-        applyFertilizer: (plotId: string, itemId: string) => {
+        applyFertilizer: (position: Vector2D, fertilizerType: 'speed' | 'quality' | 'water') => {
           set((state) => {
             if (!state.world) return state;
 
-            const plot = state.world.farmPlots.find(p => p.id === plotId);
-            const item = state.world.player.inventory.find(i => i.id === itemId);
+            // createFarmPlot ids are `plot_${Date.now()}`, so match the cell instead.
+            const plot = state.world.farmPlots.find(
+              (p) => Math.floor(p.position.x) === position.x && Math.floor(p.position.y) === position.y,
+            );
+            if (!plot || !plot.crop) return state;
 
-            if (!plot || !plot.tilled || plot.fertilizerType || !item || item.type !== ItemType.SEED) {
-              // Assuming fertilizer is tagged as SEED or we need a new FERTILIZER type
-              // For now, check if name contains fertilizer
-              if (!item?.name.toLowerCase().includes('fertilizer')) return state;
-            }
+            const item = state.world.player.inventory.find((entry) => {
+              const name = entry.name.toLowerCase();
+              const id = entry.id.toLowerCase();
+              const looksLikeFertilizer = name.includes('fertilizer') || id.includes('fertilizer');
+              return looksLikeFertilizer && (name.includes(fertilizerType) || id.includes(fertilizerType));
+            });
+            const inventory = item
+              ? state.world.player.inventory
+                .map((entry) => entry.id === item.id ? { ...entry, quantity: entry.quantity - 1 } : entry)
+                .filter((entry) => entry.quantity > 0)
+              : state.world.player.inventory;
 
-            const fertilizerType = item.name.toLowerCase().includes('quality') ? 'quality' :
-              item.name.toLowerCase().includes('speed') ? 'speed' : 'water';
-
-            const newInventory = state.world.player.inventory.map(i =>
-              i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i
-            ).filter(i => i.quantity > 0);
-
-            const updatedPlots = state.world.farmPlots.map(p =>
-              p.id === plotId ? { ...p, fertilizerType: fertilizerType as any } : p
+            const farmPlots = state.world.farmPlots.map((p) =>
+              p.id === plot.id ? { ...p, fertilizerType } : p,
             );
 
             return {
               world: {
                 ...state.world,
-                player: { ...state.world.player, inventory: newInventory },
-                farmPlots: updatedPlots
-              }
+                player: { ...state.world.player, inventory },
+                farmPlots,
+              },
             };
           });
         },

@@ -1171,7 +1171,10 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         return;
       }
 
-      applyFertilizer(plot.id, fertilizerItem.id);
+      applyFertilizer(
+        { x: Math.floor(plot.position.x), y: Math.floor(plot.position.y) },
+        selectedFertilizerType,
+      );
       showNotification(`🩹 Applied ${selectedFertilizerType} fertilizer!`);
       setSelectedAction(null);
     } else if (plot.crop) {
