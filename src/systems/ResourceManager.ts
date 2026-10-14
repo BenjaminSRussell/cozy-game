@@ -89,6 +89,8 @@ export interface ResourceSystem {
 export class ResourceManager {
   private timeSystem: TimeSystem;
   private resourceSystem: ResourceSystem;
+  /** Counted materials such as wood and stone. Keys are stored lowercase. */
+  private resources: Map<string, number> = new Map();
   private readonly TREE_REGROWTH_TIME = 3 * 24 * 60 * 60 * 1000; // 3 days in milliseconds
   private readonly FORAGEABLE_RESPAWN_TIME = 2 * 24 * 60 * 60 * 1000; // 2 days
 
@@ -296,6 +298,22 @@ export class ResourceManager {
   // ============================================================================
   // RESOURCE INTERACTIONS
   // ============================================================================
+
+  /**
+   * Add to a counted material. `Wood` and `wood` are the same resource.
+   */
+  public addResource(type: string, amount: number): void {
+    const key = type.toLowerCase();
+    const current = this.resources.get(key) ?? 0;
+    this.resources.set(key, current + amount);
+  }
+
+  /**
+   * Read a counted material. Missing types are 0, not undefined.
+   */
+  public getResource(type: string): number {
+    return this.resources.get(type.toLowerCase()) ?? 0;
+  }
 
   /**
    * Harvest a tree
