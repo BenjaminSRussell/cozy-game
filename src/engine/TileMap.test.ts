@@ -86,6 +86,25 @@ describe('TileMap', () => {
     expect(map.getTile(1, 0)?.crop).toBe('carrot');
   });
 
+  it('picks the same variant for a coordinate every time', () => {
+    const wide = { width: 4, height: 3, tileSize: 16, elevationScale: 8 };
+    const first = new TileMap(wide);
+    const second = new TileMap(wide);
+    for (let x = 0; x < wide.width; x++) {
+      for (let y = 0; y < wide.height; y++) {
+        const a = first.getTile(x, y);
+        const b = second.getTile(x, y);
+        expect(a?.variant).toBe(b?.variant);
+        expect(a?.variant).toBeGreaterThanOrEqual(0);
+        expect(a?.variant).toBeLessThan(4);
+        expect(Number.isInteger(a?.variant)).toBe(true);
+      }
+    }
+    expect(first.getTile(0, 0)?.variant).toBe(0);
+    expect(second.getTile(0, 0)?.variant).toBe(0);
+    expect(first.getTile(2, 0)?.variant).toBe(3);
+  });
+
   it('returns only tiles inside the requested radius', () => {
     const map = new TileMap({ width: 5, height: 5, tileSize: 16, elevationScale: 8 });
     const positions = map.getTilesInRange(2, 2, 1).map((tile) => `${tile.position.x},${tile.position.y}`);
