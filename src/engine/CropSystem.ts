@@ -73,10 +73,10 @@ export class AdvancedCropSystem {
 
     this.cropPersonalities.set('corn', {
       type: 'energetic',
-      swayAmount: 0.5,
+      swayAmount: 0.2,
       bounceHeight: 4,
       glowIntensity: 0.3,
-      animationSpeed: 0.04,
+      animationSpeed: 0.025,
       specialEffects: ['dramatic_sway', 'height_growth']
     });
   }
