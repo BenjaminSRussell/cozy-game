@@ -1,4 +1,23 @@
-import { Road, Vector2D } from '../types/game';
+import { Road, RoadGrade, Vector2D } from '../types/game';
+
+/** Tile facts buildRoad needs. walkable false blocks even when the type is not water. */
+export interface RoadPlacementTile {
+    position: Vector2D;
+    type?: string;
+    walkable?: boolean;
+}
+
+export interface RoadPlacementWorld {
+    tiles?: readonly RoadPlacementTile[];
+    roads?: readonly Road[];
+}
+
+export interface RoadBuildResult {
+    success: boolean;
+    reason?: string;
+    road?: Road;
+    roads?: Road[];
+}
 
 // Bitmask constants for road connections
 // 1 = Top, 2 = Right, 4 = Bottom, 8 = Left
@@ -39,5 +58,42 @@ export class RoadSystem {
             ...road,
             connections: this.calculateConnections(road, roads)
         }));
+    }
+
+    /**
+     * Place a road on a walkable tile.
+     * Water is refused even if walkable is omitted. Other tiles are refused when walkable is false.
+     * A missing tile is not treated as blocked.
+     */
+    public static buildRoad(
+        position: Vector2D,
+        grade: RoadGrade,
+        world: RoadPlacementWorld = {}
+    ): RoadBuildResult {
+        const tile = world.tiles?.find(t => t.position.x === position.x && t.position.y === position.y);
+        if (tile?.type === 'water' || tile?.walkable === false) {
+            return {
+                success: false,
+                reason: tile?.type === 'water'
+                    ? 'Cannot build road on water'
+                    : 'Cannot build road on non-walkable tile'
+            };
+        }
+
+        const road: Road = {
+            id: `road_${position.x}_${position.y}`,
+            type: grade === 'paved' ? 'paved' : 'dirt',
+            grade,
+            lanes: 1,
+            position,
+            connections: 0
+        };
+
+        const roads = this.refreshAllConnections([...(world.roads ?? []), road]);
+        return {
+            success: true,
+            road: roads[roads.length - 1],
+            roads
+        };
     }
 }
