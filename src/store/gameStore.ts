@@ -815,6 +815,7 @@ const createInitialWorld = (playerName: string): GameWorld => {
       stamina: 100,
       maxStamina: 100,
       staminaRegenRate: 0,
+      playTime: 0,
       inventory: [
         {
           id: 'item_hay_starting',
