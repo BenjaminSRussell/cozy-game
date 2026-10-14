@@ -494,11 +494,21 @@ export interface CraftingRecipe {
  */
 export type PlayerAction = 'idle' | 'walk' | 'hoe' | 'water' | 'axe' | 'pickaxe';
 
-export interface PlayerAnimationState {
+/** Tool clip stored on PlayerState. The isometric screen still reads these fields. */
+export interface PlayerActionAnimation {
   action: PlayerAction;
   frame: number;
   direction: number; // 0: SE, 1: SW, 2: NW, 3: NE (Isometric directions)
   isPlaying: boolean;
+}
+
+export type FacingDirection = 'north' | 'south' | 'east' | 'west';
+export interface PlayerAnimationState {
+  direction: FacingDirection;
+  frameIndex: number;
+  elapsedTime: number;
+  frameDuration: number; // 0.15s per frame
+  isMoving: boolean;
 }
 
 export interface PlayerState {
@@ -536,8 +546,8 @@ export interface PlayerState {
     /** Total playtime in milliseconds */
     total_play_time: number;
   };
-  /** Current animation state */
-  animation: PlayerAnimationState;
+  /** Current tool/action animation. Cardinal walk frames are not stored here. */
+  animation: PlayerActionAnimation;
   /** Current world position */
   position: Vector3D;
   /** Target position for movement */
