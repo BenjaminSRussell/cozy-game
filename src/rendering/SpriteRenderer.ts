@@ -5,8 +5,21 @@
  * to minimize draw calls and maximize performance.
  */
 
+import { FacingDirection, PlayerAnimationState } from '../types/game';
 import { RenderPipeline, Vector2D, RenderObject } from './RenderPipeline';
 import { TextureManager, LoadedTexture } from './TextureManager';
+
+/** Character sheet rows: Down=0, Left=1, Right=2, Up=3. */
+export const CHARACTER_FACING_ROW: Record<FacingDirection, number> = {
+  south: 0,
+  west: 1,
+  east: 2,
+  north: 3,
+};
+
+const CHARACTER_ROWS: readonly FacingDirection[] = ['south', 'west', 'east', 'north'];
+const CHARACTER_COLUMNS = 4;
+const DEFAULT_FRAME_DURATION = 0.15;
 
 export interface SpriteConfig {
   textureId: string;
@@ -45,6 +58,18 @@ export interface Sprite extends RenderObject {
   animationTime: number;
   flipped: boolean;
   config: SpriteConfig;
+}
+
+export interface CharacterSheetCell {
+  row: number;
+  column: number;
+  direction: FacingDirection;
+  sourceRect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 export interface Particle {
@@ -341,6 +366,106 @@ export class SpriteRenderer {
       loop,
       frameRate
     });
+  }
+
+  /**
+   * Slice a character sheet into 4 rows (Down, Left, Right, Up) and 4 columns.
+   */
+  public sliceCharacterSheet(sheetWidth: number, sheetHeight: number): CharacterSheetCell[] {
+    const frameWidth = sheetWidth / CHARACTER_COLUMNS;
+    const frameHeight = sheetHeight / CHARACTER_ROWS.length;
+    const cells: CharacterSheetCell[] = [];
+
+    for (let row = 0; row < CHARACTER_ROWS.length; row++) {
+      for (let column = 0; column < CHARACTER_COLUMNS; column++) {
+        cells.push({
+          row,
+          column,
+          direction: CHARACTER_ROWS[row],
+          sourceRect: {
+            x: column * frameWidth,
+            y: row * frameHeight,
+            width: frameWidth,
+            height: frameHeight,
+          },
+        });
+      }
+    }
+
+    return cells;
+  }
+
+  /**
+   * Idle walk-cycle state. frameDuration is 0.15s and frameIndex starts at 0.
+   */
+  public createWalkCycle(direction: FacingDirection = 'south'): PlayerAnimationState {
+    return {
+      direction,
+      frameIndex: 0,
+      elapsedTime: 0,
+      frameDuration: DEFAULT_FRAME_DURATION,
+      isMoving: false,
+    };
+  }
+
+  /**
+   * While moving, frameIndex cycles 0 → 1 → 2 → 3 → 0 every frameDuration seconds.
+   * When movement stops, frameIndex returns to 0 and the facing direction stays.
+   */
+  public updateWalkCycle(
+    state: PlayerAnimationState,
+    deltaTime: number,
+    movement?: { isMoving: boolean; direction?: FacingDirection },
+  ): PlayerAnimationState {
+    const frameDuration = state.frameDuration > 0 ? state.frameDuration : DEFAULT_FRAME_DURATION;
+    const isMoving = movement ? movement.isMoving : state.isMoving;
+
+    if (!isMoving) {
+      return {
+        direction: state.direction,
+        frameIndex: 0,
+        elapsedTime: 0,
+        frameDuration,
+        isMoving: false,
+      };
+    }
+
+    const direction = movement?.direction ?? state.direction;
+    const durationMs = Math.max(1, Math.round(frameDuration * 1000));
+    const previousMs = Math.max(0, Math.round(Number.isFinite(state.elapsedTime) ? state.elapsedTime * 1000 : 0));
+    const deltaMs = Math.max(0, Math.round(Number.isFinite(deltaTime) ? deltaTime * 1000 : 0));
+    const elapsedMs = previousMs + deltaMs;
+    const steps = Math.floor(elapsedMs / durationMs);
+    const baseFrame = ((state.frameIndex % CHARACTER_COLUMNS) + CHARACTER_COLUMNS) % CHARACTER_COLUMNS;
+
+    return {
+      direction,
+      frameIndex: (baseFrame + steps) % CHARACTER_COLUMNS,
+      elapsedTime: (elapsedMs - steps * durationMs) / 1000,
+      frameDuration,
+      isMoving: true,
+    };
+  }
+
+  /**
+   * Source rectangle for the current facing row and walk frame.
+   */
+  public characterFrameRect(
+    state: PlayerAnimationState,
+    sheetWidth: number,
+    sheetHeight: number,
+  ): CharacterSheetCell['sourceRect'] {
+    const column = ((state.frameIndex % CHARACTER_COLUMNS) + CHARACTER_COLUMNS) % CHARACTER_COLUMNS;
+    const row = CHARACTER_FACING_ROW[state.direction] ?? 0;
+    const frameWidth = sheetWidth / CHARACTER_COLUMNS;
+    const frameHeight = sheetHeight / CHARACTER_ROWS.length;
+
+    return {
+      x: column * frameWidth,
+      y: row * frameHeight,
+      width: frameWidth,
+      height: frameHeight,
+    };
   }
 
   /**
