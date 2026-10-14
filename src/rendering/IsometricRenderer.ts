@@ -6,6 +6,7 @@
  */
 
 import { GameWorld, CropStage } from '../types/game';
+import { gridToScreen, screenToGrid } from '../engine/TileMap';
 import { TextureManager } from './TextureManager';
 import { WindSystem, WindVector } from '../systems/WindSystem';
 import { DemoAssets } from '../assets/DemoAssets';
@@ -197,15 +198,16 @@ export class IsometricRenderer {
   }
 
   /**
-   * Convert 3D world coordinates to 2D isometric screen coordinates
+   * Convert 3D world coordinates to 2D isometric screen coordinates.
+   * Ground plane is gridToScreen. Camera and the CSS origin match screenToVoxel.
+   * ctx.scale(dpr) does not change this space; cssWidth is not the backing store.
    */
   private worldToIsometric(x: number, y: number, z: number): IsometricPoint {
-    const isoX = (x - y) * (this.tileSize / 2);
-    const isoY = (x + y) * (this.tileSize / 4) - (z * this.voxelHeight);
+    const projected = gridToScreen(x, y, this.tileSize, this.tileSize / 2);
 
     return {
-      screenX: isoX + this.cssWidth / 2 + this.camera.x,
-      screenY: isoY + this.cssHeight / 3 + this.camera.y,
+      screenX: projected.x + this.cssWidth / 2 + this.camera.x,
+      screenY: projected.y - z * this.voxelHeight + this.cssHeight / 3 + this.camera.y,
       depth: x + y + z // Simple depth sorting key
     };
   }
@@ -1407,22 +1409,21 @@ export class IsometricRenderer {
 
   /**
    * Inverse of worldToIsometric on the ground plane (z = 0).
-   * Diamonds are centered on the grid point, so the nearest integer is the
-   * drawn tile; floor would pick the neighbor on the top-left half of each tile.
+   * Pointer space is CSS pixels plus the same camera offset as the projection.
+   * canvas.width is css size times devicePixelRatio; do not scale into it.
+   * Diamonds are centered on the grid point. screenToGrid floors that point
+   * as the cell minimum, which would select the top-left neighbor, so the
+   * sample is shifted half a tile (+0.5 on both axes) before the floor.
    * Returns null outside world.mapSize once render() has cached it.
    */
   screenToVoxel(screenX: number, screenY: number): { x: number; y: number } | null {
+    const tileWidth = this.tileSize;
+    const tileHeight = this.tileSize / 2;
     const relX = screenX - this.cssWidth / 2 - this.camera.x;
     const relY = screenY - this.cssHeight / 3 - this.camera.y;
+    const centered = screenToGrid(relX, relY + tileHeight / 2, tileWidth, tileHeight);
 
-    // isoX = (x - y) * (tileSize / 2)
-    // isoY = (x + y) * (tileSize / 4)
-    const halfTile = this.tileSize / 2;
-    const quarterTile = this.tileSize / 4;
-    const gridX = Math.round(relX / halfTile / 2 + relY / quarterTile / 2);
-    const gridY = Math.round(relY / quarterTile / 2 - relX / halfTile / 2);
-
-    const tile = { x: gridX, y: gridY };
+    const tile = { x: centered.gridX, y: centered.gridY };
     if (!this.isTileOnMap(tile)) return null;
     return tile;
   }
