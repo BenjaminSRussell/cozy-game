@@ -75,6 +75,40 @@ export const createTool = (
   };
 };
 
+/**
+ * Apply one tool swing.
+ * At 0 durability the matching inventory entry is removed and the store's
+ * existing console notice reports the break once. Equipped tools stay at 0
+ * so a later swing cannot spend them again.
+ */
+function consumeToolDurability(
+  player: PlayerState,
+  tool: Tool,
+  cost = 1,
+): { tools: PlayerState['tools']; inventory: Item[] } {
+  const durability = Math.max(0, tool.durability - cost);
+  const worn: Tool = { ...tool, durability };
+  const inventory = durability <= 0
+    ? player.inventory.filter((item) => item.id !== tool.id)
+    : player.inventory.map((item) => (
+      item.id === tool.id ? { ...item, durability } : item
+    ));
+
+  if (durability <= 0) {
+    showNotification(`Your ${tool.name} broke!`);
+  }
+
+  return {
+    tools: { ...player.tools, [tool.toolType]: worn },
+    inventory,
+  };
+}
+
+/** Player-facing notices in this store. Not a second notification channel. */
+function showNotification(message: string): void {
+  console.log(message);
+}
+
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // STONE TIER UPGRADES
   {
@@ -1209,18 +1243,10 @@ export const useGameStore = create<GameStore>()(
               return state;
             }
 
-            // Consume durability
-            const newDurability = hoe.durability - 1;
-            if (newDurability <= 0) {
-              // Break tool logic could go here, or just stop working. 
-              // For now, let's keep it simple: stop working if 0.
-              if (hoe.durability <= 0) return state;
-            }
+            // Till soil. A hoe already at 0 cannot swing again.
+            if (hoe.durability <= 0) return state;
 
-            const updatedTools = {
-              ...tools,
-              [ToolType.HOE]: { ...hoe, durability: Math.max(0, newDurability) }
-            };
+            const worn = consumeToolDurability(state.world.player, hoe);
 
             const newPlot: FarmPlot = {
               id: `plot_${Date.now()}`,
@@ -1234,7 +1260,11 @@ export const useGameStore = create<GameStore>()(
               world: {
                 ...state.world,
                 farmPlots: [...state.world.farmPlots, newPlot],
-                player: { ...state.world.player, tools: updatedTools }
+                player: {
+                  ...state.world.player,
+                  tools: worn.tools,
+                  inventory: worn.inventory,
+                },
               },
             };
           });
@@ -1374,15 +1404,7 @@ export const useGameStore = create<GameStore>()(
               return state;
             }
 
-            // Consume durability (water)
-            // Water can concept: durability = amount of water left? Or actual tool durability?
-            // Let's treat durability as "charge" or "condition". For MVP, simple durability.
-            const newDurability = can.durability - 1;
-
-            const updatedTools = {
-              ...tools,
-              [ToolType.WATERING_CAN]: { ...can, durability: Math.max(0, newDurability) }
-            };
+            const worn = consumeToolDurability(state.world.player, can);
 
             const updatedPlots = state.world.farmPlots.map((plot) => {
               if (plot.id !== plotId || !plot.crop) return plot;
@@ -1396,8 +1418,12 @@ export const useGameStore = create<GameStore>()(
               world: {
                 ...state.world,
                 farmPlots: updatedPlots,
-                player: { ...state.world.player, tools: updatedTools }
-              }
+                player: {
+                  ...state.world.player,
+                  tools: worn.tools,
+                  inventory: worn.inventory,
+                },
+              },
             };
           });
         },
@@ -1541,11 +1567,7 @@ export const useGameStore = create<GameStore>()(
 
             const durabilityCost = 1;
             const miningPower = 10 * pickaxe.efficiency;
-
-            const updatedTools = {
-              ...tools,
-              [ToolType.PICKAXE]: { ...pickaxe, durability: Math.max(0, pickaxe.durability - durabilityCost) }
-            };
+            const worn = consumeToolDurability(state.world.player, pickaxe, durabilityCost);
 
             const oreItem: Item = {
               id: deposit.oreType, // Use consistent ID for stacking
@@ -1571,8 +1593,8 @@ export const useGameStore = create<GameStore>()(
                 oreDeposits: updatedDeposits,
                 player: {
                   ...state.world.player,
-                  inventory: [...state.world.player.inventory, oreItem],
-                  tools: updatedTools
+                  inventory: [...worn.inventory, oreItem],
+                  tools: worn.tools,
                 },
               },
             };
@@ -1620,10 +1642,7 @@ export const useGameStore = create<GameStore>()(
             const source = state.world.woodSources.find((w) => w.id === sourceId);
             if (!source || source.health < 50) return state;
 
-            const updatedTools = {
-              ...tools,
-              [ToolType.AXE]: { ...axe, durability: Math.max(0, axe.durability - 1) }
-            };
+            const worn = consumeToolDurability(state.world.player, axe);
 
             const woodItem: Item = {
               id: `wood_${Date.now()}`,
@@ -1645,8 +1664,8 @@ export const useGameStore = create<GameStore>()(
                 woodSources: updatedSources,
                 player: {
                   ...state.world.player,
-                  inventory: [...state.world.player.inventory, woodItem],
-                  tools: updatedTools
+                  inventory: [...worn.inventory, woodItem],
+                  tools: worn.tools,
                 },
               },
             };
