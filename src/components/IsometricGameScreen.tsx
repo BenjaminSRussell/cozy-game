@@ -88,6 +88,123 @@ interface StructureFootprint {
   size?: { x: number; y: number };
 }
 
+/**
+ * Hold-to-charge for the hoe (plant) and watering can (water). The screen times the hold
+ * and passes it here. The area is measured from the player's tile, not from the pointer.
+ */
+export type ChargeTier = 'copper' | 'steel' | 'gold' | 'iridium';
+export type ChargeAction = 'till' | 'water';
+export type ChargeSource = 'pointer' | 'key';
+export interface GridCell {
+  x: number;
+  y: number;
+}
+/** One cardinal step on the grid: one axis is 0, the other is 1 or -1. */
+export interface GridFacing {
+  x: number;
+  y: number;
+}
+
+export interface ChargeSpec {
+  tier: ChargeTier;
+  /** Hold time that reaches this tier, in ms. */
+  holdMs: number;
+  /** Cells to each side of the forward line. 0 is a 1-wide line, 1 is 3 wide. */
+  halfWidth: number;
+  /** Forward distance from the player's tile, inclusive. */
+  fromForward: number;
+  toForward: number;
+}
+
+/**
+ * Copper 1x3 and steel 1x5 run ahead of the player. Gold 3x3 is centered on the
+ * tile in front. Iridium 3x6 runs from the tile in front, 6 deep.
+ */
+export const CHARGE_TIERS: readonly ChargeSpec[] = [
+  { tier: 'copper', holdMs: 800, halfWidth: 0, fromForward: 1, toForward: 3 },
+  { tier: 'steel', holdMs: 1500, halfWidth: 0, fromForward: 1, toForward: 5 },
+  { tier: 'gold', holdMs: 2200, halfWidth: 1, fromForward: 0, toForward: 2 },
+  { tier: 'iridium', holdMs: 3000, halfWidth: 1, fromForward: 1, toForward: 6 },
+];
+/** Space is the keyboard action key. It is not a walk key. */
+export const CHARGE_ACTION_KEY_CODE = 'Space';
+/** A press that moves farther than this from where it went down is a drag and never charges. */
+export const CHARGE_DRAG_TOLERANCE_PX = 10;
+export const DEFAULT_CHARGE_FACING: GridFacing = { x: 0, y: 1 };
+
+/** Highest tier the hold has reached, or null before the first 0.8 s. */
+export function chargeSpecForHold(holdMs: number): ChargeSpec | null {
+  let reached: ChargeSpec | null = null;
+  for (const spec of CHARGE_TIERS) {
+    if (holdMs >= spec.holdMs) reached = spec;
+  }
+  return reached;
+}
+
+/** Cells a tier covers, measured from the player's tile. The lateral axis is the facing turned a quarter. */
+export function chargeAreaCells(origin: GridCell, facing: GridFacing, spec: ChargeSpec): GridCell[] {
+  const cells: GridCell[] = [];
+  for (let forward = spec.fromForward; forward <= spec.toForward; forward += 1) {
+    for (let side = -spec.halfWidth; side <= spec.halfWidth; side += 1) {
+      cells.push({
+        x: origin.x + facing.x * forward - facing.y * side,
+        y: origin.y + facing.y * forward + facing.x * side,
+      });
+    }
+  }
+  return cells;
+}
+
+/** Tier and cells for a hold. No tier means no area yet. */
+export function chargeAreaFor(
+  holdMs: number,
+  origin: GridCell,
+  facing: GridFacing,
+): { tier: ChargeTier | null; cells: GridCell[] } {
+  const spec = chargeSpecForHold(holdMs);
+  if (!spec) return { tier: null, cells: [] };
+  return { tier: spec.tier, cells: chargeAreaCells(origin, facing, spec) };
+}
+
+/** Plant is the hoe (till) and water is the watering can. Other actions do not charge. */
+export function chargeActionFor(selected: string | null): ChargeAction | null {
+  if (selected === 'plant') return 'till';
+  if (selected === 'water') return 'water';
+  return null;
+}
+
+/** Facing follows the dominant axis of motion. A player who is still keeps its last facing. */
+export function facingFromVelocity(vx: number, vy: number, previous: GridFacing): GridFacing {
+  if (Math.abs(vx) < VELOCITY_STOP_EPSILON && Math.abs(vy) < VELOCITY_STOP_EPSILON) return previous;
+  if (Math.abs(vx) >= Math.abs(vy)) return { x: vx > 0 ? 1 : -1, y: 0 };
+  return { x: 0, y: vy > 0 ? 1 : -1 };
+}
+
+export function sameGridCells(a: readonly GridCell[], b: readonly GridCell[]): boolean {
+  return a.length === b.length && a.every((cell, index) => cell.x === b[index].x && cell.y === b[index].y);
+}
+
+/** True once a press has moved past the drag tolerance from where it went down. */
+export function chargeDragged(start: { x: number; y: number }, point: { x: number; y: number }): boolean {
+  return Math.hypot(point.x - start.x, point.y - start.y) > CHARGE_DRAG_TOLERANCE_PX;
+}
+
+interface ChargeHold {
+  source: ChargeSource;
+  action: ChargeAction;
+  startedAt: number;
+  /** Where the press went down. Null for the keyboard. */
+  start: { x: number; y: number } | null;
+  tier: ChargeTier | null;
+  cells: GridCell[];
+}
+
+interface ChargeApi {
+  start(source: ChargeSource, start: { x: number; y: number } | null): void;
+  release(source: ChargeSource): void;
+  cancel(): void;
+}
+
 export function emptyMovementKeys(): MovementKeyState {
   return {
     KeyW: false,
@@ -837,6 +954,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
 }
 
+/** A focused button, link or field keeps Space for itself, so the charge key does not steal it. */
+function isControlTarget(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) return false;
+  return target.closest('button, a[href], input, select, textarea, [role="button"]') !== null;
+}
+
 interface IsometricGameScreenProps {
   onSave: () => void;
   /** Active line. Nothing is drawn when this is omitted. */
@@ -858,6 +981,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const joystickNubRef = useRef<HTMLDivElement>(null);
   /** Ghost click after a drag is ignored until this time. A missing click must not swallow the next tap. */
   const suppressClickUntilRef = useRef(0);
+  /** The press or Space that is charging a hoe or watering can. Null when nothing is held. */
+  const chargeRef = useRef<ChargeHold | null>(null);
+  /** Cardinal direction of the last movement. The charge area is measured from it. */
+  const facingRef = useRef<GridFacing>(DEFAULT_CHARGE_FACING);
+  /** Latest start, release and cancel. Window listeners keep the render they were bound in, so they call through this. */
+  const chargeApiRef = useRef<ChargeApi | null>(null);
   const [selectedAction, setSelectedAction] = useState<'plant' | 'water' | 'harvest' | 'build' | 'mine' | 'build_road' | 'spawn_vehicle' | 'fertilize' | null>(null);
   const [selectedCropType, setSelectedCropType] = useState<'wheat' | 'carrot' | 'tomato' | 'apple'>('wheat');
   const [selectedFertilizerType, setSelectedFertilizerType] = useState<'speed' | 'quality' | 'water'>('speed');
@@ -956,14 +1085,26 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
+      if (event.code === CHARGE_ACTION_KEY_CODE) {
+        if (isControlTarget(event.target)) return;
+        if (!event.repeat) chargeApiRef.current?.start('key', null);
+        event.preventDefault();
+        return;
+      }
       if (!applyMovementKey(keys, event.code, true)) return;
       event.preventDefault();
     };
     const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === CHARGE_ACTION_KEY_CODE) {
+        chargeApiRef.current?.release('key');
+        if (!isControlTarget(event.target)) event.preventDefault();
+        return;
+      }
       if (!applyMovementKey(keys, event.code, false)) return;
       event.preventDefault();
     };
     const onBlur = () => {
+      chargeApiRef.current?.cancel();
       for (const code of MOVEMENT_KEY_CODES) keys[code] = false;
       joystickRef.current = { dx: 0, dy: 0 };
       joystickGestureRef.current = idleJoystickGesture();
@@ -1003,6 +1144,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           motion.exhausted = playerIsExhausted(player);
           stepPlayerVelocity(motion, inputX, inputY);
           settleStoppedVelocity(motion, inputX !== 0 || inputY !== 0);
+          facingRef.current = facingFromVelocity(motion.vx, motion.vy, facingRef.current);
 
           if (motion.vx !== 0 || motion.vy !== 0) {
             const next = nextPlayerPosition(
@@ -1035,6 +1177,10 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           }
         }
       }
+
+      // Re-aim the charge reticle every frame, so it follows the player and the hold time.
+      const live = useGameStore.getState().world;
+      if (live) advanceCharge(live.player.position);
 
       // Redraw while exhausted so the sweat bubble keeps floating between moves.
       if (world && playerIsExhausted(world.player)) {
@@ -1410,6 +1556,82 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     }
   };
 
+  // Hold-to-charge. A held press or Space with a hoe or watering can selected arms a charge.
+  // A tap keeps the normal single-tile action. A hold that reaches Copper applies on release.
+  const startCharge = (source: ChargeSource, start: { x: number; y: number } | null): void => {
+    if (chargeRef.current) return;
+    const action = chargeActionFor(selectedAction);
+    if (!action || !useGameStore.getState().world) return;
+    chargeRef.current = { source, action, startedAt: performance.now(), start, tier: null, cells: [] };
+  };
+
+  /** Drops the charge. With a source, only a charge that came from that source is dropped. */
+  const cancelCharge = (source?: ChargeSource): void => {
+    const charge = chargeRef.current;
+    if (!charge || (source !== undefined && charge.source !== source)) return;
+    chargeRef.current = null;
+    rendererRef.current?.setChargeReticle(null);
+  };
+
+  const releaseCharge = (source: ChargeSource): void => {
+    const charge = chargeRef.current;
+    if (!charge || charge.source !== source) return;
+    cancelCharge();
+    // A short press has no tier, so the normal tap in handleCanvasClick still runs.
+    if (!charge.tier) return;
+    // The click that follows a charged pointer release belongs to this charge.
+    if (source === 'pointer') suppressClickUntilRef.current = Date.now() + 400;
+    if (refuseExhausted()) return;
+    if (!checkTool(charge.action === 'till' ? ToolType.HOE : ToolType.WATERING_CAN)) return;
+
+    const changed = useGameStore.getState().applyToolArea(charge.cells, charge.action);
+    const plural = changed === 1 ? '' : 's';
+    if (charge.action === 'till') {
+      if (changed === 0) {
+        showNotification('📍 Nothing new to till here');
+        return;
+      }
+      AudioManager.getInstance().playTillSound();
+      showNotification(`📍 Tilled ${changed} tile${plural}!`);
+      return;
+    }
+    if (changed === 0) {
+      showNotification('💧 Nothing to water in that area');
+      return;
+    }
+    startWaterSplash();
+    addExperience(5);
+    showNotification(`💧 Watered ${changed} crop${plural}!`);
+  };
+
+  /** Runs every frame from the movement loop. The reticle follows the player and the hold time. */
+  const advanceCharge = (position: { x: number; y: number }): void => {
+    const charge = chargeRef.current;
+    if (!charge) return;
+    const origin = { x: Math.floor(position.x), y: Math.floor(position.y) };
+    const next = chargeAreaFor(performance.now() - charge.startedAt, origin, facingRef.current);
+    if (next.tier === charge.tier && sameGridCells(next.cells, charge.cells)) return;
+    charge.tier = next.tier;
+    charge.cells = next.cells;
+    rendererRef.current?.setChargeReticle(next.tier ? next.cells : null);
+  };
+
+  const handleCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0) return;
+    startCharge('pointer', { x: event.clientX, y: event.clientY });
+  };
+
+  const handleCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const charge = chargeRef.current;
+    if (!charge || charge.source !== 'pointer' || !charge.start) return;
+    if (chargeDragged(charge.start, { x: event.clientX, y: event.clientY })) cancelCharge('pointer');
+  };
+
+  // Refresh the handles after every render, so the window key listeners call the latest closures.
+  useEffect(() => {
+    chargeApiRef.current = { start: startCharge, release: releaseCharge, cancel: cancelCharge };
+  });
+
   // Camera controls
   const moveCamera = (dx: number, dy: number) => {
     if (rendererRef.current) {
@@ -1516,6 +1738,11 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
             cursor: 'crosshair'
           }}
           onClick={handleCanvasClick}
+          onPointerDown={handleCanvasPointerDown}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerUp={() => releaseCharge('pointer')}
+          onPointerLeave={() => cancelCharge('pointer')}
+          onPointerCancel={() => cancelCharge('pointer')}
         />
 
         {/* Camera Controls */}
@@ -1776,6 +2003,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         <Text style={styles.instructionText}>• Keys 1-0, the scroll wheel, or a tap selects the hotbar</Text>
         <Text style={styles.instructionText}>• Drag the left half of the screen to walk</Text>
         <Text style={styles.instructionText}>• Select actions then click to place/build</Text>
+        <Text style={styles.instructionText}>• Hold a click or Space with a hoe or watering can to charge a wider area</Text>
         <Text style={styles.instructionText}>• Watch your crops grow in beautiful 3D!</Text>
       </View>
 

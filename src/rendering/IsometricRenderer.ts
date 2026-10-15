@@ -158,6 +158,8 @@ export class IsometricRenderer {
   hoveredTile: { x: number; y: number } | null = null;
   /** Last world passed to render(); a hover repaint reuses it and does not set worldDirty. */
   private lastWorld: GameWorld | null = null;
+  /** Cells a held tool will hit on release. Empty when no charge is held. */
+  private chargeTiles: { x: number; y: number }[] = [];
   /** Reused top-layer tint. Cutouts are punched here so the world underneath stays. */
   private ambientCanvas: HTMLCanvasElement | null = null;
   private boundPointerMove: EventListener;
@@ -228,6 +230,20 @@ export class IsometricRenderer {
 
   public markDirty(): void {
     this.worldDirty = true;
+  }
+
+  /**
+   * Glowing outlines on the cells a held tool will hit on release.
+   * Null or [] clears them. Like hover, it repaints only a clean cache.
+   */
+  setChargeReticle(tiles: readonly { x: number; y: number }[] | null): void {
+    const next = (tiles ?? []).map((cell) => ({ x: cell.x, y: cell.y }));
+    const same = next.length === this.chargeTiles.length
+      && next.every((cell, index) => cell.x === this.chargeTiles[index].x && cell.y === this.chargeTiles[index].y);
+    if (same) return;
+    this.chargeTiles = next;
+    if (!this.lastWorld || this.worldDirty) return;
+    this.render(this.lastWorld);
   }
 
   private isTreeCrop(world: GameWorld, x: number, y: number): boolean {
@@ -1381,6 +1397,7 @@ export class IsometricRenderer {
     // Draw UI overlay
     this.drawUI(world);
     this.drawHoveredTile();
+    this.drawChargeReticle();
     this.drawAmbientFilter(world);
   }
 
@@ -1408,6 +1425,32 @@ export class IsometricRenderer {
     this.ctx.stroke();
     this.ctx.fillStyle = isValidAction ? 'rgba(255, 255, 255, 0.2)' : 'rgba(239, 68, 68, 0.2)';
     this.ctx.fill();
+  }
+
+  /** Same glow on every charged cell, so the whole area reads at once. Off-map cells are skipped. */
+  private drawChargeReticle(): void {
+    if (this.chargeTiles.length === 0) return;
+    const tileWidth = this.tileSize;
+    const tileHeight = this.tileSize / 2;
+    this.ctx.save();
+    this.ctx.shadowColor = 'rgba(255, 200, 60, 0.9)';
+    this.ctx.shadowBlur = 12;
+    this.ctx.strokeStyle = 'rgba(255, 224, 130, 0.95)';
+    this.ctx.fillStyle = 'rgba(255, 210, 90, 0.2)';
+    this.ctx.lineWidth = 2;
+    for (const tile of this.chargeTiles) {
+      if (!this.isTileOnMap(tile)) continue;
+      const iso = this.worldToIsometric(tile.x, tile.y, 0);
+      this.ctx.beginPath();
+      this.ctx.moveTo(iso.screenX, iso.screenY - tileHeight / 2);
+      this.ctx.lineTo(iso.screenX + tileWidth / 2, iso.screenY);
+      this.ctx.lineTo(iso.screenX, iso.screenY + tileHeight / 2);
+      this.ctx.lineTo(iso.screenX - tileWidth / 2, iso.screenY);
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.stroke();
+    }
+    this.ctx.restore();
   }
 
   private drawUI(world: GameWorld): void {

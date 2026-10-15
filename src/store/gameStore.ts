@@ -433,6 +433,14 @@ interface GameStore {
   waterCrop: (plotId: string) => void;
 
   /**
+   * Hoe ('till') or water ('water') every tile in one state update.
+   * One swing: one durability cost and one exhaustion check. Till skips tiles
+   * that already have a plot. Water skips tiles without a living crop.
+   * @returns tiles changed. Zero leaves durability and stamina untouched.
+   */
+  applyToolArea: (tiles: Vector2D[], action: 'till' | 'water') => number;
+
+  /**
    * Update crop growth based on elapsed time
    * Called regularly from game loop to progress crops through growth stages
    * Advances stages based on days elapsed and water level thresholds
@@ -1629,6 +1637,71 @@ export const useGameStore = create<GameStore>()(
               },
             };
           });
+        },
+
+        applyToolArea: (tiles, action) => {
+          let changed = 0;
+          set((state) => {
+            if (!state.world || tiles.length === 0) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
+
+            const world = state.world;
+            // Cells past the map edge are not part of the farm, so they take no tool work.
+            const cells = tiles.filter((cell) => (
+              cell.x >= 0 && cell.y >= 0 && cell.x < world.mapSize.x && cell.y < world.mapSize.y
+            ));
+            const onTile = (position: Vector2D, cell: Vector2D) =>
+              Math.floor(position.x) === cell.x && Math.floor(position.y) === cell.y;
+
+            if (action === 'till') {
+              const hoe = world.player.tools[ToolType.HOE];
+              if (!hoe || hoe.durability <= 0) return state;
+              const open = cells.filter((cell) => !world.farmPlots.some((plot) => onTile(plot.position, cell)));
+              if (open.length === 0) return state;
+
+              changed = open.length;
+              const worn = consumeToolDurability(world.player, hoe);
+              const stamp = Date.now();
+              const newPlots: FarmPlot[] = open.map((cell, index) => ({
+                id: `plot_${stamp}_${index}`,
+                position: { x: cell.x, y: cell.y },
+                size: { x: 1, y: 1 },
+                tilled: true,
+                tilledAt: stamp,
+              }));
+              return {
+                world: {
+                  ...world,
+                  farmPlots: [...world.farmPlots, ...newPlots],
+                  player: { ...world.player, tools: worn.tools, inventory: worn.inventory },
+                },
+              };
+            }
+
+            const can = world.player.tools[ToolType.WATERING_CAN];
+            if (!can || can.durability <= 0) return state;
+            const thirsty = (plot: FarmPlot) =>
+              Boolean(plot.crop) && plot.crop?.stage !== CropStage.DEAD
+              && cells.some((cell) => onTile(plot.position, cell));
+            const count = world.farmPlots.filter(thirsty).length;
+            if (count === 0) return state;
+
+            changed = count;
+            const worn = consumeToolDurability(world.player, can);
+            return {
+              world: {
+                ...world,
+                farmPlots: world.farmPlots.map((plot) => (
+                  thirsty(plot) && plot.crop
+                    ? { ...plot, crop: { ...plot.crop, waterLevel: Math.min(100, plot.crop.waterLevel + 30) } }
+                    : plot
+                )),
+                player: { ...world.player, tools: worn.tools, inventory: worn.inventory },
+              },
+            };
+          });
+          return changed;
         },
 
         updateCropGrowth: (deltaTime: number) => {
