@@ -5,6 +5,8 @@
  * Perfect for demo and testing before real assets are ready.
  */
 
+import { assetUri } from './assetUri';
+
 // ============================================================================
 // IMMEDIATE DEMO ASSETS - NO LOADING REQUIRED
 // ============================================================================
@@ -1058,43 +1060,43 @@ export class DemoAssets {
   }
 
   static createHouseBuilding(): string {
-    return require('../../assets/buildings/house.svg') as string;
+    return assetUri(require('../../assets/buildings/house.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createBarnBuilding(): string {
-    return require('../../assets/buildings/barn.svg') as string;
+    return assetUri(require('../../assets/buildings/barn.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createShedBuilding(): string {
-    return require('../../assets/buildings/shed.svg') as string;
+    return assetUri(require('../../assets/buildings/shed.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createWindmillBuilding(): string {
-    return require('../../assets/buildings/windmill.svg') as string;
+    return assetUri(require('../../assets/buildings/windmill.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createGreenhouseBuilding(): string {
-    return require('../../assets/buildings/greenhouse.svg') as string;
+    return assetUri(require('../../assets/buildings/greenhouse.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createWellBuilding(): string {
-    return require('../../assets/buildings/well.svg') as string;
+    return assetUri(require('../../assets/buildings/well.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createFenceBuilding(): string {
-    return require('../../assets/buildings/fence.svg') as string;
+    return assetUri(require('../../assets/buildings/fence.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createTowerBuilding(): string {
-    return require('../../assets/buildings/tower.svg') as string;
+    return assetUri(require('../../assets/buildings/tower.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createBridgeBuilding(): string {
-    return require('../../assets/buildings/bridge.svg') as string;
+    return assetUri(require('../../assets/buildings/bridge.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createMarketBuilding(): string {
-    return require('../../assets/buildings/market.svg') as string;
+    return assetUri(require('../../assets/buildings/market.svg')) ?? this.createPlaceholderBuilding();
   }
 
   static createPlaceholderBuilding(): string {

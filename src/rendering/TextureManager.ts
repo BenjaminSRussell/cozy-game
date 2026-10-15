@@ -5,6 +5,8 @@
  * for optimal performance in the rendering pipeline.
  */
 
+import { assetUri } from '../assets/assetUri';
+
 export interface TextureConfig {
   id: string;
   path: string;
@@ -91,7 +93,12 @@ export class TextureManager {
     const startTime = performance.now();
 
     try {
-      const parts = config.path.split('#');
+      // On web, require() of an svg gives { uri, width, height }, not a string.
+      const location = assetUri(config.path);
+      if (!location) {
+        throw new Error(`Texture ${config.id} has no usable path`);
+      }
+      const parts = location.split('#');
       const filePath = parts[0];
       const partId = parts[1];
 

@@ -90,3 +90,62 @@ describe('TextureManager emoji ids', () => {
     expect(textures.getTexture('assets/missing/crop.png')).toBeUndefined();
   });
 });
+
+describe('TextureManager Metro asset objects', () => {
+  afterEach(() => {
+    TextureManager.getInstance().clearCache();
+    vi.unstubAllGlobals();
+  });
+
+  it('loads a web require() asset by its uri instead of falling back to magenta', async () => {
+    // On web, require('x.svg') is { uri, width, height }. Loading used to throw on split().
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"></svg>',
+    }));
+    const ctx = { clearRect() {}, drawImage() {} };
+    // Fires onload on the next microtask, after the loader has attached its handlers.
+    class LoadingImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      private value = '';
+      get src() {
+        return this.value;
+      }
+      set src(value: string) {
+        this.value = value;
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('Image', LoadingImage);
+    vi.stubGlobal('document', {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => ctx,
+        toDataURL: () => 'data:image/png;base64,grass',
+      }),
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const textures = TextureManager.getInstance();
+      await textures.preloadTextures([
+        {
+          id: 'tile_grass',
+          path: { uri: '/assets/tiles/grass.svg', width: 64, height: 64 } as unknown as string,
+        },
+      ]);
+
+      expect(fetchMock).toHaveBeenCalledWith('/assets/tiles/grass.svg');
+      expect(warn).not.toHaveBeenCalled();
+      // The 64x64 magenta fallback is what a failed load stores.
+      expect(textures.getTexture('tile_grass')).toMatchObject({ width: 128, height: 128 });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
