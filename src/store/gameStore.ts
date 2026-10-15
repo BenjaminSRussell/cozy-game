@@ -396,6 +396,14 @@ interface GameStore {
   createFarmPlot: (position: { x: number; y: number }) => void;
 
   /**
+   * Hoe swing on one tile: tills empty grass or plain dirt into farm soil.
+   * Costs 2 stamina and one hoe durability. Refused when exhausted, when no usable
+   * hoe is equipped, or when the tile holds a plot, ore deposit, tree, building or road.
+   * @returns true when the tile was tilled
+   */
+  tillSoil: (tileX: number, tileY: number) => boolean;
+
+  /**
    * Plant a crop in a farm plot
    * Empty plots and dead crops accept a new seed. A living crop is left unchanged.
    * Initializes crop with SEED stage, full water and health
@@ -1042,6 +1050,14 @@ function isTilledSoil(tile: SoilTile): boolean {
   return soil === 'tilled_dry' || soil === 'tilled_wet';
 }
 
+/** Stamina one hoe swing costs. */
+const TILL_STAMINA_COST = 2;
+
+/** True when both positions fall on one grid cell. Floors match the renderer's cell lookup. */
+function sameCell(a: Vector2D, b: Vector2D): boolean {
+  return Math.floor(a.x) === Math.floor(b.x) && Math.floor(a.y) === Math.floor(b.y);
+}
+
 function nextShippedToday(
   world: GameWorld,
   rows: readonly ShippedTodayEntry[],
@@ -1423,6 +1439,55 @@ export const useGameStore = create<GameStore>()(
               },
             };
           });
+        },
+
+        tillSoil: (tileX: number, tileY: number) => {
+          let tilled = false;
+          set((state) => {
+            if (!state.world) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
+
+            const world = state.world;
+            const cell = { x: tileX, y: tileY };
+            const occupied =
+              world.farmPlots.some((plot) => sameCell(plot.position, cell)) ||
+              (world.oreDeposits ?? []).some((deposit) => sameCell(deposit.position, cell)) ||
+              (world.woodSources ?? []).some((source) => sameCell(source.position, cell)) ||
+              (world.buildings ?? []).some((building) => sameCell(building.position, cell)) ||
+              (world.roads ?? []).some((road) => sameCell(road.position, cell));
+            if (occupied) return state;
+
+            const hoe = world.player.tools[ToolType.HOE];
+            if (!hoe || hoe.durability <= 0) return state;
+
+            const worn = consumeToolDurability(world.player, hoe);
+            const stamina = Math.max(0, world.player.stamina - TILL_STAMINA_COST);
+            tilled = true;
+
+            const plot: FarmPlot = {
+              id: `plot_${tileX}_${tileY}_${Date.now()}`,
+              position: cell,
+              size: { x: 1, y: 1 },
+              tilled: true,
+              tilledAt: Date.now(),
+            };
+
+            return {
+              world: {
+                ...world,
+                farmPlots: [...world.farmPlots, plot],
+                player: {
+                  ...world.player,
+                  stamina,
+                  isExhausted: stamina <= 0,
+                  tools: worn.tools,
+                  inventory: worn.inventory,
+                },
+              },
+            };
+          });
+          return tilled;
         },
 
         plantCrop: (plotId: string, cropType: string) => {

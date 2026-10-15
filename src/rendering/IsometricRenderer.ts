@@ -11,6 +11,7 @@ import { LightingSystem, placedLightSources } from '../engine/LightingSystem';
 import { TextureManager } from './TextureManager';
 import { WindSystem, WindVector } from '../systems/WindSystem';
 import { DemoAssets } from '../assets/DemoAssets';
+import { DirtBurstSystem, DIRT_BURST_LIFE_SECONDS } from './DirtBurst';
 
 
 interface Voxel {
@@ -153,6 +154,8 @@ export class IsometricRenderer {
   private voxelHeight = 16;
   private textureManager: TextureManager;
   private windSystem: WindSystem;
+  /** Dirt thrown up by hoe swings. Animated by render(). */
+  private readonly dirtBursts = new DirtBurstSystem();
   private playerGridPos: { x: number, y: number } | null = null;
   /** Grid tile under the pointer. Null when the pointer is off the map. */
   hoveredTile: { x: number; y: number } | null = null;
@@ -228,6 +231,16 @@ export class IsometricRenderer {
 
   public markDirty(): void {
     this.worldDirty = true;
+  }
+
+  /** Throw dirt up from a tile a hoe just broke. The burst animates on later render() calls. */
+  spawnDirtBurst(gridX: number, gridY: number): void {
+    this.dirtBursts.spawn(gridX, gridY);
+  }
+
+  /** True while dirt from a swing is still in the air. The screen redraws until it is not. */
+  hasDirtBurst(): boolean {
+    return this.dirtBursts.getGrains().length > 0;
   }
 
   private isTreeCrop(world: GameWorld, x: number, y: number): boolean {
@@ -1356,6 +1369,7 @@ export class IsometricRenderer {
 
     // Update wind
     this.windSystem.update(0.016); // Approx 60fps dt
+    this.dirtBursts.update(0.016); // Same fixed step as the wind.
 
     // Clear canvas
     this.ctx.clearRect(0, 0, width, height);
@@ -1377,6 +1391,9 @@ export class IsometricRenderer {
 
     // Draw Wind Particles
     this.drawWindParticles(world);
+
+    // Draw dirt from hoe swings
+    this.drawDirtBursts();
 
     // Draw UI overlay
     this.drawUI(world);
@@ -1492,6 +1509,20 @@ export class IsometricRenderer {
   resize(width: number, height: number): void {
     this.canvas.width = width;
     this.canvas.height = height;
+  }
+
+  /** Dirt grains from hoe swings: dark dots lifted by their height and faded by their life. */
+  private drawDirtBursts(): void {
+    for (const grain of this.dirtBursts.getGrains()) {
+      const iso = this.worldToIsometric(grain.x, grain.y, grain.z);
+      this.ctx.save();
+      this.ctx.globalAlpha = Math.max(0, Math.min(1, grain.life / DIRT_BURST_LIFE_SECONDS));
+      this.ctx.fillStyle = '#5D4037';
+      this.ctx.beginPath();
+      this.ctx.arc(iso.screenX, iso.screenY, grain.radius, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.restore();
+    }
   }
 
   private drawWindParticles(world: GameWorld): void {

@@ -845,7 +845,7 @@ interface IsometricGameScreenProps {
 
 export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave, dialogue = null }) => {
   const {
-    world, plantCrop, harvestCrop, waterCrop, createFarmPlot, addCoins, addExperience,
+    world, plantCrop, harvestCrop, waterCrop, tillSoil, addCoins, addExperience,
     placeBuilding, createOreDeposit, mineOre, harvestWood,
     buildRoad, upgradeRoad, spawnVehicle, mountVehicle, dismountVehicle, movePlayer, applyFertilizer,
     advanceTime,
@@ -1041,6 +1041,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         state.syncExhaustion();
         const latest = useGameStore.getState().world;
         if (latest) rendererRef.current?.render(latest);
+      }
+
+      // Keep redrawing while dirt from a hoe swing is in the air.
+      if (rendererRef.current?.hasDirtBurst()) {
+        const latest = useGameStore.getState().world;
+        if (latest) rendererRef.current.render(latest);
       }
 
       frameId = window.requestAnimationFrame(tick);
@@ -1381,8 +1387,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       // Plant action on empty soil -> Till
       if (refuseExhausted()) return;
       if (!checkTool(ToolType.HOE)) return;
-      createFarmPlot({ x: voxel.x, y: voxel.y });
+      if (!tillSoil(voxel.x, voxel.y)) {
+        showNotification('❌ Nothing to till here!');
+        return;
+      }
       AudioManager.getInstance().playTillSound();
+      rendererRef.current?.spawnDirtBurst(voxel.x, voxel.y);
       showNotification('📍 Tilled soil!');
     }
   };
