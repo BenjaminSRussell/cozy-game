@@ -519,3 +519,35 @@ describe('PersistenceManager local save slots', () => {
     expect(combined).not.toContain('expo-file-system');
   });
 });
+
+describe('PersistenceManager player.unlocks', () => {
+  it('keeps unlocks as a Set through a save and load', async () => {
+    const world = {
+      id: 'unlocks-1',
+      createdAt: 1,
+      lastPlayedAt: 2,
+      player: { name: 'Ben', level: 2, unlocks: new Set(['tractor']) },
+    } as unknown as GameWorld;
+
+    const manager = new PersistenceManager();
+    await manager.saveWorld(world);
+    const unlocks = (await manager.loadWorld('unlocks-1'))?.player.unlocks;
+
+    expect(unlocks).toBeInstanceOf(Set);
+    expect([...(unlocks ?? [])]).toEqual(['tractor']);
+    unlocks?.add('greenhouse');
+    expect(unlocks?.has('greenhouse')).toBe(true);
+  });
+
+  it('loads a save written before unlocks was a Set, with unlocks as an empty Set', async () => {
+    localStorage.setItem(
+      'cozy_save_legacy-unlocks',
+      JSON.stringify({ id: 'legacy-unlocks', player: { name: 'Ada', level: 3, unlocks: {} } }),
+    );
+
+    const unlocks = (await new PersistenceManager().loadWorld('legacy-unlocks'))?.player.unlocks;
+
+    expect(unlocks).toBeInstanceOf(Set);
+    expect(unlocks?.size).toBe(0);
+  });
+});

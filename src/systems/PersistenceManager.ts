@@ -82,6 +82,7 @@ export interface CloudSyncStatus {
  * A building that points at its GameWorld would otherwise throw
  * "Converting circular structure to JSON". The live object is not mutated,
  * and a repeated (non-cyclic) reference is still serialized twice.
+ * A Set is written as an array of its members, since JSON would write {}.
  */
 function stripCycles(value: unknown): unknown {
   const stack = new WeakSet<object>();
@@ -101,6 +102,9 @@ function stripCycles(value: unknown): unknown {
     try {
       if (Array.isArray(current)) {
         return current.map((item) => walk(item));
+      }
+      if (current instanceof Set) {
+        return Array.from(current, (item) => walk(item));
       }
 
       const copy: Record<string, unknown> = {};
@@ -668,6 +672,11 @@ export class PersistenceManager {
 
       const player = world.player ?? createDefaultPlayer();
       world.player = player;
+      // stripCycles writes unlocks as an array; saves from before that wrote {}.
+      if (player.unlocks !== undefined) {
+        const savedUnlocks: unknown = player.unlocks;
+        player.unlocks = new Set(Array.isArray(savedUnlocks) ? savedUnlocks : []);
+      }
       if (player.stamina === undefined) {
         player.stamina = 100;
       }

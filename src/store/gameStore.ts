@@ -1920,8 +1920,12 @@ export const useGameStore = create<GameStore>()(
         unlockFeature: (featureId: string) => {
           set((state) => {
             if (!state.world) return state;
-            state.world.player.unlocks.add(featureId);
-            return { world: { ...state.world } };
+            // zustand persist writes a Set as {}, so a world restored from it has no Set.
+            const unlocks = state.world.player.unlocks instanceof Set
+              ? state.world.player.unlocks
+              : new Set<string>();
+            unlocks.add(featureId);
+            return { world: { ...state.world, player: { ...state.world.player, unlocks } } };
           });
         },
 
