@@ -38,6 +38,7 @@ import {
 import { RoadSystem } from '../systems/RoadSystem';
 import { EXHAUSTED_MESSAGE, liveIsometricRenderers, playerIsExhausted } from '../rendering/IsometricRenderer';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
+import { moveInventoryStackInList } from './inventoryStacks';
 
 export const createTool = (
   type: ToolType | `${ToolType}`,
@@ -383,6 +384,15 @@ interface GameStore {
    * @returns Item if found, undefined otherwise
    */
   getInventoryItem: (itemId: string) => Item | undefined;
+
+  /**
+   * Drag the inventory stack at one hotbar index onto another index.
+   * Matching stacks merge, different items swap, and an index past the last item moves the stack to the end.
+   * @param fromIndex - Inventory index of the dragged stack
+   * @param toIndex - Inventory index to drop onto
+   * @returns true when the inventory changed
+   */
+  moveInventoryStack: (fromIndex: number, toIndex: number) => boolean;
 
   // ============================================================================
   // FARMING SYSTEM - Crop planting, growth, and harvesting
@@ -1377,6 +1387,25 @@ export const useGameStore = create<GameStore>()(
         getInventoryItem: (itemId: string) => {
           const { world } = get();
           return world?.player.inventory.find((item) => item.id === itemId);
+        },
+
+        moveInventoryStack: (fromIndex: number, toIndex: number): boolean => {
+          let moved = false;
+          set((state) => {
+            if (!state.world) return state;
+
+            const inventory = moveInventoryStackInList(state.world.player.inventory, fromIndex, toIndex);
+            if (!inventory) return state;
+
+            moved = true;
+            return {
+              world: {
+                ...state.world,
+                player: { ...state.world.player, inventory },
+              },
+            };
+          });
+          return moved;
         },
 
         // ========================================================================

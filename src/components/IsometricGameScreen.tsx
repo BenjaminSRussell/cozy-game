@@ -526,6 +526,8 @@ export function clockHudView(input: ClockHudInput): ClockHudView {
 export const HOTBAR_SLOT_COUNT = 10;
 export const HOTBAR_SLOT_SIZE = 48;
 export const HOTBAR_SLOT_GAP = 8;
+/** Pointer travel before a press on a hotbar slot counts as a drag rather than a tap. */
+const HOTBAR_DRAG_SLOP = 6;
 export const HOTBAR_SELECTED_BORDER = theme.colors.hotbarSelected;
 export const HOTBAR_KEY_CODES = [
   'Digit1',
@@ -688,6 +690,22 @@ export function cycleHotbarSlot(current: number, delta: number): number {
   const step = delta > 0 ? 1 : -1;
   return (selectHotbarSlot(current) + step + HOTBAR_SLOT_COUNT) % HOTBAR_SLOT_COUNT;
 }
+
+/** Reads the `data-hotbar-index` of a drop target. Anything that is not a hotbar slot is null. */
+export function hotbarSlotFromDataIndex(value: string | null | undefined): number | null {
+  if (value == null || !/^\d+$/.test(value)) return null;
+  const index = Number(value);
+  return index < HOTBAR_SLOT_COUNT ? index : null;
+}
+
+/** A press on an inventory-backed hotbar slot. `active` turns on once the pointer passes the drag slop. */
+type HotbarDrag = {
+  from: number;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  active: boolean;
+};
 
 function isDirectIcon(value: string): boolean {
   const trimmed = value.trim();
@@ -874,6 +892,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   const seasonalRef = useRef<SeasonalAudioSystem | null>(null);
   const waterStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedHotbarSlot, setSelectedHotbarSlot] = useState(0);
+  const hotbarDragRef = useRef<HotbarDrag | null>(null);
 
   const seasonalAudio = () => {
     if (!seasonalRef.current) seasonalRef.current = new SeasonalAudioSystem();
@@ -1094,6 +1113,65 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('wheel', onWheel);
+    };
+  }, []);
+
+  // Drag an inventory stack onto another hotbar slot. Tools and empty slots cannot start a drag.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const slotIndexOf = (target: EventTarget | null) => {
+      const slot = target instanceof Element ? target.closest('[data-hotbar-index]') : null;
+      return hotbarSlotFromDataIndex(slot?.getAttribute('data-hotbar-index'));
+    };
+
+    // Capture phase, and every press starts from a clean state, so an earlier drag whose
+    // pointerup never arrived cannot fire on a later release.
+    const onPointerDown = (event: PointerEvent) => {
+      hotbarDragRef.current = null;
+      if (event.button !== 0) return;
+      const from = slotIndexOf(event.target);
+      if (from === null || from >= (useGameStore.getState().world?.player.inventory.length ?? 0)) return;
+      hotbarDragRef.current = {
+        from,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        active: false,
+      };
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = hotbarDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId || drag.active) return;
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > HOTBAR_DRAG_SLOP) {
+        drag.active = true;
+      }
+    };
+
+    const endDrag = (event: PointerEvent, dropped: boolean) => {
+      const drag = hotbarDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      hotbarDragRef.current = null;
+      if (!dropped || !drag.active) return;
+
+      const to = slotIndexOf(document.elementFromPoint(event.clientX, event.clientY));
+      if (to === null || to === drag.from) return;
+      if (!useGameStore.getState().moveInventoryStack(drag.from, to)) return;
+      setSelectedHotbarSlot((current) => (current === drag.from ? to : current));
+    };
+
+    const onPointerUp = (event: PointerEvent) => endDrag(event, true);
+    const onPointerCancel = (event: PointerEvent) => endDrag(event, false);
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerCancel);
     };
   }, []);
 
@@ -1438,6 +1516,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     coins: world.player.coins,
   });
   const hotbar = hotbarLayout(hotbarItemsFromPlayer(world.player), selectedHotbarSlot);
+  // Inventory indexes come first in the hotbar. Slots past them show equipped tools, which cannot be dragged.
+  const hotbarStackCount = world.player.inventory.length;
 
   return (
     <JoystickTouchRoot
@@ -1893,6 +1973,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
             type="button"
             aria-label={slot.accessibilityLabel}
             aria-pressed={slot.selected}
+            data-hotbar-index={slot.index}
             onClick={() => setSelectedHotbarSlot(selectHotbarSlot(slot.index))}
             style={{
               width: slot.size,
@@ -1909,7 +1990,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
               border: `2px solid ${slot.borderColor}`,
               background: theme.colors.glassBg,
               boxShadow: slot.selected ? `0 0 10px ${slot.borderColor}` : theme.shadows.crisp,
-              cursor: 'pointer',
+              cursor: slot.index < hotbarStackCount ? 'grab' : 'pointer',
             }}
           >
             <span

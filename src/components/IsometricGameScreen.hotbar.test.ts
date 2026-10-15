@@ -62,6 +62,7 @@ import {
   hotbarItemsFromPlayer,
   hotbarLayout,
   hotbarMeter,
+  hotbarSlotFromDataIndex,
   hotbarSlotFromKey,
   hotbarWheelDelta,
   selectHotbarSlot,
@@ -250,5 +251,18 @@ describe('bottom hotbar', () => {
     expect(view.slots[2].meter?.kind).toBe('water');
     expect(view.slots[2].borderColor).toBe('#F59E0B');
     expect(view.slots[2].accessibilityLabel).toContain('selected');
+  });
+});
+
+describe('hotbar drop targets', () => {
+  it('reads only the hotbar slot indexes from a drop target', () => {
+    expect(hotbarSlotFromDataIndex('0')).toBe(0);
+    expect(hotbarSlotFromDataIndex('9')).toBe(9);
+    expect(hotbarSlotFromDataIndex('10')).toBeNull();
+    expect(hotbarSlotFromDataIndex('-1')).toBeNull();
+    expect(hotbarSlotFromDataIndex('2.5')).toBeNull();
+    expect(hotbarSlotFromDataIndex('')).toBeNull();
+    expect(hotbarSlotFromDataIndex(null)).toBeNull();
+    expect(hotbarSlotFromDataIndex(undefined)).toBeNull();
   });
 });
