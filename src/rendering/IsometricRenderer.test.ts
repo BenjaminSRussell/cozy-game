@@ -27,7 +27,12 @@ vi.hoisted(() => {
 });
 
 import { useGameStore } from '../store/gameStore';
-import { IsometricRenderer } from './IsometricRenderer';
+import {
+  HARVEST_POP_ARC_PX,
+  HARVEST_POP_DURATION_MS,
+  IsometricRenderer,
+  harvestPopPose,
+} from './IsometricRenderer';
 
 const TILE_SIZE = 64;
 
@@ -683,5 +688,114 @@ describe('IsometricRenderer depth queue', () => {
     expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
     const again = (renderer as unknown as { renderQueue: DepthQueueItem[] }).renderQueue;
     expect(again.map((item) => item.depth)).toEqual(queue.map((item) => item.depth));
+  });
+});
+
+describe('harvest pop', () => {
+  it('starts at the plot, reaches the player and lands with no lift', () => {
+    expect(harvestPopPose(0)).toEqual({ travel: 0, liftPx: 0, done: false });
+
+    const landed = harvestPopPose(HARVEST_POP_DURATION_MS);
+    expect(landed.travel).toBe(1);
+    expect(landed.liftPx).toBeCloseTo(0);
+    expect(landed.done).toBe(true);
+    expect(harvestPopPose(HARVEST_POP_DURATION_MS * 5).done).toBe(true);
+    expect(harvestPopPose(Number.NaN)).toEqual({ travel: 0, liftPx: 0, done: false });
+  });
+
+  it('arcs above the ground in flight and never rises past the first bounce', () => {
+    const samples = Array.from({ length: 101 }, (_, step) =>
+      harvestPopPose((HARVEST_POP_DURATION_MS * step) / 100),
+    );
+    for (const pose of samples) {
+      expect(pose.liftPx).toBeGreaterThanOrEqual(0);
+      expect(pose.liftPx).toBeLessThanOrEqual(HARVEST_POP_ARC_PX + 1e-9);
+    }
+    expect(harvestPopPose(HARVEST_POP_DURATION_MS * 0.25).liftPx).toBeGreaterThan(0);
+  });
+
+  it('moves steadily toward the player and never back toward the plot', () => {
+    let previous = -1;
+    for (let step = 0; step <= 100; step += 1) {
+      const { travel } = harvestPopPose((HARVEST_POP_DURATION_MS * step) / 100);
+      expect(travel).toBeGreaterThanOrEqual(previous);
+      previous = travel;
+    }
+  });
+
+  it('is active from the moment a drop is spawned', () => {
+    const { renderer } = rendererWithMap(800, 600, { x: 100, y: 100 });
+    expect(renderer.hasActiveHarvestPops()).toBe(false);
+
+    renderer.spawnHarvestPop({ x: 3, y: 5 }, 'gold', 1000);
+    expect(renderer.hasActiveHarvestPops()).toBe(true);
+  });
+
+  it('draws the drop on its arc until it lands, starring only silver, gold and iridium', () => {
+    const proto = IsometricRenderer.prototype as unknown as {
+      drawVoxels: () => void;
+      drawWindParticles: (world: unknown) => void;
+      drawUI: (world: unknown) => void;
+    };
+    vi.spyOn(proto, 'drawVoxels').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawWindParticles').mockImplementation(() => {});
+    vi.spyOn(proto, 'drawUI').mockImplementation(() => {});
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0);
+
+    const arc = vi.fn();
+    const fillText = vi.fn();
+    const ctx = {
+      scale: () => {},
+      save: () => {},
+      restore: () => {},
+      clearRect: () => {},
+      createLinearGradient: () => ({ addColorStop: () => {} }),
+      fillRect: () => {},
+      beginPath: () => {},
+      arc,
+      fill: () => {},
+      stroke: () => {},
+      fillText,
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 1,
+      font: '',
+      textAlign: 'start',
+      textBaseline: 'alphabetic',
+    };
+    const canvas = {
+      width: 800,
+      height: 600,
+      style: {},
+      getContext: () => ctx,
+      getBoundingClientRect: () => ({ width: 800, height: 600 }),
+    } as unknown as HTMLCanvasElement;
+    const renderer = new IsometricRenderer(canvas);
+    const world = depthWorld();
+
+    renderer.spawnHarvestPop({ x: 1, y: 0 }, 'gold');
+    renderer.render(world);
+    expect(arc).toHaveBeenCalledTimes(1);
+    expect(fillText).toHaveBeenCalledWith('★', expect.any(Number), expect.any(Number));
+
+    clock.mockReturnValue(HARVEST_POP_DURATION_MS / 2);
+    renderer.render(world);
+    expect(arc).toHaveBeenCalledTimes(2);
+    expect(renderer.hasActiveHarvestPops()).toBe(true);
+
+    clock.mockReturnValue(HARVEST_POP_DURATION_MS);
+    renderer.render(world);
+    expect(arc).toHaveBeenCalledTimes(2);
+    expect(renderer.hasActiveHarvestPops()).toBe(false);
+
+    fillText.mockClear();
+    renderer.spawnHarvestPop({ x: 1, y: 0 }, 'normal');
+    renderer.render(world);
+    expect(arc).toHaveBeenCalledTimes(3);
+    expect(fillText).not.toHaveBeenCalled();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 });

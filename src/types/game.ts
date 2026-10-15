@@ -171,6 +171,19 @@ export function getQualityMultiplier(quality: Item['quality']): number {
   }
 }
 
+/**
+ * Star badge colour for a harvest quality. Only silver, gold and iridium get
+ * a star; normal and missing quality return null.
+ */
+export function getQualityStarColor(quality: string | undefined): string | null {
+  switch (quality) {
+    case 'silver': return '#C0C0C0';
+    case 'gold': return '#FFD700';
+    case 'iridium': return '#B388FF';
+    default: return null;
+  }
+}
+
 // ============================================================================
 // FARMING SYSTEM - Crop planting and growth mechanics
 // ============================================================================

@@ -251,4 +251,22 @@ describe('bottom hotbar', () => {
     expect(view.slots[2].borderColor).toBe('#F59E0B');
     expect(view.slots[2].accessibilityLabel).toContain('selected');
   });
+
+  it('stars silver, gold and iridium harvests and leaves normal and plain stacks bare', () => {
+    const layout = hotbarLayout([
+      { id: 'harvest_wheat_silver', name: 'Wheat (Silver)', quantity: 3, spriteId: 'wheat', quality: 'silver' },
+      { id: 'harvest_wheat_gold', name: 'Wheat (Gold)', quantity: 2, spriteId: 'wheat', quality: 'gold' },
+      { id: 'harvest_wheat_iridium', name: 'Wheat (Iridium)', quantity: 1, spriteId: 'wheat', quality: 'iridium' },
+      { id: 'harvest_wheat_normal', name: 'Wheat (Normal)', quantity: 4, spriteId: 'wheat', quality: 'normal' },
+      { id: 'wheat', name: 'Wheat', quantity: 1, spriteId: 'wheat' },
+    ], 0);
+
+    const [silver, gold, iridium, normal, plain] = layout.slots;
+    expect(silver.qualityStarColor).toBe('#C0C0C0');
+    expect(gold.qualityStarColor).toBe('#FFD700');
+    expect(iridium.qualityStarColor).toBe('#B388FF');
+    expect(normal.qualityStarColor).toBeNull();
+    expect(plain.qualityStarColor).toBeNull();
+    expect(layout.slots[5].qualityStarColor).toBeNull();
+  });
 });

@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useGameStore } from '../store/gameStore';
-import { CropStage, Season, ToolType } from '../types/game';
+import { CropStage, Season, ToolType, getQualityStarColor } from '../types/game';
 import {
   EXHAUSTED_MESSAGE,
   IsometricRenderer,
@@ -612,6 +612,8 @@ export interface HotbarSlotItem {
   maxDurability?: number;
   waterLevel?: number;
   maxWater?: number;
+  /** Harvest quality. Silver, gold and iridium stacks show a star. */
+  quality?: string;
 }
 
 export interface HotbarMeterView {
@@ -632,6 +634,8 @@ export interface HotbarSlotView {
   quantityLabel: string | null;
   quantityCorner: 'bottom-right';
   meter: HotbarMeterView | null;
+  /** Star colour for a silver, gold or iridium harvest. Null for everything else. */
+  qualityStarColor: string | null;
   accessibilityLabel: string;
 }
 
@@ -769,6 +773,7 @@ export function hotbarLayout(
       quantityLabel,
       quantityCorner: 'bottom-right',
       meter,
+      qualityStarColor: item ? getQualityStarColor(item.quality) : null,
       accessibilityLabel: `Hotbar slot ${keyLabel}, ${detail}${selectedSlot ? ', selected' : ''}`,
     };
   });
@@ -1043,6 +1048,12 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         if (latest) rendererRef.current?.render(latest);
       }
 
+      // Keep frames coming while a harvest drop is still in the air.
+      if (rendererRef.current?.hasActiveHarvestPops()) {
+        const latest = useGameStore.getState().world;
+        if (latest) rendererRef.current.render(latest);
+      }
+
       frameId = window.requestAnimationFrame(tick);
     };
 
@@ -1280,7 +1291,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
       setSelectedAction(null);
     } else if (selectedAction === 'harvest' && plot.crop && plot.crop.stage === CropStage.HARVESTABLE) {
       const cropInfo = CROP_TYPES[selectedCropType];
-      harvestCrop(plot.id);
+      const harvested = harvestCrop(plot.id);
+      if (harvested) rendererRef.current?.spawnHarvestPop(plot.position, harvested.quality);
       const audio = AudioManager.getInstance();
       audio.playScytheSound();
       audio.playHarvestPop();
@@ -1929,6 +1941,23 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
             </span>
             {slot.icon ? (
               <span aria-hidden style={{ fontSize: 22, lineHeight: '24px' }}>{slot.icon}</span>
+            ) : null}
+            {slot.qualityStarColor ? (
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  top: 1,
+                  right: 3,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  lineHeight: '12px',
+                  color: slot.qualityStarColor,
+                  textShadow: '0 0 2px rgba(93, 64, 55, 0.8)',
+                }}
+              >
+                ★
+              </span>
             ) : null}
             {slot.quantityLabel !== null ? (
               <span

@@ -421,8 +421,9 @@ interface GameStore {
    * Only works if crop stage is HARVESTABLE
    * Adds harvested items to inventory and clears plot
    * @param plotId - ID of the farm plot containing crop
+   * @returns this harvest's yield as an item (quantity is this harvest only, not the bag total), or null if nothing was harvested
    */
-  harvestCrop: (plotId: string) => void;
+  harvestCrop: (plotId: string) => Item | null;
 
   /**
    * Water a crop to replenish water level
@@ -1508,6 +1509,8 @@ export const useGameStore = create<GameStore>()(
         },
 
         harvestCrop: (plotId: string) => {
+          // set() runs its updater synchronously, so the result is filled before it returns.
+          const result: { item: Item | null } = { item: null };
           set((state) => {
             if (!state.world) return state;
 
@@ -1547,9 +1550,10 @@ export const useGameStore = create<GameStore>()(
             // Yield logic - influenced by health
             const yieldCount = Math.floor(2 + (crop.health / 50));
 
-            // Add harvested crop to inventory
+            // Add harvested crop to inventory. The id has no timestamp so the same
+            // crop at the same quality stacks in the bag instead of taking a new slot.
             const harvestedItem: Item = {
-              id: `harvest_${crop.type}_${quality}_${Date.now()}`,
+              id: `harvest_${crop.type}_${quality}`,
               name: `${crop.type.charAt(0).toUpperCase() + crop.type.slice(1)} (${quality !== 'normal' ? quality : 'Normal'})`,
               type: ItemType.CROP,
               quantity: yieldCount,
@@ -1576,6 +1580,7 @@ export const useGameStore = create<GameStore>()(
               p.id === plotId ? { ...p, crop: null, fertilizerType: undefined } : p,
             );
 
+            result.item = harvestedItem;
             return {
               world: {
                 ...state.world,
@@ -1587,6 +1592,7 @@ export const useGameStore = create<GameStore>()(
               },
             };
           });
+          return result.item;
         },
 
         waterCrop: (plotId: string) => {

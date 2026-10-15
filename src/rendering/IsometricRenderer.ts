@@ -5,7 +5,7 @@
  * Perfect for cozy farming games with depth and dimension
  */
 
-import { GameWorld, CropStage } from '../types/game';
+import { GameWorld, CropStage, getQualityStarColor } from '../types/game';
 import { gridToScreen, screenToGrid } from '../engine/TileMap';
 import { LightingSystem, placedLightSources } from '../engine/LightingSystem';
 import { TextureManager } from './TextureManager';
@@ -135,6 +135,30 @@ export function sweatScreenY(headY: number, nowMs: number, exhausted: boolean): 
   return headY - 10 - cue.rise * SWEAT_RISE_PX;
 }
 
+/** A harvest drop flies from its plot to the player over this long. */
+export const HARVEST_POP_DURATION_MS = 600;
+/** Height of the first bounce in px. Each later bounce is lower. */
+export const HARVEST_POP_ARC_PX = 36;
+
+export interface HarvestPopPose {
+  /** 0 at the plot, 1 at the player. Eases out so the drop slows as it lands. */
+  travel: number;
+  /** Px above the ground line. Two bounces, the second lower than the first. */
+  liftPx: number;
+  /** True once the drop has reached the player. */
+  done: boolean;
+}
+
+/** Position of a harvest drop after `elapsedMs`. Pure, so the arc can be tested without a canvas. */
+export function harvestPopPose(elapsedMs: number): HarvestPopPose {
+  const progress = Number.isFinite(elapsedMs)
+    ? Math.min(1, Math.max(0, elapsedMs / HARVEST_POP_DURATION_MS))
+    : 0;
+  const travel = 1 - (1 - progress) * (1 - progress);
+  const liftPx = HARVEST_POP_ARC_PX * (1 - progress) * Math.abs(Math.sin(2 * Math.PI * progress));
+  return { travel, liftPx, done: progress >= 1 };
+}
+
 export class IsometricRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -160,6 +184,8 @@ export class IsometricRenderer {
   private lastWorld: GameWorld | null = null;
   /** Reused top-layer tint. Cutouts are punched here so the world underneath stays. */
   private ambientCanvas: HTMLCanvasElement | null = null;
+  /** Harvest drops still flying to the player. render() drops each one once it arrives. */
+  private harvestPops: { startedAt: number; origin: { x: number; y: number }; starColor: string | null }[] = [];
   private boundPointerMove: EventListener;
   private boundPointerLeave: EventListener;
 
@@ -228,6 +254,22 @@ export class IsometricRenderer {
 
   public markDirty(): void {
     this.worldDirty = true;
+  }
+
+  /**
+   * Starts a harvest drop at `plot` that arcs to the player. The bag already holds the item;
+   * this is the visual pop. The screen redraws while hasActiveHarvestPops() is true.
+   */
+  spawnHarvestPop(plot: { x: number; y: number }, quality: string | undefined, nowMs: number = performance.now()): void {
+    this.harvestPops.push({
+      startedAt: nowMs,
+      origin: { x: plot.x, y: plot.y },
+      starColor: getQualityStarColor(quality),
+    });
+  }
+
+  hasActiveHarvestPops(): boolean {
+    return this.harvestPops.length > 0;
   }
 
   private isTreeCrop(world: GameWorld, x: number, y: number): boolean {
@@ -1375,6 +1417,9 @@ export class IsometricRenderer {
 
     this.drawVoxels();
 
+    // Harvest drops fly over the tiles and under the HUD.
+    this.drawHarvestPops(world, performance.now());
+
     // Draw Wind Particles
     this.drawWindParticles(world);
 
@@ -1492,6 +1537,39 @@ export class IsometricRenderer {
   resize(width: number, height: number): void {
     this.canvas.width = width;
     this.canvas.height = height;
+  }
+
+  /** Draws each drop on its arc toward the player's current position and drops it on arrival. */
+  private drawHarvestPops(world: GameWorld, nowMs: number): void {
+    this.harvestPops = this.harvestPops.filter((pop) => !harvestPopPose(nowMs - pop.startedAt).done);
+    if (this.harvestPops.length === 0) return;
+
+    const player = world.player.position;
+    const chestZ = (player.z || 1) + 1;
+    for (const pop of this.harvestPops) {
+      const pose = harvestPopPose(nowMs - pop.startedAt);
+      const gridX = pop.origin.x + (player.x - pop.origin.x) * pose.travel;
+      const gridY = pop.origin.y + (player.y - pop.origin.y) * pose.travel;
+      const at = this.worldToIsometric(gridX, gridY, 1 + (chestZ - 1) * pose.travel);
+      const y = at.screenY - pose.liftPx;
+
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.arc(at.screenX, y, 9, 0, Math.PI * 2);
+      this.ctx.fillStyle = '#FFF8E7';
+      this.ctx.fill();
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeStyle = pop.starColor ?? '#8D6E63';
+      this.ctx.stroke();
+      if (pop.starColor) {
+        this.ctx.font = 'bold 11px system-ui, sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillStyle = pop.starColor;
+        this.ctx.fillText('★', at.screenX + 9, y - 9);
+      }
+      this.ctx.restore();
+    }
   }
 
   private drawWindParticles(world: GameWorld): void {

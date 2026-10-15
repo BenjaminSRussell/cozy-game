@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Node's experimental localStorage has no methods unless --localstorage-file is set.
 // The game store persists through it, so install a memory shim before the store loads.
@@ -92,5 +92,58 @@ describe('harvestCrop', () => {
 
     expect(plotCrop()).toBeNull();
     expect(useGameStore.getState().world?.player.inventory).toEqual(inventoryBefore);
+  });
+});
+
+function seedPlot(plot: FarmPlot) {
+  useGameStore.setState((state) => {
+    if (!state.world) return state;
+    return { world: { ...state.world, farmPlots: [plot] } };
+  });
+}
+
+describe('harvestCrop bag result', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    [0.01, 'gold'],
+    [0.3, 'silver'],
+    [0.99, 'normal'],
+  ] as Array<[number, 'gold' | 'silver' | 'normal']>)(
+    'rolls %s into %s quality and returns the item it put in the bag',
+    (roll, quality) => {
+      useGameStore.getState().createNewGame('Harvester');
+      seedPlot(harvestablePlot());
+      vi.spyOn(Math, 'random').mockReturnValue(roll);
+
+      const harvested = useGameStore.getState().harvestCrop(plotId);
+
+      expect(harvested).toMatchObject({ quality, quantity: 4, spriteId: 'carrot', sellValue: 12 });
+    },
+  );
+
+  it('returns null when the plot has no mature crop', () => {
+    useGameStore.getState().createNewGame('Harvester');
+    seedPlot({ ...harvestablePlot(), crop: null });
+
+    expect(useGameStore.getState().harvestCrop(plotId)).toBeNull();
+  });
+
+  it('stacks repeat harvests of the same crop and quality into one bag entry', () => {
+    useGameStore.getState().createNewGame('Harvester');
+    vi.spyOn(Math, 'random').mockReturnValue(0.99);
+
+    seedPlot(harvestablePlot());
+    useGameStore.getState().harvestCrop(plotId);
+    seedPlot(harvestablePlot());
+    useGameStore.getState().harvestCrop(plotId);
+
+    const stacks = useGameStore.getState().world?.player.inventory.filter(
+      (item) => item.id === 'harvest_carrot_normal',
+    ) ?? [];
+    expect(stacks).toHaveLength(1);
+    expect(stacks[0].quantity).toBe(8);
   });
 });
