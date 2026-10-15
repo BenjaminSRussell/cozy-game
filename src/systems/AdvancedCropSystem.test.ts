@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AdvancedCropSystem } from './CropSystem';
+import { AdvancedCropSystem } from './AdvancedCropSystem';
 
 describe('AdvancedCropSystem seed day advance', () => {
   const crops = new AdvancedCropSystem();

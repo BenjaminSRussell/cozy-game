@@ -7,7 +7,6 @@ import { MarketplaceScreen } from './MarketplaceScreen';
 import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModal';
 import { DialogueBox, type DialogueRequest } from './DialogueBox';
 import { LoadingScreen } from './LoadingScreen';
-import { AdvancedParticleSystem } from '../engine/ParticleSystem';
 import { DemoAssets } from '../assets/DemoAssets';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
