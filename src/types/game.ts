@@ -850,3 +850,14 @@ export type HomeBenefitType =
   | 'season_override'   // Allows year-round growing
   | 'energy_gen'        // Provides free tool energy
   | 'magical_bonuses';  // Special magical benefits
+
+/**
+ * A fish on the line, waiting for the tension-bar mini-game to resolve.
+ * Transient: the store leaves it out of saved data.
+ */
+export interface FishingBite {
+  /** Species id, such as 'bass'. */
+  fishType: string;
+  /** Epoch ms when the bite started. Keys the mini-game so each bite starts from a fresh bar. */
+  startedAt: number;
+}

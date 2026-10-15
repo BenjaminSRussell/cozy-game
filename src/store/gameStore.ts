@@ -33,6 +33,7 @@ import {
   RoadGrade,
   Vehicle,
   ShippedTodayEntry,
+  FishingBite,
   getQualityMultiplier,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
@@ -138,6 +139,25 @@ function rejectExhaustedSwing<T extends { world: GameWorld | null }>(
       ...world,
       player: { ...world.player, isExhausted: true },
     },
+  };
+}
+
+/** Coins a caught fish sells for. A placeholder until species values are set. */
+const FISH_SELL_VALUE = 20;
+
+/**
+ * Inventory entry for a fish landed with the tension-bar mini-game.
+ * Fish use the CROP item type, as CoreSystemsManager already does, so they sell through the market.
+ */
+export function fishCatchItem(fishType: string): Item {
+  return {
+    id: `fish_${fishType}`,
+    name: fishType.charAt(0).toUpperCase() + fishType.slice(1),
+    type: ItemType.CROP,
+    quantity: 1,
+    sellValue: FISH_SELL_VALUE,
+    spriteId: '🐟',
+    rarity: 'common',
   };
 }
 
@@ -812,6 +832,26 @@ interface GameStore {
   /** Copy empty stamina onto `player.isExhausted`. */
   syncExhaustion: () => void;
   movePlayer: (position: Vector3D) => void;
+
+  // ============================================================================
+  // FISHING - Tension-bar mini-game for a fish on the line
+  // ============================================================================
+
+  /** The fish on the line. Null when no mini-game is open. Never saved. */
+  fishingBite: FishingBite | null;
+
+  /**
+   * Open the tension-bar mini-game for a fish that just bit.
+   * Ignored when no game is loaded or a bite is already open.
+   * @param fishType - Species id, such as 'bass'
+   */
+  startFishingBite: (fishType: string) => void;
+
+  /**
+   * Close the mini-game. A caught fish goes into the inventory, and an escape adds nothing.
+   * @param outcome - How the mini-game ended
+   */
+  resolveFishingBite: (outcome: 'caught' | 'escaped') => void;
 }
 
 /**
@@ -1097,6 +1137,7 @@ export const useGameStore = create<GameStore>()(
         world: null,
         settings: DEFAULT_SETTINGS,
         nextVehicleId: 0,
+        fishingBite: null,
 
         // ========================================================================
         // WORLD ACTIONS
@@ -3383,10 +3424,30 @@ export const useGameStore = create<GameStore>()(
             };
           });
         },
+
+        // ========================================================================
+        // FISHING ACTIONS
+        // ========================================================================
+
+        startFishingBite: (fishType: string) => {
+          set((state) => {
+            if (!state.world || state.fishingBite !== null) return state;
+            return { fishingBite: { fishType, startedAt: Date.now() } };
+          });
+        },
+
+        resolveFishingBite: (outcome: 'caught' | 'escaped') => {
+          const bite = get().fishingBite;
+          if (bite === null) return;
+          set({ fishingBite: null });
+          if (outcome === 'caught') get().addItem(fishCatchItem(bite.fishType));
+        },
       }),
       {
         // Persist key for localStorage
         name: 'cozy-haven-storage',
+        // The fish on the line is transient. Leaving it out means a reload never reopens a stale bite.
+        partialize: ({ fishingBite: _fishingBite, ...persisted }) => persisted,
       },
     ),
   ),

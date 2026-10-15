@@ -19,6 +19,7 @@ import { CraftingMenu } from './CraftingMenu';
 import { theme } from '../styles/theme';
 import { CozyIconButton } from './CozyIconButton';
 import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModal';
+import { FishingMinigameModal } from './FishingMinigameModal';
 import { DialogueBox, type DialogueRequest } from './DialogueBox';
 import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
 import { lerp } from '../utils/math';
@@ -848,7 +849,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     world, plantCrop, harvestCrop, waterCrop, createFarmPlot, addCoins, addExperience,
     placeBuilding, createOreDeposit, mineOre, harvestWood,
     buildRoad, upgradeRoad, spawnVehicle, mountVehicle, dismountVehicle, movePlayer, applyFertilizer,
-    advanceTime,
+    advanceTime, fishingBite, resolveFishingBite,
   } = useGameStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<IsometricRenderer | null>(null);
@@ -996,7 +997,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           indoors,
         });
 
-        if (dt > 0) {
+        // A fish on the line freezes the walk while the mini-game overlay is open.
+        if (dt > 0 && !state.fishingBite) {
           const player = world.player;
           const keysVector = movementInputVector(keys);
           const { inputX, inputY } = locomotionInput(keysVector.inputX, keysVector.inputY, joystickRef.current);
@@ -1165,7 +1167,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   };
 
   const onJoystickTouchStart = (event: JoystickTouchEvent) => {
-    if (showCrafting) return;
+    if (showCrafting || fishingBite !== null) return;
     if (isJoystickIgnoredTarget(event.target ?? null)) return;
     const touch = joystickPointFromEvent(event, 'touches');
     if (!touch) return;
@@ -1974,6 +1976,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           </button>
         ))}
       </div>
+      <FishingMinigameModal bite={fishingBite} onResolve={resolveFishingBite} />
       <ShippingSummaryModal
         visible={shipping.open}
         rows={shipping.rows}
