@@ -37,6 +37,13 @@ import {
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
 import { EXHAUSTED_MESSAGE, liveIsometricRenderers, playerIsExhausted } from '../rendering/IsometricRenderer';
+import {
+  extractMineOre,
+  generateMineFloor,
+  MINE_FLOOR_ORES,
+  MINE_MAX_FLOOR,
+  smashMineRock,
+} from '../rendering/MiningSystem';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
 
 export const createTool = (
@@ -487,6 +494,34 @@ interface GameStore {
    * @param depositId - ID of ore deposit to mine
    */
   mineOre: (depositId: string) => void;
+
+  /**
+   * Enter the mine on floor 1. Does nothing while already underground.
+   */
+  enterMine: () => void;
+
+  /**
+   * Smash the boulder at (x, y) on the current mine floor with a pickaxe swing.
+   * Each smash rolls a 10% chance to reveal the ladder down. The last boulder on a
+   * floor reveals it if it is still hidden.
+   * @param x - Cell column on the current floor
+   * @param y - Cell row on the current floor
+   */
+  smashRock: (x: number, y: number) => void;
+
+  /**
+   * Mine the ore vein at (x, y) on the current mine floor with a pickaxe swing.
+   * Adds 1-3 ore to the inventory and clears the vein.
+   * @param x - Cell column on the current floor
+   * @param y - Cell row on the current floor
+   */
+  mineVein: (x: number, y: number) => void;
+
+  /**
+   * Take the revealed ladder down one floor. Refused until the ladder is revealed,
+   * and never goes below MINE_MAX_FLOOR (25).
+   */
+  descendMine: () => void;
 
   // ============================================================================
   // WOOD HARVESTING - Tree resources
@@ -972,6 +1007,7 @@ const createInitialWorld = (playerName: string): GameWorld => {
       }
     ],
     oreDeposits: [],
+    mine: { currentFloor: 0, deepestFloor: 0, floor: null },
     woodSources: [],
     animals: [],
     tilledLand: [],
@@ -1800,6 +1836,115 @@ export const useGameStore = create<GameStore>()(
                   ...state.world.player,
                   inventory: [...worn.inventory, oreItem],
                   tools: worn.tools,
+                },
+              },
+            };
+          });
+        },
+
+        enterMine: () => {
+          set((state) => {
+            if (!state.world) return state;
+            const mine = state.world.mine;
+            if (mine?.floor) return state;
+            return {
+              world: {
+                ...state.world,
+                mine: {
+                  currentFloor: 1,
+                  deepestFloor: Math.max(mine?.deepestFloor ?? 0, 1),
+                  floor: generateMineFloor(1),
+                },
+              },
+            };
+          });
+        },
+
+        smashRock: (x: number, y: number) => {
+          set((state) => {
+            if (!state.world) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
+
+            const pickaxe = state.world.player.tools[ToolType.PICKAXE];
+            if (!pickaxe || pickaxe.durability <= 0) {
+              console.log('No pickaxe!');
+              return state;
+            }
+
+            const mine = state.world.mine;
+            if (!mine?.floor) return state;
+            const result = smashMineRock(mine.floor, x, y);
+            if (!result.smashed) return state;
+
+            if (result.ladderRevealed) {
+              showNotification(`A ladder down to floor ${mine.floor.depth + 1} is revealed.`);
+            }
+            const worn = consumeToolDurability(state.world.player, pickaxe, 1);
+            return {
+              world: {
+                ...state.world,
+                player: { ...state.world.player, inventory: worn.inventory, tools: worn.tools },
+                mine: { ...mine, floor: result.floor },
+              },
+            };
+          });
+        },
+
+        mineVein: (x: number, y: number) => {
+          let yielded = null as Item | null;
+          set((state) => {
+            if (!state.world) return state;
+            const exhausted = rejectExhaustedSwing(state);
+            if (exhausted) return exhausted;
+
+            const pickaxe = state.world.player.tools[ToolType.PICKAXE];
+            if (!pickaxe || pickaxe.durability <= 0) {
+              console.log('No pickaxe!');
+              return state;
+            }
+
+            const mine = state.world.mine;
+            if (!mine?.floor) return state;
+            const result = extractMineOre(mine.floor, x, y);
+            if (!result.oreType) return state;
+
+            const ore = MINE_FLOOR_ORES[result.oreType];
+            yielded = {
+              id: result.oreType, // Same id as surface ore, so addItem stacks them
+              name: ore.name,
+              type: ItemType.ORE,
+              quantity: Math.floor(Math.random() * 3) + 1,
+              sellValue: ore.sellValue,
+              spriteId: result.oreType,
+              rarity: ore.rarity,
+            };
+
+            const worn = consumeToolDurability(state.world.player, pickaxe, 1);
+            return {
+              world: {
+                ...state.world,
+                player: { ...state.world.player, inventory: worn.inventory, tools: worn.tools },
+                mine: { ...mine, floor: result.floor },
+              },
+            };
+          });
+          if (yielded) get().addItem(yielded);
+        },
+
+        descendMine: () => {
+          set((state) => {
+            const mine = state.world?.mine;
+            if (!state.world || !mine?.floor?.ladder) return state;
+            const next = mine.floor.depth + 1;
+            if (next > MINE_MAX_FLOOR) return state;
+            return {
+              world: {
+                ...state.world,
+                mine: {
+                  currentFloor: next,
+                  deepestFloor: Math.max(mine.deepestFloor, next),
+                  floor: generateMineFloor(next),
                 },
               },
             };

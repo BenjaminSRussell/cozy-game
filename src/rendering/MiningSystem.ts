@@ -1,4 +1,5 @@
 import { lerp } from '../utils/math';
+import type { MineFloor, MineTile } from '../types/game';
 
 /**
  * Enhanced Mining System for 2.5D Isometric World
@@ -691,5 +692,170 @@ export class MiningSystem {
     this.caveSystems.clear();
     this.playerTools.clear();
     this.discoveredOres.clear();
+  }
+}
+
+// ============================================================================
+// Mine floors: 25 procedurally generated 18x18 cavern floors.
+// Pure helpers. The store owns the player's position and calls these.
+// ============================================================================
+
+/** Side length of a mine floor, in cells. */
+export const MINE_FLOOR_SIZE = 18;
+
+/** Deepest mine floor. No ladder is ever revealed on it. */
+export const MINE_MAX_FLOOR = 25;
+
+/** Chance that one boulder smash reveals the ladder to the next floor. */
+export const MINE_LADDER_REVEAL_CHANCE = 0.1;
+
+/** Share of interior cells that are boulders. Ore cells are rolled first. */
+const MINE_BOULDER_CHANCE = 0.12;
+
+export interface MineOreInfo {
+  name: string;
+  sellValue: number;
+  rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
+}
+
+/** Ores that can appear on mine floors. Copper, iron, gold, diamond and ruby match initializeOreConfigs. */
+export const MINE_FLOOR_ORES: Record<string, MineOreInfo> = {
+  copper: { name: 'Copper', sellValue: 25, rarity: 'common' },
+  coal: { name: 'Coal', sellValue: 15, rarity: 'common' },
+  iron: { name: 'Iron', sellValue: 40, rarity: 'common' },
+  topaz: { name: 'Topaz', sellValue: 120, rarity: 'rare' },
+  amethyst: { name: 'Amethyst', sellValue: 120, rarity: 'rare' },
+  gold: { name: 'Gold', sellValue: 150, rarity: 'rare' },
+  diamond: { name: 'Diamond', sellValue: 500, rarity: 'legendary' },
+  ruby: { name: 'Ruby', sellValue: 180, rarity: 'rare' },
+};
+
+/** One ore that can spawn on a floor, with its chance per interior cell. */
+export interface MineOreSpawn {
+  oreType: string;
+  chance: number;
+}
+
+/**
+ * Ore spawn chances per interior cell for a depth band.
+ * Floors 1-9: copper 15%, coal 10%. Floors 10-19: iron 15%, topaz or amethyst 5%.
+ * Floors 20-25: gold 15%, diamond or ruby 3%. Each gem pair splits its share evenly.
+ */
+export function mineFloorOreSpawns(depth: number): MineOreSpawn[] {
+  assertMineDepth(depth);
+  if (depth <= 9) {
+    return [
+      { oreType: 'copper', chance: 0.15 },
+      { oreType: 'coal', chance: 0.1 },
+    ];
+  }
+  if (depth <= 19) {
+    return [
+      { oreType: 'iron', chance: 0.15 },
+      { oreType: 'topaz', chance: 0.025 },
+      { oreType: 'amethyst', chance: 0.025 },
+    ];
+  }
+  return [
+    { oreType: 'gold', chance: 0.15 },
+    { oreType: 'diamond', chance: 0.015 },
+    { oreType: 'ruby', chance: 0.015 },
+  ];
+}
+
+/**
+ * Generate one mine floor: a walled 18x18 cavern with scattered boulders and ore cells.
+ * The ladder starts hidden. Pass `random` to make the layout repeatable.
+ */
+export function generateMineFloor(depth: number, random: () => number = Math.random): MineFloor {
+  const spawns = mineFloorOreSpawns(depth);
+  const size = MINE_FLOOR_SIZE;
+  const tiles: MineTile[] = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const onWall = x === 0 || y === 0 || x === size - 1 || y === size - 1;
+      tiles.push(onWall ? { kind: 'wall' } : rollInteriorTile(spawns, random));
+    }
+  }
+  return { depth, width: size, height: size, tiles, ladder: null };
+}
+
+function rollInteriorTile(spawns: MineOreSpawn[], random: () => number): MineTile {
+  let roll = random();
+  for (const spawn of spawns) {
+    if (roll < spawn.chance) return { kind: 'ore', oreType: spawn.oreType };
+    roll -= spawn.chance;
+  }
+  return roll < MINE_BOULDER_CHANCE ? { kind: 'boulder' } : { kind: 'floor' };
+}
+
+/** Result of one boulder smash. `floor` is the same object when nothing changed. */
+export interface MineSmashResult {
+  floor: MineFloor;
+  /** False when the cell was not a boulder */
+  smashed: boolean;
+  /** True when this smash revealed the ladder */
+  ladderRevealed: boolean;
+}
+
+/**
+ * Smash the boulder at (x, y). Each smash rolls MINE_LADDER_REVEAL_CHANCE to reveal the
+ * ladder under that cell. The last boulder on a floor reveals it if it is still hidden,
+ * so no floor can trap the player. The deepest floor never gets a ladder.
+ */
+export function smashMineRock(
+  floor: MineFloor,
+  x: number,
+  y: number,
+  random: () => number = Math.random,
+): MineSmashResult {
+  const index = mineCellIndex(floor, x, y);
+  if (index < 0 || floor.tiles[index]?.kind !== 'boulder') {
+    return { floor, smashed: false, ladderRevealed: false };
+  }
+
+  const tiles = floor.tiles.slice();
+  tiles[index] = { kind: 'floor' };
+  const boulderLeft = tiles.some((tile) => tile.kind === 'boulder');
+  const ladderHidden = floor.ladder === null && floor.depth < MINE_MAX_FLOOR;
+  const rolledReveal = random() < MINE_LADDER_REVEAL_CHANCE;
+  const ladderRevealed = ladderHidden && (rolledReveal || !boulderLeft);
+
+  return {
+    floor: { ...floor, tiles, ladder: ladderRevealed ? { x, y } : floor.ladder },
+    smashed: true,
+    ladderRevealed,
+  };
+}
+
+/** Result of mining one cell. `oreType` is null when the cell held no ore vein. */
+export interface MineExtractResult {
+  floor: MineFloor;
+  oreType: string | null;
+}
+
+/** Mine the ore vein at (x, y). The cell becomes open floor. */
+export function extractMineOre(floor: MineFloor, x: number, y: number): MineExtractResult {
+  const index = mineCellIndex(floor, x, y);
+  const tile = index < 0 ? undefined : floor.tiles[index];
+  if (tile?.kind !== 'ore' || !tile.oreType) {
+    return { floor, oreType: null };
+  }
+
+  const tiles = floor.tiles.slice();
+  tiles[index] = { kind: 'floor' };
+  return { floor: { ...floor, tiles }, oreType: tile.oreType };
+}
+
+/** Index of cell (x, y) in floor.tiles, or -1 when it is off the floor. */
+function mineCellIndex(floor: MineFloor, x: number, y: number): number {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) return -1;
+  if (x < 0 || y < 0 || x >= floor.width || y >= floor.height) return -1;
+  return y * floor.width + x;
+}
+
+function assertMineDepth(depth: number): void {
+  if (!Number.isInteger(depth) || depth < 1 || depth > MINE_MAX_FLOOR) {
+    throw new RangeError(`Mine depth must be an integer from 1 to ${MINE_MAX_FLOOR}, got ${depth}`);
   }
 }

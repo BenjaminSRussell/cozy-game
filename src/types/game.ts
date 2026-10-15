@@ -415,6 +415,40 @@ export interface OreDeposit {
   lastMinedAt?: number;
 }
 
+/** What one cell of a mine floor holds. */
+export type MineTileKind = 'floor' | 'wall' | 'boulder' | 'ore';
+
+/** One cell of a mine floor. */
+export interface MineTile {
+  kind: MineTileKind;
+  /** Ore id for 'ore' cells, e.g. 'copper' or 'topaz' */
+  oreType?: string;
+}
+
+/**
+ * One generated mine floor: a walled 18x18 cavern.
+ * Cells are row-major, so the cell at (x, y) is tiles[y * width + x].
+ */
+export interface MineFloor {
+  /** Floor number, 1 to 25 */
+  depth: number;
+  width: number;
+  height: number;
+  tiles: MineTile[];
+  /** Cell where the ladder to depth + 1 was revealed, or null while it is hidden */
+  ladder: Vector2D | null;
+}
+
+/** Player progress through the mine. Lives on the world. */
+export interface MineState {
+  /** Floor the player is on, or 0 outside the mine */
+  currentFloor: number;
+  /** Deepest floor reached so far */
+  deepestFloor: number;
+  /** Layout of currentFloor, or null outside the mine */
+  floor: MineFloor | null;
+}
+
 /**
  * Wood source (tree) on the farm
  * Trees can be harvested once, then regrow over time
@@ -650,6 +684,8 @@ export interface GameWorld {
   vehicles: Vehicle[];
   /** All ore deposits available for mining */
   oreDeposits: OreDeposit[];
+  /** Mine progress: current floor and its layout. Optional so saves made before the mine existed still load. */
+  mine?: MineState;
   /** All trees available for harvesting */
   woodSources: WoodSource[];
   /** All animals on the farm */
