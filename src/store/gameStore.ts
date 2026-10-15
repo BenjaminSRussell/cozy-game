@@ -33,9 +33,24 @@ import {
   RoadGrade,
   Vehicle,
   ShippedTodayEntry,
+  VillagerId,
   getQualityMultiplier,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
+import {
+  VillagerGiftResult,
+  VillagerPlace,
+  VillagerTalkResult,
+  applyFriendshipOutcome,
+  claimMail,
+  freshRelationships,
+  giftOutcome,
+  isVillagerId,
+  relationshipOf,
+  startDialogue,
+  talkOutcome,
+  villagerPlaceAt,
+} from '../systems/VillagerSystem';
 import { EXHAUSTED_MESSAGE, liveIsometricRenderers, playerIsExhausted } from '../rendering/IsometricRenderer';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
 
@@ -535,6 +550,42 @@ interface GameStore {
   unlockFeature: (featureId: string) => void;
 
   // ============================================================================
+  // VILLAGERS - Conversation, gifts, schedules and mail
+  // ============================================================================
+
+  /**
+   * Talk to a villager. The first conversation each in-game day earns +20 friendship.
+   * Heart milestones reached by the change add letters to `villagerMailbox`.
+   * @param villagerId - Villager to talk to
+   * @returns The opening dialogue node and the change, or null when there is no world or the id is unknown
+   */
+  talkToVillager: (villagerId: VillagerId) => VillagerTalkResult | null;
+
+  /**
+   * Give one unit of an inventory stack to a villager. The unit is used up on success.
+   * A villager takes at most two gifts per in-game week. Reactions are loved +80,
+   * liked +45, neutral +20 and disliked -20.
+   * @param villagerId - Villager receiving the gift
+   * @param itemId - Inventory stack id. One unit is removed.
+   * @returns The reaction and change, or the reason it was refused. Nothing changes when refused.
+   */
+  giveVillagerGift: (villagerId: VillagerId, itemId: string) => VillagerGiftResult;
+
+  /**
+   * Claim a villager letter. Its recipe is added to `unlockedRecipeIds`.
+   * @param mailId - Letter id, such as `mail_robin_3`
+   * @returns true when the letter is claimed now, false when it is missing or already claimed
+   */
+  claimVillagerMail: (mailId: string) => boolean;
+
+  /**
+   * Where a villager should be at the current in-game time, from the shared daily schedule.
+   * @param villagerId - Villager to check
+   * @returns 'home', 'shop' or 'square', or null when there is no world or the id is unknown
+   */
+  getVillagerPlace: (villagerId: VillagerId) => VillagerPlace | null;
+
+  // ============================================================================
   // LAND EXPANSION - Purchasing and managing land
   // ============================================================================
 
@@ -983,6 +1034,9 @@ const createInitialWorld = (playerName: string): GameWorld => {
     activeWeatherEvents: [],
     damBuildings: [],
     lastWeatherEventTime: 0,
+    villagerRelationships: freshRelationships(),
+    villagerMailbox: [],
+    unlockedRecipeIds: [],
   }, 0);
 };
 
@@ -1923,6 +1977,71 @@ export const useGameStore = create<GameStore>()(
             state.world.player.unlocks.add(featureId);
             return { world: { ...state.world } };
           });
+        },
+
+        // ========================================================================
+        // VILLAGER ACTIONS - Conversation, gifts, schedules and mail
+        // ========================================================================
+
+        talkToVillager: (villagerId) => {
+          const world = get().world;
+          if (!world || !isVillagerId(villagerId)) return null;
+
+          const outcome = talkOutcome(
+            villagerId,
+            relationshipOf(world, villagerId),
+            world.totalDaysPlayed,
+          );
+          set((state) =>
+            state.world ? { world: applyFriendshipOutcome(state.world, villagerId, outcome) } : state,
+          );
+          return {
+            node: startDialogue(villagerId),
+            pointsChange: outcome.pointsChange,
+            milestones: outcome.milestones,
+          };
+        },
+
+        giveVillagerGift: (villagerId, itemId) => {
+          const world = get().world;
+          if (!world) return { ok: false, reason: 'no-world' };
+          if (!isVillagerId(villagerId)) return { ok: false, reason: 'unknown-villager' };
+
+          const stack = world.player.inventory.find((entry) => entry.id === itemId);
+          if (!stack) return { ok: false, reason: 'missing-item' };
+
+          const gift = giftOutcome(
+            villagerId,
+            relationshipOf(world, villagerId),
+            world.totalDaysPlayed,
+            stack.type,
+          );
+          if (!gift.ok) return gift;
+          if (!get().removeItem(itemId, 1)) return { ok: false, reason: 'missing-item' };
+
+          set((state) =>
+            state.world ? { world: applyFriendshipOutcome(state.world, villagerId, gift.outcome) } : state,
+          );
+          return {
+            ok: true,
+            reaction: gift.reaction,
+            pointsChange: gift.outcome.pointsChange,
+            milestones: gift.outcome.milestones,
+          };
+        },
+
+        claimVillagerMail: (mailId) => {
+          const world = get().world;
+          const updated = world ? claimMail(world, mailId) : null;
+          if (!updated) return false;
+          set({ world: updated });
+          return true;
+        },
+
+        getVillagerPlace: (villagerId) => {
+          const world = get().world;
+          if (!world || !isVillagerId(villagerId)) return null;
+          return villagerPlaceAt(world.dayTime);
         },
 
         // ========================================================================

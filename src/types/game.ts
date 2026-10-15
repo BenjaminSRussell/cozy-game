@@ -672,6 +672,53 @@ export interface GameWorld {
   damBuildings: DamBuilding[];
   /** Timestamp of last weather event */
   lastWeatherEventTime: number;
+  /**
+   * Friendship and gift bookkeeping per villager. Optional so saves written
+   * before villagers existed still load; a missing entry reads as a fresh relationship.
+   */
+  villagerRelationships?: Partial<Record<VillagerId, VillagerRelationship>>;
+  /** Letters from villagers. Heart milestones add mail here. */
+  villagerMailbox?: VillagerMail[];
+  /**
+   * Recipe ids unlocked by claimed mail. A plain array because `player.unlocks`
+   * is a Set and does not survive JSON save and load.
+   */
+  unlockedRecipeIds?: string[];
+}
+
+// ============================================================================
+// VILLAGERS - Friendship hearts, gifts and mail
+// ============================================================================
+
+/** Roster ids for the four core villagers: Robin, Pierre, Clint and Willy. */
+export type VillagerId = 'robin' | 'pierre' | 'clint' | 'willy';
+
+/** Friendship bookkeeping for one villager. */
+export interface VillagerRelationship {
+  /** Friendship points, clamped to 0 through 2500 (ten hearts of 250). */
+  points: number;
+  /** `totalDaysPlayed` on the last day a conversation earned points, or null. */
+  lastTalkDay: number | null;
+  /** Gift week (`totalDaysPlayed` / 7, rounded down) that `giftCount` applies to. */
+  giftWeek: number;
+  /** Gifts accepted in `giftWeek`. Capped at 2. */
+  giftCount: number;
+  /** Heart levels whose milestone has already paid out. Each pays once, even after points dip and recover. */
+  rewardedHearts: number[];
+}
+
+/** Letter from a villager. Claiming it can unlock the recipe it carries. */
+export interface VillagerMail {
+  /** Unique id, `mail_<villager>_<hearts>` for milestone letters. */
+  id: string;
+  /** Villager who sent the letter. */
+  from: VillagerId;
+  subject: string;
+  body: string;
+  /** Recipe unlocked when the letter is claimed. */
+  recipeId?: string;
+  /** True once the player has claimed the letter. */
+  claimed: boolean;
 }
 
 // ============================================================================
