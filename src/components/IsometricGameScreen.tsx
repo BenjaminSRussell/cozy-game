@@ -152,6 +152,8 @@ export function movementBlocks(world: {
   buildings?: readonly StructureFootprint[];
   homeBuildings?: readonly StructureFootprint[];
   damBuildings?: readonly StructureFootprint[];
+  woodSources?: readonly { position: { x: number; y: number } }[];
+  tiles?: readonly { position: { x: number; y: number }; walkable?: boolean }[] | null;
 }): MovementBlock[] {
   const lists = [world.buildings, world.homeBuildings, world.damBuildings];
   const blocks: MovementBlock[] = [];
@@ -165,6 +167,13 @@ export function movementBlocks(world: {
         height: structure.dimensions?.y ?? structure.size?.y,
       });
     }
+  }
+  // Trees block their cell. A soil tile blocks only when walkable is false, the rule movePlayer applies.
+  for (const tree of world.woodSources ?? []) {
+    blocks.push({ x: tree.position.x, y: tree.position.y });
+  }
+  for (const tile of world.tiles ?? []) {
+    if (tile.walkable === false) blocks.push({ x: tile.position.x, y: tile.position.y });
   }
   return blocks;
 }
@@ -984,6 +993,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
 
       const state = useGameStore.getState();
       const world = state.world;
+      let walked = false;
+      let poseChanged = false;
       if (world) {
         const indoors = showCraftingRef.current || isPlayerIndoors(world.player.position, [
           ...(world.buildings ?? []),
@@ -1015,6 +1026,8 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
             if (next.x !== player.position.x || next.y !== player.position.y) {
               const traveled = Math.hypot(next.x - player.position.x, next.y - player.position.y);
               state.movePlayer(next);
+              // The store can refuse a move, so a step counts only when the world actually changed.
+              walked = useGameStore.getState().world !== world;
               if (player.mountedVehicleId) {
                 stepCarry = 0;
               } else {
@@ -1033,6 +1046,7 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
               }
             }
           }
+          poseChanged = rendererRef.current?.updateWalkPose(motion.vx, motion.vy, walked, dt) ?? false;
         }
       }
 
@@ -1041,6 +1055,15 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         state.syncExhaustion();
         const latest = useGameStore.getState().world;
         if (latest) rendererRef.current?.render(latest);
+      }
+
+      // The camera eases every frame, even after the player stops. A move already repaints
+      // through the store subscription and the render effect, so only idle frames repaint here.
+      const renderer = rendererRef.current;
+      const current = useGameStore.getState().world;
+      if (renderer && current) {
+        const followed = renderer.followPlayer(current.player.position, dt);
+        if (!walked && (followed || poseChanged)) renderer.render(current);
       }
 
       frameId = window.requestAnimationFrame(tick);

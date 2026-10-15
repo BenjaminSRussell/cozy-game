@@ -359,3 +359,35 @@ describe('floating touch joystick', () => {
     expect(keyboard.vy).toBeCloseTo(0.45);
   });
 });
+
+describe('collision for trees and non-walkable soil tiles', () => {
+  it('blocks the cell a tree stands on and leaves its neighbours open', () => {
+    const blocks = movementBlocks({ woodSources: [{ position: { x: 6, y: 6 } }] });
+
+    expect(canOccupy(6.5, 6.5, blocks, MAP)).toBe(false);
+    expect(canOccupy(7.5, 6.5, blocks, MAP)).toBe(true);
+    expect(canOccupy(5.5, 6.5, blocks, MAP)).toBe(true);
+  });
+
+  it('blocks only soil tiles marked walkable: false, the same rule movePlayer applies', () => {
+    const blocks = movementBlocks({
+      tiles: [
+        { position: { x: 8, y: 2 }, walkable: false },
+        { position: { x: 9, y: 2 } },
+        { position: { x: 10, y: 2 }, walkable: true },
+      ],
+    });
+
+    expect(canOccupy(8.5, 2.5, blocks, MAP)).toBe(false);
+    expect(canOccupy(9.5, 2.5, blocks, MAP)).toBe(true);
+    expect(canOccupy(10.5, 2.5, blocks, MAP)).toBe(true);
+  });
+
+  it('slides along a tree instead of walking through it', () => {
+    const blocks = movementBlocks({ woodSources: [{ position: { x: 11, y: 10 } }] });
+
+    // +x would enter the tree cell (11, 10), so x holds while y moves into the free row above.
+    const next = nextPlayerPosition({ x: 10.5, y: 10.5, z: 1 }, { vx: 1, vy: 1 }, 0.5, blocks, MAP);
+    expect(next).toEqual({ x: 10.5, y: 11, z: 1 });
+  });
+});

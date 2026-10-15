@@ -5,7 +5,7 @@
  * Perfect for cozy farming games with depth and dimension
  */
 
-import { GameWorld, CropStage } from '../types/game';
+import { GameWorld, CropStage, FacingDirection, Vector2D, Vector3D } from '../types/game';
 import { gridToScreen, screenToGrid } from '../engine/TileMap';
 import { LightingSystem, placedLightSources } from '../engine/LightingSystem';
 import { TextureManager } from './TextureManager';
@@ -135,6 +135,113 @@ export function sweatScreenY(headY: number, nowMs: number, exhausted: boolean): 
   return headY - 10 - cue.rise * SWEAT_RISE_PX;
 }
 
+/** Walk cycle timing from #23: frames 0..3 are Idle, Walk1, Walk2, Walk3 and advance every 0.15 s. */
+export const WALK_FRAME_SECONDS = 0.15;
+export const WALK_FRAME_COUNT = 4;
+/** Leg stride per frame: 0 neutral, +1 left leg forward, -1 right leg forward. */
+const WALK_STRIDE: readonly number[] = [0, 1, 0, -1];
+/** Camera follow rate per 60 Hz frame: camera += (target - camera) * 0.1. */
+export const CAMERA_FOLLOW_RATE = 0.1;
+/** Within half a pixel on both axes the follow lands on its target, so the camera can come to rest. */
+const CAMERA_SNAP_PX = 0.5;
+
+export interface WalkPose {
+  facing: FacingDirection;
+  frame: number;
+  /** Seconds into the current frame while moving. */
+  elapsed: number;
+  moving: boolean;
+}
+
+export function idleWalkPose(facing: FacingDirection = 'south'): WalkPose {
+  return { facing, frame: 0, elapsed: 0, moving: false };
+}
+
+/**
+ * Facing from a grid velocity, judged by the screen direction it produces.
+ * The dominant screen axis wins. A zero velocity keeps `previous`.
+ */
+export function walkFacingFromVelocity(vx: number, vy: number, previous: FacingDirection): FacingDirection {
+  const screen = gridToScreen(vx, vy, 2, 1); // Same direction as the 64 x 32 tile projection.
+  if (screen.x === 0 && screen.y === 0) return previous;
+  if (Math.abs(screen.x) > Math.abs(screen.y)) return screen.x > 0 ? 'east' : 'west';
+  return screen.y > 0 ? 'south' : 'north';
+}
+
+/** One walk-cycle step. Moving runs 0 to 1 to 2 to 3 and back to 0; standing still is frame 0. */
+export function advanceWalkPose(
+  previous: WalkPose,
+  dtSeconds: number,
+  moving: boolean,
+  facing: FacingDirection,
+): WalkPose {
+  if (!moving) return { facing, frame: 0, elapsed: 0, moving: false };
+  const elapsed = previous.elapsed + Math.max(0, dtSeconds || 0);
+  const steps = Math.floor(elapsed / WALK_FRAME_SECONDS);
+  return {
+    facing,
+    frame: (previous.frame + steps) % WALK_FRAME_COUNT,
+    elapsed: elapsed - steps * WALK_FRAME_SECONDS,
+    moving: true,
+  };
+}
+
+export interface ProjectedBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** Screen-space box of the ground plane for grid cells [0, mapSize.x] by [0, mapSize.y]. */
+export function projectedMapBounds(mapSize: Vector2D, tileSize: number): ProjectedBounds {
+  const tileHeight = tileSize / 2;
+  const corners = [
+    gridToScreen(0, 0, tileSize, tileHeight),
+    gridToScreen(mapSize.x, 0, tileSize, tileHeight),
+    gridToScreen(0, mapSize.y, tileSize, tileHeight),
+    gridToScreen(mapSize.x, mapSize.y, tileSize, tileHeight),
+  ];
+  return {
+    minX: Math.min(...corners.map((c) => c.x)),
+    minY: Math.min(...corners.map((c) => c.y)),
+    maxX: Math.max(...corners.map((c) => c.x)),
+    maxY: Math.max(...corners.map((c) => c.y)),
+  };
+}
+
+function clampAxis(value: number, low: number, high: number): number {
+  // A map narrower than the view has low > high. Centre it on that axis.
+  if (low > high) return (low + high) / 2;
+  return Math.min(high, Math.max(low, value));
+}
+
+/**
+ * Clamp a camera offset so the visible ground stays inside the map box.
+ * worldToIsometric puts the ground origin at (width / 2, height / 3), so the visible
+ * projected range is [-width / 2 - cam.x, width / 2 - cam.x] by [-height / 3 - cam.y, 2 height / 3 - cam.y].
+ */
+export function clampCameraToMap(
+  offset: Vector2D,
+  bounds: ProjectedBounds,
+  view: { width: number; height: number },
+): Vector2D {
+  return {
+    x: clampAxis(offset.x, view.width / 2 - bounds.maxX, -bounds.minX - view.width / 2),
+    y: clampAxis(offset.y, (2 * view.height) / 3 - bounds.maxY, -bounds.minY - view.height / 3),
+  };
+}
+
+/** One frame-rate-normalised ease toward the target. Lands exactly on it once within half a pixel. */
+export function stepCamera(current: Vector2D, target: Vector2D, dtSeconds: number): Vector2D {
+  if (!(dtSeconds > 0)) return current;
+  const dx = target.x - current.x;
+  const dy = target.y - current.y;
+  if (Math.abs(dx) < CAMERA_SNAP_PX && Math.abs(dy) < CAMERA_SNAP_PX) return { x: target.x, y: target.y };
+  const rate = 1 - Math.pow(1 - CAMERA_FOLLOW_RATE, dtSeconds * 60);
+  return { x: current.x + dx * rate, y: current.y + dy * rate };
+}
+
 export class IsometricRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -144,6 +251,10 @@ export class IsometricRenderer {
   /** First render builds; later renders reuse voxels until markDirty(). */
   private worldDirty = true;
   private camera = { x: 0, y: 0, z: 0 };
+  /** Manual pan from the on-screen buttons. It stays part of the follow target, so the follow does not undo it. */
+  private pan: Vector2D = { x: 0, y: 0 };
+  /** Walk frame and facing for the player sprite. Set by updateWalkPose(). */
+  private walkPose: WalkPose = idleWalkPose();
   /** World bounds from the last render(); picks outside this are rejected. */
   private mapSize: { x: number; y: number } | null = null;
   private tileSize = 64; // Increased for better detail
@@ -1055,6 +1166,8 @@ export class IsometricRenderer {
 
     const action = player.animation?.action || 'idle';
     const isWorking = player.animation?.isPlaying;
+    const pose = this.walkPose;
+    const stride = pose.moving ? WALK_STRIDE[pose.frame] : 0;
 
     // Shadow
     this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -1062,8 +1175,10 @@ export class IsometricRenderer {
     this.ctx.ellipse(iso.screenX, iso.screenY, 12, 6, 0, 0, Math.PI * 2);
     this.ctx.fill();
 
-    // Bobbing animation for idle
-    const bob = action === 'idle' ? Math.sin(Date.now() / 200) * 2 : 0;
+    // Idle bobs while standing. Walking bounces on the Walk1 and Walk3 frames.
+    const bob = pose.moving
+      ? (pose.frame % 2 === 1 ? -1.5 : 0)
+      : (action === 'idle' ? Math.sin(Date.now() / 200) * 2 : 0);
     const anchorY = iso.screenY;
 
     // Body Color based on action? Or typical clothes
@@ -1073,11 +1188,25 @@ export class IsometricRenderer {
     this.ctx.beginPath();
     this.ctx.ellipse(iso.screenX, anchorY - 15 + bob, 8, 12, 0, 0, Math.PI * 2);
     this.ctx.fill();
-    // Head
-    this.ctx.fillStyle = '#FFCC80'; // Skin tone
+
+    // Legs. The stride lengthens one leg and shortens the other.
+    this.ctx.fillStyle = '#5D4037';
+    this.ctx.fillRect(iso.screenX - 5, anchorY - 6, 3, 6 + Math.max(0, stride) * 3);
+    this.ctx.fillRect(iso.screenX + 2, anchorY - 6, 3, 6 + Math.max(0, -stride) * 3);
+
+    // Arms swing opposite to the legs.
+    this.ctx.fillStyle = '#1E88E5';
+    this.ctx.beginPath();
+    this.ctx.ellipse(iso.screenX - 10, anchorY - 15 + bob + stride * 2, 3, 6, 0, 0, Math.PI * 2);
+    this.ctx.ellipse(iso.screenX + 10, anchorY - 15 + bob - stride * 2, 3, 6, 0, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    // Head. Facing north shows the back of the head, which is hair.
+    this.ctx.fillStyle = pose.facing === 'north' ? '#6D4C41' : '#FFCC80';
     this.ctx.beginPath();
     this.ctx.arc(iso.screenX, anchorY - 30 + bob, 8, 0, Math.PI * 2);
     this.ctx.fill();
+    this.drawPlayerEyes(iso.screenX, anchorY - 27 + bob, pose.facing);
 
     // Hat (Straw hat!)
     this.ctx.fillStyle = '#E6C348';
@@ -1122,6 +1251,19 @@ export class IsometricRenderer {
 
       this.ctx.restore();
     }
+  }
+
+  /** Eyes show the facing: both on south, one on the side for east or west, none on north. */
+  private drawPlayerEyes(x: number, y: number, facing: FacingDirection): void {
+    if (facing === 'north') return;
+    const offsets = facing === 'south' ? [-3, 3] : [facing === 'east' ? 3 : -3];
+    this.ctx.fillStyle = '#3E2723';
+    this.ctx.beginPath();
+    for (const offset of offsets) {
+      this.ctx.moveTo(x + offset + 1.3, y);
+      this.ctx.arc(x + offset, y, 1.3, 0, Math.PI * 2);
+    }
+    this.ctx.fill();
   }
 
   private drawRoad(iso: IsometricPoint, grade: 'gravel' | 'paved', lanes: 1 | 2, connections: number): void {
@@ -1466,6 +1608,40 @@ export class IsometricRenderer {
     this.camera.x += dx;
     this.camera.y += dy;
     this.camera.z += dz;
+    this.pan = { x: this.pan.x + dx, y: this.pan.y + dy };
+  }
+
+  /**
+   * Ease the camera so the player's ground point sits at the view centre, plus the manual pan.
+   * The target is clamped to the map, and the pan is trimmed to match, so it cannot pile up past an edge.
+   * Returns true while the camera is still moving, so the caller keeps repainting.
+   */
+  followPlayer(position: Vector3D, dtSeconds: number): boolean {
+    if (!this.mapSize) return false;
+    const projected = gridToScreen(position.x, position.y, this.tileSize, this.tileSize / 2);
+    // Offset that puts this ground point at the view centre. The projection origin is at
+    // (width / 2, height / 3), so the vertical term is height / 2 - height / 3 = height / 6.
+    const centred: Vector2D = { x: -projected.x, y: this.cssHeight / 6 - projected.y };
+    const target = clampCameraToMap(
+      { x: centred.x + this.pan.x, y: centred.y + this.pan.y },
+      projectedMapBounds(this.mapSize, this.tileSize),
+      { width: this.cssWidth, height: this.cssHeight },
+    );
+    this.pan = { x: target.x - centred.x, y: target.y - centred.y };
+    const next = stepCamera(this.camera, target, dtSeconds);
+    const moved = next.x !== this.camera.x || next.y !== this.camera.y;
+    this.camera = { ...this.camera, x: next.x, y: next.y };
+    return moved;
+  }
+
+  /** Walk frame and facing from the player's grid velocity. Returns true when the drawn pose changed. */
+  updateWalkPose(vx: number, vy: number, moving: boolean, dtSeconds: number): boolean {
+    const previous = this.walkPose;
+    const facing = moving ? walkFacingFromVelocity(vx, vy, previous.facing) : previous.facing;
+    this.walkPose = advanceWalkPose(previous, dtSeconds, moving, facing);
+    return this.walkPose.frame !== previous.frame
+      || this.walkPose.facing !== previous.facing
+      || this.walkPose.moving !== previous.moving;
   }
 
   /**

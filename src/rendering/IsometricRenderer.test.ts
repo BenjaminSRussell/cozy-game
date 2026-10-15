@@ -27,7 +27,16 @@ vi.hoisted(() => {
 });
 
 import { useGameStore } from '../store/gameStore';
-import { IsometricRenderer } from './IsometricRenderer';
+import {
+  WALK_FRAME_SECONDS,
+  advanceWalkPose,
+  clampCameraToMap,
+  idleWalkPose,
+  IsometricRenderer,
+  projectedMapBounds,
+  stepCamera,
+  walkFacingFromVelocity,
+} from './IsometricRenderer';
 
 const TILE_SIZE = 64;
 
@@ -683,5 +692,96 @@ describe('IsometricRenderer depth queue', () => {
     expect(buildVoxelWorld).toHaveBeenCalledTimes(1);
     const again = (renderer as unknown as { renderQueue: DepthQueueItem[] }).renderQueue;
     expect(again.map((item) => item.depth)).toEqual(queue.map((item) => item.depth));
+  });
+});
+
+describe('IsometricRenderer walk pose', () => {
+  it('faces the way the player moves on screen', () => {
+    expect(walkFacingFromVelocity(1, -1, 'south')).toBe('east');
+    expect(walkFacingFromVelocity(-1, 1, 'south')).toBe('west');
+    expect(walkFacingFromVelocity(1, 1, 'north')).toBe('south');
+    expect(walkFacingFromVelocity(-1, -1, 'east')).toBe('north');
+    expect(walkFacingFromVelocity(0, 0, 'west')).toBe('west');
+  });
+
+  it('cycles Idle, Walk1, Walk2, Walk3 every 0.15 s and returns to idle when still', () => {
+    let pose = idleWalkPose('east');
+    const frames: number[] = [];
+    for (let step = 0; step < 5; step += 1) {
+      pose = advanceWalkPose(pose, WALK_FRAME_SECONDS, true, 'east');
+      frames.push(pose.frame);
+    }
+    expect(frames).toEqual([1, 2, 3, 0, 1]);
+
+    pose = advanceWalkPose(pose, 0.05, false, 'east');
+    expect(pose).toEqual({ facing: 'east', frame: 0, elapsed: 0, moving: false });
+  });
+
+  it('reports a repaint only when the drawn frame, facing or moving state changes', () => {
+    const { renderer } = rendererWithMap(800, 600, { x: 100, y: 100 });
+
+    expect(renderer.updateWalkPose(1, -1, true, 0.01)).toBe(true);
+    expect(renderer.updateWalkPose(1, -1, true, 0.01)).toBe(false);
+    expect(renderer.updateWalkPose(1, -1, true, WALK_FRAME_SECONDS)).toBe(true);
+    expect(renderer.updateWalkPose(0, 0, false, 1 / 60)).toBe(true);
+    expect(renderer.updateWalkPose(0, 0, false, 1 / 60)).toBe(false);
+  });
+});
+
+describe('IsometricRenderer camera follow', () => {
+  it('eases 10% of the gap per 60 Hz frame and lands once within half a pixel', () => {
+    const once = stepCamera({ x: 0, y: 0 }, { x: 100, y: -50 }, 1 / 60);
+    expect(once.x).toBeCloseTo(10);
+    expect(once.y).toBeCloseTo(-5);
+
+    const twice = stepCamera(once, { x: 100, y: -50 }, 1 / 60);
+    expect(twice.x).toBeCloseTo(19);
+
+    expect(stepCamera({ x: 99.8, y: -50 }, { x: 100, y: -50 }, 1 / 60)).toEqual({ x: 100, y: -50 });
+    expect(stepCamera({ x: 0, y: 0 }, { x: 100, y: 0 }, 0)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('clamps the view to the projected map and centres a map smaller than the view', () => {
+    const view = { width: 800, height: 600 };
+    const bounds = projectedMapBounds({ x: 100, y: 100 }, TILE_SIZE);
+    expect(bounds).toEqual({ minX: -3200, minY: 0, maxX: 3200, maxY: 3200 });
+
+    expect(clampCameraToMap({ x: 5000, y: 0 }, bounds, view)).toEqual({ x: 2800, y: -200 });
+    expect(clampCameraToMap({ x: 0, y: -1500 }, bounds, view)).toEqual({ x: 0, y: -1500 });
+    expect(clampCameraToMap({ x: 0, y: -9000 }, bounds, view)).toEqual({ x: 0, y: -2800 });
+
+    const small = projectedMapBounds({ x: 2, y: 2 }, TILE_SIZE);
+    expect(small).toEqual({ minX: -64, minY: 0, maxX: 64, maxY: 64 });
+    expect(clampCameraToMap({ x: 300, y: 300 }, small, view)).toEqual({ x: 0, y: 68 });
+  });
+
+  it('brings the player to the view centre and keeps the centre pick on the player tile', () => {
+    const { renderer } = rendererWithMap(800, 600, { x: 100, y: 100 });
+    const player = { x: 50, y: 50, z: 1 };
+
+    expect(renderer.followPlayer(player, 1 / 60)).toBe(true);
+    for (let frame = 0; frame < 200; frame += 1) renderer.followPlayer(player, 1 / 60);
+
+    expect(renderer.followPlayer(player, 1 / 60)).toBe(false);
+    expect(renderer.screenToVoxel(400, 300)).toEqual({ x: 50, y: 50 });
+  });
+
+  it('keeps a manual pan through the follow', () => {
+    const { renderer } = rendererWithMap(800, 600, { x: 100, y: 100 });
+    const player = { x: 50, y: 50, z: 1 };
+
+    renderer.moveCamera(40, 0, 0);
+    for (let frame = 0; frame < 200; frame += 1) renderer.followPlayer(player, 1 / 60);
+
+    expect(renderer.screenToVoxel(440, 300)).toEqual({ x: 50, y: 50 });
+  });
+
+  it('stops at the map corner instead of scrolling past the edge', () => {
+    const { renderer } = rendererWithMap(800, 600, { x: 100, y: 100 });
+    for (let frame = 0; frame < 200; frame += 1) renderer.followPlayer({ x: 0, y: 0, z: 1 }, 1 / 60);
+
+    const camera = (renderer as unknown as { camera: { x: number; y: number } }).camera;
+    expect(camera.x).toBeCloseTo(0);
+    expect(camera.y).toBeCloseTo(-200);
   });
 });
