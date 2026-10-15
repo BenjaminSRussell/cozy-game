@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
 import { useGameStore } from '../store/gameStore';
-import { CropStage, Season, ToolType } from '../types/game';
+import { CropStage, Season, ToolType, type ShippedTodayEntry } from '../types/game';
 import {
   EXHAUSTED_MESSAGE,
   IsometricRenderer,
@@ -19,6 +19,9 @@ import { CraftingMenu } from './CraftingMenu';
 import { theme } from '../styles/theme';
 import { CozyIconButton } from './CozyIconButton';
 import { ShippingSummaryModal, useEndOfDayShipping } from './ShippingSummaryModal';
+import { FarmhouseBedPrompt, SleepFade } from './FarmhouseBedModal';
+import { isEndOfDay } from './shippingSummary';
+import { BED_FADE_MS, findFarmhouse, isNextToFarmhouse, type BedStage } from '../systems/farmhouseBed';
 import { DialogueBox, type DialogueRequest } from './DialogueBox';
 import { clearNotificationTimer, scheduleNotificationHide, type NotificationTimerId } from './notificationTimer';
 import { lerp } from '../utils/math';
@@ -934,6 +937,40 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
     };
   }, []);
 
+  // Farmhouse bed. Walking up to the farmhouse asks; Yes fades out, tallies the day, then wakes at 6:00 AM.
+  const [bedStage, setBedStageState] = useState<BedStage>('idle');
+  const [bedRows, setBedRows] = useState<ShippedTodayEntry[]>([]);
+  const bedStageRef = useRef<BedStage>('idle');
+  const bedLatchRef = useRef(false);
+  const bedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shippingOpenRef = useRef(false);
+  const setBedStage = (stage: BedStage) => {
+    bedStageRef.current = stage;
+    setBedStageState(stage);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (bedTimerRef.current) clearTimeout(bedTimerRef.current);
+    };
+  }, []);
+
+  const onBedNo = () => setBedStage('idle');
+  const onBedYes = () => {
+    setBedStage('fading');
+    bedTimerRef.current = setTimeout(() => {
+      bedTimerRef.current = null;
+      const store = useGameStore.getState();
+      // Tally before goToBed: the day roll clears shippedToday.
+      const tally = store.world?.shippedToday ?? [];
+      store.goToBed();
+      onSave();
+      setBedRows([...tally]);
+      setBedStage('summary');
+    }, BED_FADE_MS);
+  };
+  const onBedContinue = () => setBedStage('idle');
+
   // Held WASD / arrow keys, plus the floating stick. Velocity lerps each frame; collision is checked before movePlayer.
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -996,7 +1033,19 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
           indoors,
         });
 
-        if (dt > 0) {
+        const farmhouse = findFarmhouse(world.buildings);
+        if (farmhouse && isNextToFarmhouse(world.player.position, farmhouse)) {
+          // Not offered once the 11 PM tally is up; that modal already ends the day.
+          const canAsk = !isEndOfDay(world.dayTime) && !shippingOpenRef.current;
+          if (canAsk && !bedLatchRef.current && bedStageRef.current === 'idle') {
+            bedLatchRef.current = true;
+            setBedStage('prompt');
+          }
+        } else {
+          bedLatchRef.current = false;
+        }
+
+        if (dt > 0 && bedStageRef.current === 'idle') {
           const player = world.player;
           const keysVector = movementInputVector(keys);
           const { inputX, inputY } = locomotionInput(keysVector.inputX, keysVector.inputY, joystickRef.current);
@@ -1419,6 +1468,10 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
   };
 
   const shipping = useEndOfDayShipping(world, advanceTime);
+
+  useEffect(() => {
+    shippingOpenRef.current = shipping.open;
+  }, [shipping.open]);
 
   if (!world) {
     return (
@@ -1978,6 +2031,17 @@ export const IsometricGameScreen: React.FC<IsometricGameScreenProps> = ({ onSave
         visible={shipping.open}
         rows={shipping.rows}
         onContinue={shipping.onContinue}
+      />
+      <FarmhouseBedPrompt
+        visible={bedStage === 'prompt'}
+        onYes={onBedYes}
+        onNo={onBedNo}
+      />
+      <SleepFade active={bedStage === 'fading'} />
+      <ShippingSummaryModal
+        visible={bedStage === 'summary'}
+        rows={bedRows}
+        onContinue={onBedContinue}
       />
       {dialogue ? (
         <DialogueBox

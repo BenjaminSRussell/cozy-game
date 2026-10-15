@@ -36,6 +36,8 @@ import {
   getQualityMultiplier,
 } from '../types/game';
 import { RoadSystem } from '../systems/RoadSystem';
+import { createStartingFarmhouse } from '../systems/farmhouseBed';
+import { minutesUntilNextSunrise } from '../components/shippingSummary';
 import { EXHAUSTED_MESSAGE, liveIsometricRenderers, playerIsExhausted } from '../rendering/IsometricRenderer';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
 
@@ -809,6 +811,12 @@ interface GameStore {
    * Stamina returns to max, or half of max after passing out.
    */
   sleep: (passedOut?: boolean) => void;
+  /**
+   * Overnight reset for the farmhouse bed. Runs to the next 6:00 AM, which rolls the day when
+   * the clock crosses midnight (crops grow, the shipping ledger clears). Stamina goes to max
+   * and wet soil dries. Read shippedToday before calling: the roll clears it.
+   */
+  goToBed: () => void;
   /** Copy empty stamina onto `player.isExhausted`. */
   syncExhaustion: () => void;
   movePlayer: (position: Vector3D) => void;
@@ -958,7 +966,8 @@ const createInitialWorld = (playerName: string): GameWorld => {
         unlocked: true,
         level: 1,
         spriteId: 'building_garage'
-      }
+      },
+      createStartingFarmhouse(),
     ],
     homeBuildings: [], // Initialize empty home buildings array
     roads: [],
@@ -3321,6 +3330,24 @@ export const useGameStore = create<GameStore>()(
                 },
               },
             };
+          });
+        },
+
+        goToBed: () => {
+          const world = get().world;
+          if (!world) return;
+          // advanceTime rolls the day (crop growth, ledger clear, animal reset) when this crosses midnight.
+          get().advanceTime(minutesUntilNextSunrise(world.dayTime));
+          get().sleep(false);
+          set((state) => {
+            if (!state.world) return state;
+            const tiles = readSoilTiles(state.world);
+            if (!tiles) return state;
+            const dried = tiles.map((tile) =>
+              (tile.state ?? tile.type) === 'tilled_wet' ? { ...tile, state: 'tilled_dry' } : tile,
+            );
+            const nextWorld: WorldWithTiles = { ...state.world, tiles: dried };
+            return { world: nextWorld };
           });
         },
 
