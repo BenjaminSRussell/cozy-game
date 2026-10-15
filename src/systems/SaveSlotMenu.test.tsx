@@ -344,4 +344,35 @@ describe('SaveSlotScreen', () => {
     expect(onDelete).toHaveBeenCalledWith(1);
     expect(ui.texts).not.toContain('Delete Save');
   });
+
+  it('offers Export on occupied cards and Import on empty ones', async () => {
+    const onExport = vi.fn();
+    const onImport = vi.fn(async () => true);
+    await act(async () => {
+      root.render(
+        <Record>
+          <SaveSlotScreen
+            slots={slots}
+            onNewGame={() => undefined}
+            onLoad={() => undefined}
+            onDelete={() => undefined}
+            onExport={onExport}
+            onImport={onImport}
+            onBack={() => undefined}
+          />
+        </Record>,
+      );
+    });
+
+    expect(ui.presses['Export slot 1']).toBeDefined();
+    expect(ui.presses['Export slot 2']).toBeUndefined();
+    expect(ui.presses['Import into slot 2']).toBeDefined();
+    expect(ui.presses['Import into slot 1']).toBeUndefined();
+
+    await act(async () => {
+      ui.presses['Export slot 1']?.();
+    });
+    expect(onExport).toHaveBeenCalledWith(1);
+    expect(onImport).not.toHaveBeenCalled();
+  });
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image, ActivityIndicator, TextInput } from 'react-native';
 import { useGameStore } from './src/store/gameStore';
 import {
   PersistenceManager,
@@ -14,6 +14,12 @@ import { IsometricGameScreen } from './src/components/IsometricGameScreen';
 import { LoadingScreen } from './src/components/LoadingScreen';
 import { AssetLoader, LoadingProgress } from './src/rendering/AssetLoader';
 import { EconomySystem } from './src/systems/EconomySystem';
+import { TitleScreen, SettingsPanel } from './src/components/TitleScreen';
+import { CharacterCustomizer } from './src/components/CharacterCustomizer';
+import { pickContinueSlot } from './src/components/titleMenu';
+import { captureSaveThumbnail } from './src/systems/saveThumbnail';
+import { canPickSaveFile, pickSaveFileText, saveFileName, shareSaveFile } from './src/systems/saveFileTransfer';
+import type { NewGameOptions } from './src/types/game';
 
 /**
  * Application state interface tracking initialization and game status
@@ -30,6 +36,12 @@ interface GameAppState {
   gameStarted: boolean;
   /** Load Game screen with the three local slots */
   showSlots: boolean;
+  /** Settings panel opened from the title screen */
+  showSettings: boolean;
+  /** Title music. Saved as cozy_setting_music. */
+  musicOn: boolean;
+  /** Slot whose New Game waits on the character customizer */
+  customizeSlot: LocalSaveSlotId | null;
   /** Slot cards aligned to cozy_slot_1 … cozy_slot_3 */
   slotCards: Array<LocalSaveSlot | null>;
 }
@@ -40,11 +52,11 @@ interface GameAppState {
  * Core responsibilities:
  * - Initialize AudioManager for background music playback
  * - Initialize PersistenceManager for local save/load
- * - Manage application state (loading → menu → gameplay)
+ * - Manage application state (loading → title → gameplay)
  * - Start GameEngine when play begins. Time, crops, and physics tick there
  *   on requestAnimationFrame, not on a React setInterval.
  * - Handle resource cleanup on unmount (stop audio)
- * - Navigate between menu screen and game screen
+ * - Navigate between title, character customizer, slots, settings and game screens
  *
  * @returns React component containing the complete application UI
  */
@@ -56,15 +68,41 @@ export interface SaveSlotScreenProps {
   onNewGame: (slotId: LocalSaveSlotId) => void;
   onLoad: (slotId: LocalSaveSlotId) => void;
   onDelete: (slotId: LocalSaveSlotId) => void;
+  /** Writes an occupied slot out as a save file */
+  onExport?: (slotId: LocalSaveSlotId) => void;
+  /** Restores save file text into an empty slot. Resolves true once the slot is filled. */
+  onImport?: (slotId: LocalSaveSlotId, text: string) => Promise<boolean>;
   onBack: () => void;
 }
 
 /**
  * Three save cards. Delete only calls onDelete from the confirm control.
  * A card with no thumbnailDataUrl leaves the preview blank.
+ * Empty cards offer Import; occupied cards offer Export.
  */
-export function SaveSlotScreen({ slots, onNewGame, onLoad, onDelete, onBack }: SaveSlotScreenProps) {
+export function SaveSlotScreen({
+  slots,
+  onNewGame,
+  onLoad,
+  onDelete,
+  onExport,
+  onImport,
+  onBack,
+}: SaveSlotScreenProps) {
   const [pendingDeleteSlot, setPendingDeleteSlot] = useState<LocalSaveSlotId | null>(null);
+  const [importSlot, setImportSlot] = useState<LocalSaveSlotId | null>(null);
+  const [importText, setImportText] = useState('');
+
+  const closeImport = () => {
+    setImportSlot(null);
+    setImportText('');
+  };
+
+  const submitImport = async () => {
+    if (importSlot == null || !onImport) return;
+    const filled = await onImport(importSlot, importText);
+    if (filled) closeImport();
+  };
 
   return (
     <View style={styles.container}>
@@ -100,6 +138,15 @@ export function SaveSlotScreen({ slots, onNewGame, onLoad, onDelete, onBack }: S
                   >
                     <Text style={styles.buttonText}>Load</Text>
                   </TouchableOpacity>
+                  {onExport ? (
+                    <TouchableOpacity
+                      style={styles.slotButton}
+                      accessibilityLabel={`Export slot ${slotId}`}
+                      onPress={() => onExport(slotId)}
+                    >
+                      <Text style={styles.buttonText}>Export</Text>
+                    </TouchableOpacity>
+                  ) : null}
                   <TouchableOpacity
                     style={[styles.slotButton, styles.deleteButton]}
                     accessibilityLabel={`Delete slot ${slotId}`}
@@ -109,13 +156,27 @@ export function SaveSlotScreen({ slots, onNewGame, onLoad, onDelete, onBack }: S
                   </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity
-                  style={styles.slotButton}
-                  accessibilityLabel={`New game slot ${slotId}`}
-                  onPress={() => onNewGame(slotId)}
-                >
-                  <Text style={styles.buttonText}>New Game</Text>
-                </TouchableOpacity>
+                <View style={styles.slotActions}>
+                  <TouchableOpacity
+                    style={styles.slotButton}
+                    accessibilityLabel={`New game slot ${slotId}`}
+                    onPress={() => onNewGame(slotId)}
+                  >
+                    <Text style={styles.buttonText}>New Game</Text>
+                  </TouchableOpacity>
+                  {onImport ? (
+                    <TouchableOpacity
+                      style={[styles.slotButton, styles.secondaryButton]}
+                      accessibilityLabel={`Import into slot ${slotId}`}
+                      onPress={() => {
+                        setImportText('');
+                        setImportSlot(slotId);
+                      }}
+                    >
+                      <Text style={styles.buttonText}>Import</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               )}
             </View>
           );
@@ -152,6 +213,53 @@ export function SaveSlotScreen({ slots, onNewGame, onLoad, onDelete, onBack }: S
           </View>
         </View>
       )}
+
+      {importSlot != null && onImport ? (
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, styles.importCard]}>
+            <Text style={styles.modalTitle}>{`Import into slot ${importSlot}`}</Text>
+            <Text style={styles.slotMeta}>Paste the text of a Cozy Haven save file.</Text>
+            <TextInput
+              style={styles.importInput}
+              multiline
+              value={importText}
+              onChangeText={setImportText}
+              placeholder="Save file text"
+              accessibilityLabel="Save file text"
+            />
+            {canPickSaveFile() ? (
+              <TouchableOpacity
+                style={[styles.button, styles.secondaryButton]}
+                accessibilityLabel="Choose save file"
+                onPress={() => {
+                  void pickSaveFileText().then((text) => {
+                    if (text != null) setImportText(text);
+                  });
+                }}
+              >
+                <Text style={styles.buttonText}>Choose File</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.button, importText.trim().length === 0 && styles.disabledButton]}
+              accessibilityLabel="Import Save"
+              disabled={importText.trim().length === 0}
+              onPress={() => {
+                void submitImport();
+              }}
+            >
+              <Text style={styles.buttonText}>Import Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              accessibilityLabel="Cancel import"
+              onPress={closeImport}
+            >
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -165,6 +273,9 @@ export default function App() {
     hasGame: false,
     gameStarted: false,
     showSlots: false,
+    showSettings: false,
+    musicOn: true,
+    customizeSlot: null,
     slotCards: BLANK_SLOTS,
   });
 
@@ -227,8 +338,11 @@ export default function App() {
           loadingAsset: 'Save Files'
         }));
 
-        // Start background music only after assets are loaded
-        audio.playMusic('farm_morning');
+        // Start background music only after assets are loaded. Settings can turn it off.
+        const musicOn = (await persistence.getSetting('music')) !== 'off';
+        if (musicOn) {
+          audio.playMusic('farm_morning');
+        }
 
         // Initialize economy system
         setState(prev => ({ ...prev, loadingStage: 'Checking Game Data...', loadingProgress: 0.9 }));
@@ -238,7 +352,7 @@ export default function App() {
           economy.loadSaveData(savedEconomy);
         } else {
           // New game or no data? We could advance a few days to simulate a running market
-          // economy.advanceDay('spring'); 
+          // economy.advanceDay('spring');
         }
 
         // Numbered slots, plus any cozy_meta_* saves copied into empty slots.
@@ -253,6 +367,7 @@ export default function App() {
           loadingStage: 'Ready!',
           loadingAsset: 'Starting...',
           hasGame: hasExistingSave,
+          musicOn,
           slotCards,
         }));
 
@@ -268,6 +383,9 @@ export default function App() {
           hasGame: false,
           gameStarted: false,
           showSlots: false,
+          showSettings: false,
+          musicOn: true,
+          customizeSlot: null,
           slotCards: BLANK_SLOTS,
         });
       }
@@ -311,9 +429,13 @@ export default function App() {
 
   /**
    * Start a new game in one numbered slot and write it immediately.
+   * `start` carries the customizer choices. Without it the store defaults apply.
    */
-  const startInSlot = async (slotId: LocalSaveSlotId) => {
-    useGameStore.getState().createNewGame('Player');
+  const startInSlot = async (
+    slotId: LocalSaveSlotId,
+    start?: { playerName: string; options: NewGameOptions },
+  ) => {
+    useGameStore.getState().createNewGame(start?.playerName ?? 'Player', start?.options);
     useGameStore.getState().createFarmPlot({ x: 10, y: 10 });
     useGameStore.getState().createFarmPlot({ x: 10, y: 30 });
     useGameStore.getState().createFarmPlot({ x: 10, y: 50 });
@@ -330,20 +452,22 @@ export default function App() {
       hasGame: true,
       gameStarted: true,
       showSlots: false,
+      customizeSlot: null,
     }));
   };
 
   /**
-   * Start new game in the first empty slot. A full set opens the slot screen.
+   * New Game opens the character customizer for the first empty slot.
+   * A full set opens the slot screen instead.
    */
-  const handleNewGame = async () => {
+  const handleNewGame = () => {
     const cards = persistenceRef.current?.listLocalSlots() ?? BLANK_SLOTS;
     const emptyIndex = cards.findIndex((card) => !localSlotCardContent(card).occupied);
     if (emptyIndex < 0 || !isLocalSaveSlotId(emptyIndex + 1)) {
       setState((prev) => ({ ...prev, showSlots: true, slotCards: cards }));
       return;
     }
-    await startInSlot((emptyIndex + 1) as LocalSaveSlotId);
+    setState((prev) => ({ ...prev, customizeSlot: (emptyIndex + 1) as LocalSaveSlotId }));
   };
 
   const openSlots = async () => {
@@ -379,6 +503,14 @@ export default function App() {
     }
   };
 
+  /** Continue opens the most recently saved slot. The title disables it when no slot has a save. */
+  const handleContinue = async () => {
+    const target = pickContinueSlot(persistenceRef.current?.listLocalSlots() ?? BLANK_SLOTS);
+    if (target) {
+      await handleLoadSlot(target.slotId);
+    }
+  };
+
   /**
    * Save game into the active numbered slot.
    * Also keeps the legacy cozy_save_ / cozy_meta_ records written by saveWorld.
@@ -405,7 +537,9 @@ export default function App() {
       }
 
       if (slotId != null && isLocalSaveSlotId(slotId)) {
-        await persistence.saveLocalSlot(slotId, world);
+        // Thumbnail comes from the game canvas on web. Native saves keep a blank card.
+        const thumbnailDataUrl = captureSaveThumbnail();
+        await persistence.saveLocalSlot(slotId, world, thumbnailDataUrl ? { thumbnailDataUrl } : undefined);
         activeSlotRef.current = slotId;
       } else {
         await persistence.saveWorld(world);
@@ -440,6 +574,47 @@ export default function App() {
     }));
   };
 
+  /** Hands the slot to the browser download (web) or the share sheet (native). */
+  const handleExportSlot = async (slotId: LocalSaveSlotId) => {
+    const text = await persistenceRef.current?.exportLocalSlot(slotId);
+    if (!text) {
+      alert('This save could not be exported.');
+      return;
+    }
+    try {
+      await shareSaveFile(text, saveFileName(slotId));
+    } catch (error) {
+      console.error('Failed to share save file:', error);
+      alert('Could not share the save file. Please try again.');
+    }
+  };
+
+  /** Restores save file text into an empty slot. Resolves true when the slot was filled. */
+  const handleImportSlot = async (slotId: LocalSaveSlotId, text: string): Promise<boolean> => {
+    const persistence = persistenceRef.current;
+    const slot = persistence ? await persistence.importLocalSlot(slotId, text) : null;
+    if (!persistence || !slot) {
+      alert('That is not a Cozy Haven save, or the slot is not empty.');
+      return false;
+    }
+    setState((prev) => ({ ...prev, hasGame: true, slotCards: persistence.listLocalSlots() }));
+    alert('Save imported.');
+    return true;
+  };
+
+  /** Title music on or off. The choice is saved so the next launch remembers it. */
+  const toggleMusic = () => {
+    const next = !state.musicOn;
+    const audio = AudioManager.getInstance();
+    if (next) {
+      void audio.playMusic('farm_morning');
+    } else {
+      void audio.stopMusic(300);
+    }
+    setState((prev) => ({ ...prev, musicOn: next }));
+    void persistenceRef.current?.saveSetting('music', next ? 'on' : 'off');
+  };
+
   if (state.isLoading) {
     return (
       <LoadingScreen
@@ -455,52 +630,66 @@ export default function App() {
     return <IsometricGameScreen onSave={handleSaveGame} />;
   }
 
+  const titleScreen = (
+    <TitleScreen
+      canContinue={pickContinueSlot(state.slotCards) !== null}
+      onNewGame={handleNewGame}
+      onContinue={() => {
+        void handleContinue();
+      }}
+      onLoadGame={() => {
+        void openSlots();
+      }}
+      onSettings={() => setState((prev) => ({ ...prev, showSettings: true }))}
+    />
+  );
+
+  if (state.customizeSlot != null) {
+    const slotId = state.customizeSlot;
+    return (
+      <View style={styles.fill}>
+        {titleScreen}
+        <CharacterCustomizer
+          onStart={(start) => {
+            void startInSlot(slotId, start);
+          }}
+          onCancel={() => setState((prev) => ({ ...prev, customizeSlot: null }))}
+        />
+      </View>
+    );
+  }
+
   if (state.showSlots) {
     return (
       <SaveSlotScreen
         slots={state.slotCards}
-        onNewGame={(slotId) => {
-          void startInSlot(slotId);
-        }}
+        onNewGame={(slotId) => setState((prev) => ({ ...prev, customizeSlot: slotId }))}
         onLoad={(slotId) => {
           void handleLoadSlot(slotId);
         }}
         onDelete={(slotId) => {
           void handleDeleteSlot(slotId);
         }}
+        onExport={(slotId) => {
+          void handleExportSlot(slotId);
+        }}
+        onImport={handleImportSlot}
         onBack={() => setState((prev) => ({ ...prev, showSlots: false }))}
       />
     );
   }
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.menuContainer}>
-        <Text style={styles.title}>🌾 Cozy Haven 🏠</Text>
-        <Text style={styles.subtitle}>A peaceful farming adventure</Text>
-        <Text style={styles.description}>
-          Plant crops, build your farm, and enjoy a relaxing life in the countryside.
-        </Text>
+  if (state.showSettings) {
+    return (
+      <SettingsPanel
+        musicOn={state.musicOn}
+        onToggleMusic={toggleMusic}
+        onBack={() => setState((prev) => ({ ...prev, showSettings: false }))}
+      />
+    );
+  }
 
-        <TouchableOpacity style={styles.button} onPress={() => { void handleNewGame(); }}>
-          <Text style={styles.buttonText}>🎮 New Game</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={() => { void openSlots(); }}>
-          <Text style={styles.buttonText}>📂 Load Game</Text>
-        </TouchableOpacity>
-
-        <View style={styles.infoContainer}>
-          <Text style={styles.infoTitle}>How to Play:</Text>
-          <Text style={styles.infoText}>• Tap "Plant" then click a plot to plant crops</Text>
-          <Text style={styles.infoText}>• Tap "Water" to keep crops healthy</Text>
-          <Text style={styles.infoText}>• Tap "Harvest" when crops are golden</Text>
-          <Text style={styles.infoText}>• Sell crops to earn coins</Text>
-          <Text style={styles.infoText}>• Build structures and expand your farm</Text>
-        </View>
-      </View>
-    </View>
-  );
+  return titleScreen;
 }
 
 const styles = StyleSheet.create({
@@ -510,6 +699,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFF8DC',
     padding: 20,
+  },
+  fill: {
+    flex: 1,
   },
   loadingText: {
     marginTop: 20,
@@ -534,13 +726,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontFamily: 'System',
   },
-  description: {
-    fontSize: 14,
-    color: '#A0826D',
-    marginBottom: 30,
-    textAlign: 'center',
-    maxWidth: 300,
-  },
   button: {
     paddingVertical: 15,
     paddingHorizontal: 40,
@@ -553,30 +738,14 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: '#C19A6B',
   },
+  disabledButton: {
+    opacity: 0.5,
+  },
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
     fontFamily: 'System',
-  },
-  infoContainer: {
-    marginTop: 40,
-    backgroundColor: '#F0E6D2',
-    padding: 20,
-    borderRadius: 12,
-    maxWidth: 350,
-  },
-  infoTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#8B4513',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  infoText: {
-    fontSize: 12,
-    color: '#654321',
-    marginVertical: 4,
   },
   slotCard: {
     width: '100%',
@@ -617,6 +786,7 @@ const styles = StyleSheet.create({
   },
   slotActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     marginTop: 8,
   },
   slotButton: {
@@ -654,6 +824,21 @@ const styles = StyleSheet.create({
     padding: 20,
     minWidth: 260,
     alignItems: 'center',
+  },
+  importCard: {
+    width: '92%',
+    maxWidth: 420,
+  },
+  importInput: {
+    width: '100%',
+    minHeight: 120,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    marginVertical: 10,
+    fontSize: 13,
+    color: '#654321',
+    textAlignVertical: 'top',
   },
   modalTitle: {
     fontSize: 20,

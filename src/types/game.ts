@@ -576,6 +576,8 @@ export interface PlayerState {
   rotation: number;
   /** ID of the vehicle the player is currently mounting, if any */
   mountedVehicleId?: string;
+  /** Look chosen at New Game. Absent on older saves. */
+  appearance?: PlayerAppearance;
 }
 
 export type RoadGrade = 'gravel' | 'paved';
@@ -618,6 +620,30 @@ export interface ShippedTodayEntry {
  * Contains all entities, terrain, and game state
  * Serialized for save/load functionality
  */
+/**
+ * Look picked in the New Game character customizer. Values come from the
+ * palettes in src/systems/characterAppearance.ts.
+ */
+export interface PlayerAppearance {
+  /** Hex skin tone */
+  skinTone: string;
+  /** Hair style id, such as 'short' or 'braid' */
+  hairStyle: string;
+  /** Hex hair color */
+  hairColor: string;
+  /** Hex shirt color */
+  shirtColor: string;
+  /** Hex pants color */
+  pantsColor: string;
+}
+
+/** Optional choices for createNewGame. Missing fields take the store defaults. */
+export interface NewGameOptions {
+  farmName?: string;
+  favoriteAnimal?: string;
+  appearance?: PlayerAppearance;
+}
+
 export interface GameWorld {
   /** Unique identifier for this game world */
   id: string;
@@ -625,6 +651,10 @@ export interface GameWorld {
   createdAt: number;
   /** Timestamp of last play session (updated on save) */
   lastPlayedAt: number;
+  /** Farm name from New Game. Shown on save slot cards. */
+  farmName?: string;
+  /** Favorite animal from New Game */
+  favoriteAnimal?: string;
   /** Current season (affects crops, weather, resources) */
   season: Season;
   /** Minutes elapsed in current day (0-1440) */

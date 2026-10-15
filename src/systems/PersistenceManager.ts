@@ -51,6 +51,8 @@ export interface LocalSaveSlot {
   gold?: number;
   playTimeMinutes?: number;
   thumbnailDataUrl?: string;
+  /** When the slot was last written (Date.now()). Continue opens the newest. */
+  savedAt?: number;
 }
 
 /** Text and thumbnail the slot card can show. Missing facts are absent. */
@@ -350,6 +352,7 @@ function parseLocalSaveSlot(raw: string, slotId: LocalSaveSlotId): LocalSaveSlot
     const playRaw = readOptionalNumber(parsed.playTimeMinutes);
     const playTimeMinutes = playRaw !== undefined && playRaw >= 0 ? playRaw : undefined;
     const thumbnailDataUrl = readOptionalString(parsed.thumbnailDataUrl);
+    const savedAt = readOptionalNumber(parsed.savedAt);
     if (
       !worldId &&
       !farmName &&
@@ -370,6 +373,7 @@ function parseLocalSaveSlot(raw: string, slotId: LocalSaveSlotId): LocalSaveSlot
       ...(gold !== undefined ? { gold } : {}),
       ...(playTimeMinutes !== undefined ? { playTimeMinutes } : {}),
       ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
+      ...(savedAt !== undefined ? { savedAt } : {}),
     };
   } catch {
     return null;
@@ -402,6 +406,7 @@ function overlaySummary(slot: LocalSaveSlot): LocalSaveSlot {
     ...(gold !== undefined ? { gold } : {}),
     ...(playTimeMinutes !== undefined ? { playTimeMinutes } : {}),
     ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
+    ...(slot.savedAt !== undefined ? { savedAt: slot.savedAt } : {}),
   };
 }
 
@@ -422,6 +427,7 @@ function buildLocalSlot(
   return {
     slotId,
     worldId: world.id,
+    savedAt: Date.now(),
     ...(farmName ? { farmName } : {}),
     ...(summary.playerName ? { playerName: summary.playerName } : {}),
     ...(summary.date ? { date: summary.date } : {}),
@@ -429,6 +435,12 @@ function buildLocalSlot(
     ...(summary.playTimeMinutes !== undefined ? { playTimeMinutes: summary.playTimeMinutes } : {}),
     ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
   };
+}
+
+/** Minutes under an hour, then hours to one decimal place. Floors, so 119 minutes reads as 1.9 hr. */
+export function formatPlayTime(minutes: number): string {
+  if (minutes < 60) return `${Math.floor(minutes)} min`;
+  return `${(Math.floor(minutes / 6) / 10).toFixed(1)} hr`;
 }
 
 export function localSlotCardContent(slot: LocalSaveSlot | null): LocalSlotCardContent {
@@ -445,7 +457,7 @@ export function localSlotCardContent(slot: LocalSaveSlot | null): LocalSlotCardC
     ...(slot.date ? { dateLabel: `Date: ${slot.date}` } : {}),
     ...(slot.gold !== undefined ? { goldLabel: `Gold: ${slot.gold}` } : {}),
     ...(slot.playTimeMinutes !== undefined
-      ? { playTimeLabel: `Play time: ${slot.playTimeMinutes} min` }
+      ? { playTimeLabel: `Play time: ${formatPlayTime(slot.playTimeMinutes)}` }
       : {}),
     ...(slot.thumbnailDataUrl ? { thumbnailDataUrl: slot.thumbnailDataUrl } : {}),
   };
@@ -465,6 +477,48 @@ function readImportText(source: string): string {
     return atob(payload);
   }
   return decodeURIComponent(payload);
+}
+
+/** Format tag and version written into exported slot files. */
+export const SAVE_FILE_FORMAT = 'cozy-haven-save';
+export const SAVE_FILE_VERSION = 1;
+
+interface ParsedSaveFile {
+  world: GameWorld;
+  thumbnailDataUrl?: string;
+}
+
+function newImportedWorldId(): string {
+  return `world_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Reads an exported slot file, or a bare world JSON such as exportSave writes.
+ * The world gets a new id, so the imported copy never shares storage with the original.
+ */
+function parseSaveFile(text: string): ParsedSaveFile | null {
+  let root: Record<string, unknown> | null;
+  try {
+    root = asRecord(JSON.parse(text) as unknown);
+  } catch {
+    return null;
+  }
+  if (!root) return null;
+  const isEnvelope = root.format === SAVE_FILE_FORMAT;
+  if (isEnvelope && root.version !== SAVE_FILE_VERSION) return null;
+  const candidate = asRecord(isEnvelope ? root.world : root);
+  if (!candidate || readOptionalString(candidate.id) === undefined) return null;
+  const player = asRecord(candidate.player);
+  if (!player || readOptionalString(player.name) === undefined) return null;
+  const thumbnailDataUrl = isEnvelope ? readOptionalString(root.thumbnailDataUrl) : undefined;
+  const world = {
+    ...candidate,
+    id: newImportedWorldId(),
+    player: { ...createDefaultPlayer(), ...player },
+    farmPlots: Array.isArray(candidate.farmPlots) ? candidate.farmPlots : [],
+    buildings: Array.isArray(candidate.buildings) ? candidate.buildings : [],
+  } as unknown as GameWorld;
+  return thumbnailDataUrl ? { world, thumbnailDataUrl } : { world };
 }
 
 /** Player fields an older save may omit. `stamina` is not on PlayerState yet. */
@@ -804,6 +858,50 @@ export class PersistenceManager {
   }
 
   /**
+   * JSON text for one occupied slot: the world, plus the card thumbnail when there is one.
+   * Returns null for an empty or unreadable slot.
+   */
+  async exportLocalSlot(slotId: number): Promise<string | null> {
+    if (!isLocalSaveSlotId(slotId)) return null;
+    try {
+      const slot = readLocalSlot(slotId);
+      if (!slot?.worldId) return null;
+      const world = await this.loadWorld(slot.worldId);
+      if (!world) return null;
+      return JSON.stringify(
+        {
+          format: SAVE_FILE_FORMAT,
+          version: SAVE_FILE_VERSION,
+          exportedAt: Date.now(),
+          ...(slot.thumbnailDataUrl ? { thumbnailDataUrl: slot.thumbnailDataUrl } : {}),
+          world,
+        },
+        null,
+        2,
+      );
+    } catch (error) {
+      console.error('Failed to export local slot:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Restore an exported file (or a bare world JSON) into an empty slot.
+   * Occupied slots are refused, so an import never replaces a save silently.
+   */
+  async importLocalSlot(slotId: number, text: string): Promise<LocalSaveSlot | null> {
+    if (!isLocalSaveSlotId(slotId)) return null;
+    if (readLocalSlot(slotId)) return null;
+    const parsed = parseSaveFile(text);
+    if (!parsed) return null;
+    return this.saveLocalSlot(
+      slotId,
+      parsed.world,
+      parsed.thumbnailDataUrl ? { thumbnailDataUrl: parsed.thumbnailDataUrl } : undefined,
+    );
+  }
+
+  /**
    * Fill empty numbered slots from cozy_meta_* saves that are not already in a slot.
    * Writes cozy_slot_n only. Does not remove or rewrite cozy_save_* or cozy_meta_*.
    */
@@ -837,6 +935,7 @@ export class PersistenceManager {
         ...(summary.gold !== undefined ? { gold: summary.gold } : {}),
         ...(playTimeMinutes !== undefined ? { playTimeMinutes } : {}),
         ...(summary.thumbnailDataUrl ? { thumbnailDataUrl: summary.thumbnailDataUrl } : {}),
+        ...(typeof meta.lastPlayedAt === 'number' ? { savedAt: meta.lastPlayedAt } : {}),
       };
       store().setItem(localSlotKey(slotId), JSON.stringify(slot));
       cards[index] = overlaySummary(slot);

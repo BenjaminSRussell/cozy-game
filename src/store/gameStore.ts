@@ -34,7 +34,9 @@ import {
   Vehicle,
   ShippedTodayEntry,
   getQualityMultiplier,
+  NewGameOptions,
 } from '../types/game';
+import { DEFAULT_APPEARANCE, DEFAULT_FARM_NAME } from '../systems/characterAppearance';
 import { RoadSystem } from '../systems/RoadSystem';
 import { EXHAUSTED_MESSAGE, liveIsometricRenderers, playerIsExhausted } from '../rendering/IsometricRenderer';
 import { consumeCraftingInputs, hasCraftingInputs } from './craftingInputs';
@@ -312,8 +314,9 @@ interface GameStore {
   /**
    * Create a new game with initial world
    * @param playerName - Name of the player character
+   * @param options - Farm name, favorite animal and look from the customizer. Defaults apply when omitted.
    */
-  createNewGame: (playerName: string) => void;
+  createNewGame: (playerName: string, options?: NewGameOptions) => void;
 
   /**
    * Load an existing game world from storage
@@ -844,7 +847,7 @@ const DEFAULT_SETTINGS: GameSettings = {
  * @param playerName - Name for the player character
  * @returns Newly initialized GameWorld object ready for gameplay
  */
-const createInitialWorld = (playerName: string): GameWorld => {
+const createInitialWorld = (playerName: string, options: NewGameOptions = {}): GameWorld => {
   // Create initial land expansions available for purchase
   const initialLandExpansions: LandExpansion[] = [
     {
@@ -905,6 +908,8 @@ const createInitialWorld = (playerName: string): GameWorld => {
     id: `world_${Date.now()}`,
     createdAt: Date.now(),
     lastPlayedAt: Date.now(),
+    farmName: options.farmName ?? DEFAULT_FARM_NAME,
+    ...(options.favoriteAnimal ? { favoriteAnimal: options.favoriteAnimal } : {}),
     season: 'spring',
     dayTime: 360, // 6 AM
     totalDaysPlayed: 0,
@@ -912,6 +917,7 @@ const createInitialWorld = (playerName: string): GameWorld => {
     player: {
       id: `player_${Date.now()}`,
       name: playerName,
+      appearance: options.appearance ?? { ...DEFAULT_APPEARANCE },
       level: 1,
       experience: 0,
       coins: 3000, // Starting currency for testing ranching
@@ -1102,8 +1108,8 @@ export const useGameStore = create<GameStore>()(
         // WORLD ACTIONS
         // ========================================================================
 
-        createNewGame: (playerName: string) => {
-          const newWorld = createInitialWorld(playerName);
+        createNewGame: (playerName: string, options?: NewGameOptions) => {
+          const newWorld = createInitialWorld(playerName, options);
           set({ world: newWorld, nextVehicleId: 0 });
         },
 
